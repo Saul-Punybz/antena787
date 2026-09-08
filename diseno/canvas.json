@@ -1,0 +1,191 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 900
+    },
+    {
+      "file": "EnVivo.dc.html",
+      "x": 1560,
+      "y": 0,
+      "w": 1440,
+      "h": 900
+    },
+    {
+      "file": "Biblioteca.dc.html",
+      "x": 3120,
+      "y": 0,
+      "w": 1440,
+      "h": 900
+    },
+    {
+      "file": "Parrilla.dc.html",
+      "x": 0,
+      "y": 1100,
+      "w": 1440,
+      "h": 900
+    },
+    {
+      "file": "Mes.dc.html",
+      "x": 1560,
+      "y": 1100,
+      "w": 1440,
+      "h": 900
+    },
+    {
+      "file": "Guia.dc.html",
+      "x": 3120,
+      "y": 1100,
+      "w": 1440,
+      "h": 900
+    },
+    {
+      "file": "Reglas.dc.html",
+      "x": 0,
+      "y": 2200,
+      "w": 1440,
+      "h": 900
+    },
+    {
+      "file": "Anunciantes.dc.html",
+      "x": 1560,
+      "y": 2200,
+      "w": 1440,
+      "h": 900
+    },
+    {
+      "file": "Ajustes.dc.html",
+      "x": 3120,
+      "y": 2200,
+      "w": 1440,
+      "h": 900
+    },
+    {
+      "file": "Manual.dc.html",
+      "x": 1560,
+      "y": 3300,
+      "w": 1440,
+      "h": 900
+    },
+    {
+      "file": "Diferido.dc.html",
+      "x": 0,
+      "y": 3300,
+      "w": 1440,
+      "h": 900
+    },
+    {
+      "file": "Portal.dc.html",
+      "x": 3120,
+      "y": 3300,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Musica.dc.html",
+      "x": 0,
+      "y": 4400,
+      "w": 1440,
+      "h": 900
+    }
+  ],
+  "annotations": [
+    {
+      "id": "n-aire",
+      "x": 0,
+      "y": -190,
+      "w": 470,
+      "text": "AL AIRE — el cuadro grande es la senal real saliendo, no un icono. Punto rojo pulsante = tally, siempre en el mismo sitio. Semaforo a la derecha: verde bien, ambar se vence, rojo vacio."
+    },
+    {
+      "id": "n-vivo",
+      "x": 1560,
+      "y": -190,
+      "w": 470,
+      "text": "EN VIVO — lo que aprendimos de OBS: medidores de audio, cuadros perdidos y bitrate honestos. OBS empuja UNA vez a Antena787, que reparte a transmisor y a YouTube. Si YouTube se cae, la antena ni se entera."
+    },
+    {
+      "id": "n-bibl",
+      "x": 3120,
+      "y": -190,
+      "w": 470,
+      "text": "BIBLIOTECA — pared de caratulas del servidor Plex de Rolando. El arte, las sinopsis y los anos ya existen alli: no hay que teclear nada. Las caratulas de esta maqueta son marcadores."
+    },
+    {
+      "id": "n-parr",
+      "x": 0,
+      "y": 1010,
+      "w": 470,
+      "text": "PARRILLA · SEMANA — el ancho ES la duracion real. Las rayas rojas entre bloques son los minutos sobrantes de cada slot. Arriba, el dia completo con las 5 horas muertas de madrugada."
+    },
+    {
+      "id": "n-mes",
+      "x": 1560,
+      "y": 1010,
+      "w": 470,
+      "text": "PARRILLA · MES — cada dia es una barra de 24 horas. Los fines de semana tienen el doble de aire vacio: 9 horas contra 5. Los puntos ambar marcan el dia en que se vencen unos derechos."
+    },
+    {
+      "id": "n-guia",
+      "x": 3120,
+      "y": 1010,
+      "w": 470,
+      "text": "PARRILLA · GUIA — LO QUE DICE LA GUIA sobre LO QUE VA A SALIR, en el mismo eje de tiempo. Aqui el bug de CAtv se vuelve imposible de no ver."
+    },
+    {
+      "id": "n-regl",
+      "x": 0,
+      "y": 2110,
+      "w": 470,
+      "text": "REGLAS — aqui se arma el canal, no en una cuadricula. 35 tarjetas hacen la semana entera; en el Sheet son 336 celdas a mano. El vencimiento es un semaforo, no una columna escondida."
+    },
+    {
+      "id": "n-anun",
+      "x": 1560,
+      "y": 2110,
+      "w": 470,
+      "text": "ANUNCIOS — el inventario no es una tabla: es cuanto le cabe a cada hora, con el tope de 12 min. De medianoche a 6 AM no hay nada vendido, que son justo las horas que hoy salen en negro. Los clientes son de muestra."
+    },
+    {
+      "id": "n-ajus",
+      "x": 3120,
+      "y": 2110,
+      "w": 470,
+      "text": "AJUSTES — las buenas practicas del sistema operativo, vigiladas para siempre. El instalador las aplica y esta pantalla avisa si alguna se desconfigura. Aqui el riesgo #1 es visible: Windows Update quedo en automatico."
+    },
+    {
+      "id": "n-manual",
+      "x": 1560,
+      "y": 3210,
+      "w": 470,
+      "text": "MANUAL — el modo se pinta en TODO el fondo, no en un icono: el ojo detecta color en vision periferica sin mirar. Cuenta regresiva siempre visible. Volver al automatico es una pastilla, no otra celda. Se dispara al soltar, no al tocar."
+    },
+    {
+      "id": "n-difer",
+      "x": 0,
+      "y": 3210,
+      "w": 470,
+      "text": "DIFERIDO — el panel EN VIVO nunca se detiene mientras miras atras. Jamas un modal que tape el aire. El disco se cuenta en dias, no en gigabytes. Lo borrado se ve como hueco, no desaparece callado."
+    },
+    {
+      "id": "n-portal",
+      "x": 3120,
+      "y": 3210,
+      "w": 400,
+      "text": "PORTAL DEL ANUNCIANTE — la unica pantalla que NO ve el operador. La abre la ferreteria desde un enlace, en su telefono: ve que compra, paga, arrastra su anuncio y recibe respuesta al momento."
+    },
+    {
+      "id": "n-musica",
+      "x": 0,
+      "y": 4310,
+      "w": 470,
+      "text": "BIBLIOTECA MUSICAL — para radio. Caratulas cuadradas, no posters 2:3. Vienen de Cover Art Archive con MusicBrainz, que es el unico que no pide clave. Y la barra de entrada y cierre es una necesidad de radio que la TV no tiene: cuantos segundos de intro hay antes de que entre la voz."
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}

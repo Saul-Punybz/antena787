@@ -1,0 +1,550 @@
+# PRD — Antena
+
+**Sistema libre de automatización de playout y traffic para televisión**
+
+**Nombre de trabajo:** Antena *(alternativas: Emisora, Torre, OpenPlayout — a decidir)*
+**Autor:** Saul Gonzalez
+**Fecha:** 4 de septiembre de 2026
+**Versión:** 3 — **proyecto open source multiplataforma**
+**Despliegue de referencia:** Caribbean Advantage TV (CAtv) — Rolando Rosa, transmisor licenciado FCC
+
+---
+
+## 1. Resumen
+
+**Antena es software libre que permite a una universidad, una organización sin fines de lucro o una estación pequeña lanzar y operar un canal de televisión — cumpliendo con la ley — sobre hardware que ya tienen.**
+
+Cubre lo que hoy no existe entre la parrilla de programación y el transmisor: planifica qué sale al aire, lo ejecuta al frame, inserta y contabiliza publicidad, y genera la guía electrónica y la evidencia de emisión.
+
+- **Un solo ejecutable.** Sin Docker obligatorio, sin runtime externo.
+- **Windows, Linux y ARM** desde el mismo código.
+- **Corre en hardware barato** — un mini PC de $200, o una Raspberry Pi para canales de baja resolución.
+- **Se opera desde el browser.**
+- **Se descarga de GitHub, se mejora, se contribuye.**
+
+### La tesis
+
+El playout automation comercial —Florical, Imagine, Pebble, Harmonic— cuesta entre decenas y cientos de miles de dólares. Lo libre que existe —ErsatzTV, Tunarr— está hecho para armar canales caseros con la biblioteca de Plex: transcodifica al vuelo, tiene problemas documentados en los bordes de programa, y **no sabe qué es −24 LKFS, ni qué hacer cuando entra un EAS, ni cómo probarle a un anunciante que su spot salió.**
+
+Entre esos dos mundos hay un vacío enorme y lleno de gente: canales universitarios, televisoras comunitarias, emisoras religiosas, estaciones low-power, canales regionales de LATAM. Todos operando con hojas de cálculo y VLC.
+
+**Antena es para ellos.**
+
+---
+
+## 2. Motivación: el caso que originó el proyecto
+
+CAtv opera al aire con una cadena funcional pero enteramente manual:
+
+```
+Google Sheet (parrilla) → [humano] → VLC → MistServer → VLC → ENDEC (EAS) → Transmisor
+```
+
+El Sheet es un sistema de traffic sorprendentemente completo montado a mano: dashboard de "Now Playing", parrilla semanal y mensual, tabla maestra de 35 programas con ventanas de derechos y detector de conflictos, catálogo de shows, inventario publicitario, y una plantilla de XMLTV.
+
+Y aun así, medido el 4 de septiembre de 2026:
+
+| Hallazgo | Detalle |
+|---|---|
+| **EPG roto** | El bloque XMLTV sigue siendo la plantilla de ejemplo: el `<channel id>` dice `Caribbean Advantage TV` pero los `<programme>` apuntan a `channel="sports1.channel"`, con fechas de mayo y programas inventados. |
+| **30% de dead air** | 103 de 343 slots semanales vacíos. Casi todo el bloque de 1:00–6:00 AM, los siete días. |
+| **18 vencimientos en 60 días** | *Familia Robinson* (2 días), *Magic Knight Rayearth* (3 y 4), *Los Simuladores* (7). Sin renovar, esos slots caen a negro. |
+| **Validador que falla en silencio** | *Hellsing* tiene inicio 9/15/2026 y **fin 1/1/2026** — final anterior al inicio — y el detector lo marca "✓ OK". |
+| **Inventario publicitario en cero** | 0 clientes, 518,400 segundos disponibles, nada vendido. |
+| **Duraciones estimadas** | La columna "Duración" son bloques aproximados, no duración medida. Todo el relleno es adivinanza. |
+
+**Ninguno de estos problemas es exclusivo de CAtv.** Son los problemas de cualquiera que opera un canal sin herramientas. Por eso el proyecto es abierto y no un encargo.
+
+---
+
+## 3. Objetivos
+
+1. Que alguien con presupuesto cercano a cero pueda **lanzar un canal legal** y operarlo.
+2. Emitir 24/7 sin dead air y sin intervención humana diaria.
+3. Un EPG que diga la verdad.
+4. Convertir inventario publicitario en ingreso, con evidencia de emisión.
+5. **Cumplir la ley del país donde se instale**, no solo la de EEUU.
+6. **Correr en Windows y en Linux con la misma facilidad**, sin Docker obligatorio, en hardware modesto.
+7. **Aceptar el hardware que la gente ya tiene** — cualquier ENDEC, cualquier salida, cualquier resolución.
+8. Que un tercero pueda contribuir un driver sin entender todo el sistema.
+
+### No-objetivos (v1)
+
+- No se construye EAS. Es hardware certificado. Antena **se integra** con él.
+- No se construyen códecs. Eso es ffmpeg.
+- No hay multi-canal por instancia. Un proceso, un canal. *(Varias instancias en una máquina, sí.)*
+- No hay ingesta de fuentes en vivo (cámara, satélite) en v1.
+- No se persigue paridad con playout de nivel network. Esto no compite con Florical.
+
+---
+
+## 4. Los dos modos de operación
+
+**Decisión estructural.** La mayoría de los usuarios no tendrá transmisor.
+
+### Modo `streaming`
+Canal por IP: HLS, SRT, RTMP hacia YouTube/Twitch/servidor propio. **Sin obligaciones regulatorias de radiodifusión.** Sin EAS, sin CALM Act. Loudness recomendado −16 LUFS (estándar web).
+
+*A quién sirve:* canal universitario, TV interna de una ONG, señal de un municipio, cualquiera que quiera programar contenido sin licencia de transmisión.
+
+### Modo `broadcast`
+Alimenta un transmisor licenciado. **Activa el perfil de cumplimiento regional** (§8) y todas sus validaciones y bitácoras.
+
+*A quién sirve:* estaciones low-power, comunitarias, religiosas, y despliegues como CAtv.
+
+El modo se elige en la configuración inicial y **cambia qué valida el sistema, qué registra y qué se niega a hacer.** Un usuario en modo streaming nunca ve una pantalla de EAS.
+
+---
+
+## 5. Multiplataforma: cómo se sostiene
+
+Go compila estáticamente y cruza plataformas sin dolor. El mismo código produce:
+
+| Objetivo | Uso típico |
+|---|---|
+| `windows/amd64` | Estaciones pequeñas; el caso de CAtv |
+| `linux/amd64` | Servidores, universidades, quien ya administra Linux |
+| `linux/arm64` | Raspberry Pi 5 y similares — canales SD/720p de bajo costo |
+| `darwin/arm64` | Solo desarrollo |
+
+Lo dependiente de plataforma se aísla en paquetes pequeños con una interfaz común:
+
+| Concepto | Windows | Linux |
+|---|---|---|
+| Servicio | Windows Service | systemd |
+| Prioridad | Clases de prioridad | `nice` |
+| Límite de recursos | Job Objects | cgroups v2 |
+| Aceleración | QuickSync (`h264_qsv`), NVENC, D3D11VA | VAAPI, NVENC, V4L2 M2M |
+| Rutas | prefijo `\\?\`, rutas largas | POSIX |
+
+**La aceleración se detecta en tiempo de ejecución, no de compilación.** Antena prueba qué encoders soporta el `ffmpeg` presente y la máquina, elige el mejor disponible y cae a software si no hay nada. El usuario no configura eso.
+
+`kardianos/service` abstrae la instalación del servicio, así que el mismo comando funciona en ambos:
+
+```
+antena install     antena start     antena status     antena uninstall
+```
+
+---
+
+## 6. Los tres modelos de driver
+
+**Aquí vive la promesa de "acepta el hardware que ya tienes", y es lo que hace que el proyecto abierto crezca:** cada usuario que hace funcionar su equipo contribuye el driver, y el siguiente ya lo tiene.
+
+### 6.1 Drivers de salida
+
+```go
+type OutputDriver interface {
+    Name() string
+    Capabilities() OutputCaps      // contenedores, códecs, resoluciones
+    Validate(cfg Config) error     // falla temprano, con mensaje entendible
+    Start(ctx context.Context, s *Stream) error
+    Stop() error
+    Health() Status
+}
+```
+
+| Driver | Notas |
+|---|---|
+| `udp-ts` | Unicast y multicast. El más común hacia encoders y muxes |
+| `srt` | Corrección de errores sobre enlaces sucios. Caller y listener |
+| `rtp` | Instalaciones antiguas |
+| `rtmp` | Hacia YouTube, Twitch, servidores de terceros |
+| `hls` | Distribución web directa |
+| `file` | Grabación y pruebas |
+| `decklink` | **Build tag** — requiere SDK de Blackmagic |
+| `ndi` | **Build tag** — SDK propietario, licencia aparte |
+| `null` | Pruebas sin salida |
+
+Los que requieren SDK propietario **no se incluyen en las builds oficiales.** Se documenta cómo compilarlos. Así el binario que se baja de GitHub queda limpio de dependencias no libres.
+
+### 6.2 Drivers de EAS / ENDEC
+
+El sistema necesita saber **cuándo el ENDEC lo sacó del aire**, porque si no, el as-run miente y le facturas a un anunciante un spot que fue tapado por una alerta.
+
+| Driver | Cómo funciona |
+|---|---|
+| `gpi-serial` | Contacto seco por RS-232 o relé USB. Lo más universal en equipos viejos |
+| `gpi-gpio` | Pines GPIO — Raspberry Pi y similares |
+| `sage-endec` | Sage ENDEC por su interfaz web |
+| `dasdec` | DASDEC por API y SNMP |
+| `syslog` | Escucha syslog de cualquier equipo que lo emita |
+| `snmp-trap` | Receptor genérico de traps |
+| `cap-poll` | Feed CAP/IPAWS — el estándar moderno de alertas |
+| **`signal-compare`** | **Pasivo. No le habla al equipo.** |
+| `none` | Sin integración; el as-run se marca explícitamente como no reconciliado |
+
+> **`signal-compare` es la respuesta a "todas las marcas".** Compara la señal de salida contra lo que el plan decía que debía estar al aire y deduce la interrupción. Menos exacto que un GPI, pero **funciona con hardware que el proyecto no conoce y nunca va a tener en la mano.** Para un proyecto abierto eso vale más que la precisión.
+
+Regla: **`none` nunca miente.** Si no hay forma de saberlo, el reporte de proof-of-play lo dice en la cara del usuario en vez de fingir certeza.
+
+### 6.3 Perfiles de formato de casa
+
+Ya no hay un formato fijo. Es configuración por canal:
+
+| Perfil | Región |
+|---|---|
+| `1080i59.94`, `1080p29.97`, `1080p59.94` | ATSC — Américas |
+| `1080i50`, `1080p25`, `1080p50` | DVB — Europa, buena parte de LATAM |
+| `720p59.94`, `720p50` | Ambos; el más común en low-power |
+| `480i59.94` (NTSC SD), `576i50` (PAL SD) | Instalaciones SD y equipos viejos |
+| `custom` | Lo que el usuario necesite |
+
+Códec de casa elegible: **H.264** (por defecto), **MPEG-2** (para alimentar muxes ATSC 1.0 directamente), **HEVC**, **AV1** (libre de regalías, para salida IP).
+
+---
+
+## 7. Decisiones de arquitectura
+
+### 7.1 — Local. Siempre.
+
+El aire corre dentro de la instalación. El archivo son terabytes y la salida va a hardware físico. **Una estación no puede salir del aire porque se cayó el internet.** Para una universidad o una ONG, además, la nube es un costo mensual que no pueden sostener.
+
+La nube es opcional y solo para lo que puede caerse sin consecuencia: respaldo y portal de reportes.
+
+### 7.2 — Formato de casa: normalizar en el ingest, no en el aire
+
+**La decisión que hace posible correr esto en hardware barato.**
+
+Todo lo que entra se transcodifica **una sola vez, offline, en background** al perfil de casa del canal: códec único, GOP **cerrado** de longitud fija, audio de configuración fija, y loudness corregido al objetivo regional.
+
+Consecuencia: como todos los clips comparten parámetros exactos y GOP cerrado, **el playout es splice de transport stream por stream-copy. Cero transcodificación en vivo.** El motor solo reescribe PTS/DTS y contadores de continuidad, y empalma.
+
+Es lo que hace la televisión de verdad — una estación normaliza su media a formato de casa. Y es exactamente la diferencia con ErsatzTV y Tunarr, que transcodifican al vuelo: de ahí sus problemas en los bordes de programa y su consumo de máquina.
+
+*Fallback:* material no normalizado a tiempo se re-encodifica con aceleración por hardware. Camino de excepción, no el normal.
+
+### 7.3 — Separar *reglas* de *plan*
+
+- **Regla:** "Kojak, Lun–Vie, 8:00 AM, del 8/9 al 12/20." Lo que el humano edita.
+- **Plan:** "2026-09-05 08:00:00.000 → episodio 14, archivo X, duración real 00:24:31, luego relleno 00:05:29." Lo que sale al aire.
+
+El resolver materializa 48 horas de plan por adelantado. Beneficios: se puede **revisar y corregir el aire de mañana antes de que ocurra**; el motor no tiene lógica de negocio; **el EPG se genera del plan y por eso dice la verdad**; y al emitirse la fila pasa de `planned` a `aired` con timestamps reales — **el as-run no es otra tabla, es el plan con la verdad encima.**
+
+### 7.4 — Playout guiado por reloj, no por cola
+
+La parrilla es un contrato con la hora de pared. Lo confirma el EAS: cuando el ENDEC interrumpe, el playout **sigue corriendo**; al soltar la alerta ya estamos en el minuto correcto en vez de arrancar desde donde nos quedamos.
+
+**Y la precisión de frame no sale del reloj del sistema operativo — sale de la continuidad de PTS del stream.** El planificador despierta con holgura y encola por adelantado; el encoder maneja el instante exacto. Esto importa especialmente en Windows, cuya resolución de temporizador por defecto (~15.6 ms) es estrecha frente a los 33.4 ms de un frame a 29.97 fps.
+
+### 7.5 — Un solo ejecutable, sin Docker obligatorio
+
+Frontend compilado a estáticos y **embebido en el binario** (`go:embed`). Sin runtime de Node, sin servidor web aparte.
+
+`ffmpeg` y `ffprobe` **vendorizados con versión fijada** en las releases de Windows; en Linux se usa el del sistema si sirve, y si no se descarga la build fijada. En ambos casos **la versión probada es la que corre**, y eso hace los reportes de bug reproducibles.
+
+Se ofrece imagen Docker **opcional** para quien la prefiera en Linux. Nunca es requisito.
+
+### 7.6 — SQLite
+
+Un escritor, un canal, una máquina. Modo WAL, un archivo, respaldo trivial, sin proceso aparte, sin tuning. Para similitud de catálogo, `sqlite-vec`.
+
+**Requisito duro en ambas plataformas: la base va en disco local, nunca en SMB ni NFS.** El modo WAL no funciona sobre red y la corrupción es silenciosa.
+
+### 7.7 — Nada propietario en la ruta crítica
+
+MistServer, VLC y cualquier otra pieza quedan **fuera del camino del aire.** El daemon emite directo por su driver de salida. Menos latencia, menos piezas que pueden fallar de madrugada, y ninguna dependencia que el proyecto no controle.
+
+*Nota para el despliegue de CAtv:* MistServer en Windows corre sobre una capa de compatibilidad Cygwin, y su propia documentación advierte que Firewall y Defender lo bloquean. Puede quedarse para el preview web; no para el aire.
+
+---
+
+## 8. Perfiles de cumplimiento
+
+**Antena no asume que el usuario está en Estados Unidos.**
+
+El cumplimiento es un **perfil enchufable** que se activa en modo `broadcast`. El proyecto arranca con el perfil que conoce a fondo, y los demás llegan por contribución de quien opere en esa jurisdicción.
+
+| Perfil | Estado | Qué impone |
+|---|---|---|
+| **`us-fcc`** | Completo en v1 | Loudness **−24 LKFS / TP −2 dBTP** (ATSC A/85); passthrough de captions CEA-608/708; bitácora de EAS; exportación para archivo público y anuncios políticos |
+| **`eu-ebu`** | Estructura lista, se busca contribuidor | Loudness **−23 LUFS / TP −1 dBTP** (EBU R128); subtítulos DVB/teletexto |
+| **`streaming`** | Completo en v1 | Loudness −16 LUFS. Sin obligaciones de radiodifusión |
+| **Otros** | Contribuibles | LATAM, Canadá, etc. |
+
+> **La diferencia entre −24 LKFS y −23 LUFS parece trivial y no lo es.** Una universidad en España o Colombia que instale esto con el número estadounidense está incumpliendo su norma. Que el objetivo de loudness sea una constante en el código sería un error de diseño con consecuencia legal.
+
+Cada perfil declara qué valida, qué registra y **qué se niega a hacer.**
+
+> **Nota legal:** Antena ayuda a cumplir; no certifica. Los perfiles son la mejor lectura del proyecto sobre normas públicas y **no sustituyen asesoría legal ni al ingeniero de la estación.** El README lo dice sin adornos. En particular: **EAS se cumple con hardware certificado, no con este software.**
+
+---
+
+## 9. Arquitectura
+
+```
+                    ┌────────────────────────────────────┐
+   Browser  ◄────►  │  antena  (servicio)                │
+   (LAN o           │  ├─ UI embebida (React, go:embed)  │
+    Tailscale)      │  ├─ API REST + WebSocket           │
+                    │  ├─ Resolver de plan               │
+                    │  ├─ Cola de ingest                 │
+                    │  └─ SQLite WAL (disco local)       │
+                    └─────────────────┬──────────────────┘
+                                      │ plan resuelto 48h
+                    ┌─────────────────▼──────────────────┐
+                    │  antena-playout  (servicio)        │
+                    │  prioridad alta · sin red          │
+                    │  splice TS · watchdog              │
+                    │  ffmpeg (versión fijada)           │
+                    └─────────────────┬──────────────────┘
+                                      │
+                    ┌─────────────────▼──────────────────┐
+                    │        DRIVER DE SALIDA            │
+                    │  udp-ts · srt · rtmp · hls · sdi   │
+                    └─────────────────┬──────────────────┘
+                                      │
+                          ENDEC ──────┴──── Transmisor
+                            │                   o
+                    DRIVER DE EAS          plataforma IP
+                    (gpi · api · signal-compare)
+```
+
+Trabajos de fondo —ingest, normalización, Whisper, AI— corren con prioridad mínima y tope de recursos (Job Objects en Windows, cgroups en Linux). **Nunca pueden robarle recursos al aire, y se pausan solos si el playout reporta presión.**
+
+---
+
+## 10. Modelo de datos (núcleo)
+
+```
+media_asset     ruta, hash, códec, duración_medida_ms, lufs, true_peak,
+                tiene_captions, negro_cabeza_ms, negro_cola_ms, estado_normalizacion
+title           serie, película, promo, ID de estación, spot
+episode         title + número + media_asset
+rights_window   title, inicio, fin, corridas_permitidas, corridas_usadas
+schedule_rule   title, patrón_de_días, hora, rights_window     ← lo que el humano edita
+plan_item       instante + media_asset + duración + estado      ← ES el as-run
+                planned → cued → aired → (skipped | preempted)
+filler_asset    promos, IDs, interstitials, con duración exacta
+advertiser / insertion_order / spot_airing                      ← proof-of-play
+eas_event       inicio, fin, driver, confianza                  ← reconciliación
+```
+
+**Regla de integridad:** un `plan_item` no puede existir sin un `rights_window` vigente. **La restricción vive en el esquema, no en el código de validación.** Así muere de raíz el bug del *Hellsing*.
+
+---
+
+## 11. Requisitos funcionales
+
+### 11.1 Ingest *(el componente de mayor valor)*
+Watch folder y carga web · `ffprobe` para códec, resolución, frame rate y **duración real al ms** · loudness con `ebur128` y corrección al objetivo del perfil · detección de captions con **passthrough garantizado** · detección de negro y silencio en cabeza y cola para recortar slate, barras y comerciales viejos · normalización al perfil de casa en background · **cuarentena: lo que falla no llega al aire, nunca.**
+
+### 11.2 Programación
+Editor de parrilla semanal y mensual · reglas por patrón de días (`LMMJVSD`), hora y ventana de derechos · **conflictos deterministas** (solape, ventana vencida, corridas agotadas, archivo faltante o en cuarentena) · **alertas de vencimiento a 30/14/7 días** · resolver horario · **relleno automático por bin packing determinista** · aprobación del plan del día siguiente.
+
+### 11.3 Playout
+Reloj monotónico con pre-roll generoso · splice de TS por stream-copy · **cascada de respaldo: programa → filler → slate → barras y tono. Nunca negro.** · watchdog con corte a slate y alarma · as-run en tiempo real · modo pánico con un botón.
+
+### 11.4 Traffic y publicidad
+Clientes, órdenes de inserción, spots con duración medida · breaks dentro y entre programas, tope por hora, separación entre competidores · rotación · **reconciliación con EAS: los spots tapados por una alerta no se facturan, se reprograman como make-good** · reporte de proof-of-play en PDF.
+
+### 11.5 EPG
+XMLTV **generado del plan resuelto**, con IDs de canal correctos, publicado por HTTP.
+
+### 11.6 Monitoreo
+"Now Playing / Next Up" en vivo por WebSocket · negro, congelado y silencio con filtros de ffmpeg (`blackdetect`, `freezedetect`, `silencedetect`) — deterministas y gratis · alarmas por WhatsApp, Telegram, correo o webhook · **alarma de reinicio inesperado del sistema.**
+
+---
+
+## 12. Integración de AI
+
+**Regla que gobierna todo:**
+
+> **AI en el ingest y en la planificación. Cero AI entre el plan y el transmisor.**
+
+Nada que pueda colgarse, tener rate limit o alucinar entra al camino del aire. El daemon de playout es Go determinista sin dependencias de red. **El canal tiene que salir al aire con el internet caído.**
+
+Para este proyecto hay una regla adicional: **toda función de AI es opcional y desactivable.** Una ONG sin presupuesto de API tiene que poder usar Antena completa sin tocar un modelo. Por defecto, **todo lo de AI viene apagado.**
+
+### Donde gana, en orden de retorno
+
+**1 · Metadata en el ingest.** Catálogos vacíos son la norma. Nombre de archivo + frames + transcripción → título, serie, episodio, **sinopsis**, género, sugerencia de rating. Llena el EPG, que es lo único que el televidente ve antes de decidir quedarse. Humano aprueba antes de publicar.
+
+**2 · Puntos de corte.** Dónde van los breaks *dentro* del programa. Detectar cortes de escena, fundidos y silencios donde de verdad cabe un corte. Es la diferencia entre "tengo 6 minutos de inventario por hora" y "tengo 6 minutos colocados donde no arruinan el show".
+
+**3 · Captions con Whisper local.** Convierte un pasivo de cumplimiento —y una barrera de accesibilidad— en una función que nadie a este precio ofrece. Corre en la misma caja, sin costo, sin enviar nada afuera. **Para una universidad esto solo puede justificar el proyecto entero.**
+
+**4 · Copiloto de programación.** *"Se me vencen 18 programas en 60 días"* → propone reemplazos de la propia biblioteca que caben en el slot, respetan la ventana de derechos y encajan con el bloque. *"Llename el bloque de 1 a 6 AM"* → franja temática coherente.
+
+**Patrón obligatorio: la AI propone un diff contra el plan, el humano aprueba, el sistema ejecuta.** Nunca escribe al aire directo.
+
+**5 · Reportes al anunciante** por WhatsApp o correo, redactados del as-run real.
+
+### Donde la AI es mala idea — prohibida por diseño
+
+| No usar AI para | Porque |
+|---|---|
+| **Loudness** | Es medición, no juicio. `ebur128`, determinista, auditable. Un modelo cerca de un número de cumplimiento legal es negligencia. |
+| **Negro, congelado, silencio** | ffmpeg ya lo hace exacto y gratis. |
+| **Conflictos y ventanas de derechos** | Lógica determinista. El validador del Sheet falló en silencio; se arregla con código correcto. |
+| **Decidir qué sale al aire sin humano** | Derechos, ratings y contratos son obligaciones legales. |
+
+### Proveedores
+Interfaz de proveedor enchufable: **Ollama local** (por defecto, $0, nada sale de la máquina), **Claude** u otra API para el copiloto, **faster-whisper** local para transcripción. La opción local es siempre la primera, por presupuesto y por privacidad.
+
+---
+
+## 13. Hardware y presupuesto de recursos
+
+| Escenario | Máquina | Notas |
+|---|---|---|
+| **Canal 1080 con transmisor** | Mini PC Intel N100/N305 con QuickSync, 16 GB | ~$200. El caso de CAtv |
+| **Canal 720p streaming** | Cualquier PC de oficina reciclado, 8 GB | Costo cero para muchas ONGs |
+| **Canal SD o 720p mínimo** | Raspberry Pi 5, 8 GB | ~$80 |
+| **Universidad con servidor** | Lo que ya tengan, Linux | Marginal |
+
+| Proceso | RAM | CPU |
+|---|---|---|
+| `antena` (API + UI + SQLite) | 80–120 MB | despreciable |
+| `antena-playout` | 100–200 MB | despreciable |
+| ffmpeg splice (stream-copy) | ~120 MB | <10% de un núcleo |
+| *re-encode acelerado (excepción)* | ~300 MB | 15–25% de un núcleo |
+| **Antena en aire normal** | **< 500 MB** | **< 1 núcleo** |
+| Sistema base | Linux ~400 MB · Windows ~2.5 GB | |
+
+**Antena pesa lo mismo en las dos plataformas.** La diferencia la pone el sistema operativo, y se paga con RAM, que es barata. Por eso Windows es una decisión legítima y no un compromiso técnico.
+
+**Dos cajas idénticas** para cualquier instalación con licencia de transmisión. La segunda cuesta poco comparado con salir del aire.
+
+---
+
+## 14. Operación por plataforma
+
+### Ambas
+`antena install` registra el servicio · recuperación automática ante fallo · base de datos en disco local · **Tailscale** para acceso remoto sin abrir puertos · respaldo horario con `VACUUM INTO` · actualizaciones **nunca automáticas**, con ventana manual.
+
+### Específico de Windows
+- **Edición recomendada: Windows 10/11 IoT Enterprise LTSC.** Sin actualizaciones de funcionalidad por 10 años, sin Store, diseñado para aparatos dedicados. *Alternativa:* Windows Server. **Windows Home/Pro con configuración por defecto es inaceptable para un canal 24/7.**
+- **Windows Update es el riesgo operativo #1.** Nunca reinicio automático. Alarma ante reinicio inesperado.
+- **Exclusiones de Defender obligatorias** — directorios de media, ejecutables y base de datos. Escanear terabytes de video en tiempo real degrada el rendimiento y **puede provocar errores de bloqueo de archivo en pleno aire.**
+- Energía: alto rendimiento, sin suspensión ni hibernación, sin apagado de disco, **arranque automático tras corte de energía en BIOS**.
+- **Rutas largas habilitadas** (`LongPathsEnabled` + manifiesto + prefijo `\\?\`) y validación de longitud en el ingest.
+- Un servicio como `LocalSystem` **no ve unidades mapeadas.** Usar UNC o cuenta de servicio.
+
+### Específico de Linux
+- Unidades systemd con `Restart=always`, `Nice=`, y límites por cgroup.
+- Paquetes `.deb` y `.rpm` además del tarball.
+- Docker **opcional**, nunca requerido.
+- Media por NFS/SMB: **caché local de las próximas N horas del plan** — el resolver ya las conoce por adelantado.
+
+El instalador de ambas plataformas termina con un **reporte de verificación** que confirma exclusiones, energía, rutas, permisos y aceleración disponible. Si algo falta, avisa. **Que la configuración correcta no dependa de que alguien se acuerde.**
+
+---
+
+## 15. El proyecto abierto
+
+### 15.1 Licencia — **decisión pendiente, con recomendación**
+
+> **Recomendado: AGPL-3.0**
+
+Razones: es un bien público para universidades y ONGs, y el copyleft asegura que las mejoras vuelvan. Hace limpio distribuir builds de ffmpeg compiladas con `--enable-gpl` (x264, x265). Y **deja abierta la opción de doble licencia**: si más adelante Puny.bz quiere ofrecer una versión alojada o comercial, con un CLA que retenga los derechos de autor eso es posible sin traicionar a nadie.
+
+*Alternativa:* Apache-2.0 si la prioridad es máxima adopción y que cualquiera lo integre — a costa de que nadie devuelva nada.
+
+**Decidir antes del primer commit público.** Cambiar de licencia después, con contribuidores externos, es muy difícil.
+
+### 15.2 Nota sobre patentes de códecs
+El software es libre; **las patentes de H.264 y HEVC son un asunto aparte** y no lo resuelve ninguna licencia de software. En radiodifusión al aire eso normalmente se atiende del lado del transmisor. El README lo documenta con honestidad y ofrece **AV1 y VP9, libres de regalías, para la salida IP.** No se finge que el tema no existe.
+
+### 15.3 Repositorio
+
+```
+README.md            arranque en 5 minutos, en español y en inglés
+LICENSE
+CONTRIBUTING.md
+COMPLIANCE.md        qué hace y qué NO hace Antena por tu cumplimiento legal
+docs/
+  drivers/           cómo escribir un driver de salida o de EAS
+  profiles/          cómo contribuir un perfil de cumplimiento regional
+  hardware/          MATRIZ DE COMPATIBILIDAD mantenida por la comunidad
+examples/            configuraciones: universidad, ONG, low-power, streaming
+```
+
+**La matriz de compatibilidad de hardware es la función que decide la adopción.** "¿Sirve con mi ENDEC / mi encoder / mi tarjeta?" es la primera pregunta de todo el que llega. Cada usuario que hace funcionar su equipo la actualiza, y el siguiente ya no tiene que averiguarlo.
+
+### 15.4 Distribución
+GitHub Actions compila en cada release: `windows/amd64` (zip + instalador), `linux/amd64` y `linux/arm64` (tarball, `.deb`, `.rpm`), con checksums y **binarios firmados**. Sin builds nocturnas: una estación al aire no corre código sin versionar.
+
+### 15.5 Documentación
+**Español e inglés desde el día uno.** El mercado natural de esto es LATAM, y casi todo el software de broadcast está solo en inglés. Es una ventaja competitiva real y cuesta poco.
+
+Tono: la documentación asume una persona técnica pero **no un ingeniero de broadcast.** Alguien que sabe instalar software pero nunca ha oído "LKFS" ni "GOP cerrado". Se explican los términos.
+
+---
+
+## 16. Fases
+
+| Fase | Duración | Qué entrega |
+|---|---|---|
+| **F1 · Fundación** | 2–3 sem | Catálogo, ingest con medición real, derechos, parrilla, resolver, **XMLTV correcto**, alertas de vencimiento. Builds de Windows y Linux desde el día uno. **No toca el aire.** |
+| **F2 · Playout** | 4–6 sem | Normalización, daemon, splice de TS, drivers `udp-ts`/`srt`/`rtmp`/`hls`, respaldo en cascada, filler, as-run, monitor, alarmas. **Cero AI.** |
+| **F3 · Público** | 2–3 sem | Repositorio abierto, licencia, CI, docs bilingües, matriz de hardware, modo `streaming` completo. **Es la fase que convierte esto en proyecto.** |
+| **F4 · Comercial** | 4–6 sem | Traffic, breaks, reconciliación con EAS, proof-of-play. Perfil `us-fcc` completo. |
+| **F5 · Comunidad** | continuo | Drivers contribuidos, perfiles regionales, copiloto, captions con Whisper, CasparCG para gráficos |
+
+**F3 va antes que F4 a propósito.** Un canal universitario en modo streaming no necesita traffic publicitario ni EAS — necesita que el proyecto exista, se pueda bajar y funcione. Publicar temprano trae contribuidores y usuarios reales; el módulo comercial puede madurar después con gente probándolo.
+
+---
+
+## 17. Métricas de éxito
+
+| Métrica | Meta |
+|---|---|
+| Dead air en el despliegue de referencia | de 30% a < 1% |
+| Exactitud del EPG | 100% contra el as-run |
+| Intervención manual diaria | < 15 min |
+| Interrupciones no planificadas | 0 en 30 días |
+| **De cero a canal al aire** | **< 1 hora** siguiendo el README |
+| **Instalaciones de terceros** | 10 canales fuera de CAtv en 12 meses |
+| **Contribuidores externos** | 3 con código mezclado en 12 meses |
+| **Drivers contribuidos por la comunidad** | 5 en 12 meses |
+
+Las cuatro últimas son las que dicen si esto es un proyecto o un encargo con el código publicado.
+
+---
+
+## 18. Riesgos
+
+| Riesgo | Mitigación |
+|---|---|
+| **Alguien lo usa mal y se mete en un lío regulatorio** | `COMPLIANCE.md` explícito: Antena ayuda, no certifica. **EAS es hardware.** El modo `broadcast` obliga a confirmar jurisdicción y a declarar que hay un responsable técnico. |
+| **Windows Update reinicia el aire** | IoT Enterprise LTSC + política + alarma. Verificado por el instalador. |
+| **Defender bloquea o degrada** | Exclusiones obligatorias verificadas por el instalador |
+| **Nadie contribuye y queda todo sobre ti** | Publicar en F3, no al final. Matriz de hardware desde el principio. Documentación de drivers antes que features nuevas. |
+| **Fragmentación por demasiados drivers** | Interfaz estrecha y estable. Tests de contrato. Drivers sin mantenedor se marcan y se archivan. |
+| **Combinatoria de plataformas × perfiles × drivers** | CI que compila todo. Pruebas de integración con `null` y `file`. **Ninguna combinación no probada se documenta como soportada.** |
+| **Perfiles regionales escritos por quien no conoce la norma** | Cada perfil requiere fuente citada y un mantenedor que opere en esa jurisdicción. Sin dueño, se marca experimental. |
+| **Media en red tumba el aire** | Caché local de las próximas horas del plan |
+| **Deuda de código heredado del piloto** | Los drivers evitan que las particularidades de CAtv se filtren al núcleo |
+
+---
+
+## 19. Preguntas abiertas
+
+**Decisiones del proyecto**
+1. **Licencia: AGPL-3.0 o Apache-2.0.** Antes del primer commit público.
+2. **Nombre.** Antena, Emisora, Torre, otro. Verificar que no colisione.
+3. **¿Bajo la organización de Puny.bz en GitHub o una cuenta neutral?** Una organización de empresa puede desincentivar contribuciones; también da respaldo. Con CLA, la opción de doble licencia se conserva en ambos casos.
+
+**Del despliegue de referencia (CAtv)**
+4. **Qué protocolo acepta el equipo que alimenta al ENDEC** — define el primer driver de salida. Bloquea F2.
+5. **Marca y modelo del ENDEC**, y si expone GPI o red — define el primer driver de EAS.
+6. **Resolución y frame rate del transmisor** — define el primer perfil de casa.
+7. ¿El material trae captions embebidos?
+8. Edición de Windows actual y presupuesto para IoT Enterprise LTSC.
+9. Dónde vive el media y cuántos TB.
+10. Qué exenciones de captioning aplican a la estación.
+
+Ninguna bloquea la F1.
+
+---
+
+## 20. Por qué esto vale la pena
+
+Lanzar un canal de televisión hoy cuesta más en software que en transmisor. Ese es el absurdo que este proyecto ataca.
+
+Lo que hace defendible a Antena no es la parrilla — eso lo hacen ErsatzTV y Tunarr gratis. Es que **nace sabiendo qué es −24 LKFS, qué hacer cuando entra un EAS, y cómo probarle a un anunciante que su spot salió.** Ninguna herramienta libre sabe nada de eso, y las que sí saben empiezan en cinco cifras.
+
+Una universidad con un canal de práctica. Una comunitaria que hoy repite el mismo bloque porque no tiene quién arme la parrilla. Una emisora regional que perdió su anunciante porque no pudo probar que el spot salió. Ese es el usuario.
+
+CAtv es el despliegue de referencia y el que valida en condiciones reales de FCC. Si funciona ahí, funciona en cualquier estación pequeña del hemisferio.

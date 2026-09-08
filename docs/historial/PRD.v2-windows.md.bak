@@ -1,0 +1,591 @@
+# PRD — Sistema de Automatización de Playout y Traffic para TV
+
+**Nombre de trabajo:** PunyAir *(placeholder — a definir)*
+**Autor:** Saul Gonzalez
+**Fecha:** 4 de septiembre de 2026
+**Versión:** 2 — plataforma fijada en **Windows**, servidor local, sin Docker
+**Piloto:** Caribbean Advantage TV (CAtv) — Rolando Rosa, transmisor licenciado FCC
+
+---
+
+## 1. Resumen
+
+Construir el software que hoy no existe entre la parrilla de programación y el transmisor: un sistema que planifica qué sale al aire, lo ejecuta al frame, inserta y contabiliza publicidad, y genera la guía electrónica y la evidencia de emisión.
+
+No reemplaza a ffmpeg ni al equipo de EAS. Reemplaza **al humano que hoy los pega con cinta adhesiva.**
+
+Corre como **servicio nativo de Windows** en un servidor dentro de la estación. Un solo ejecutable, sin Docker, sin runtime externo. Se opera desde el browser.
+
+---
+
+## 2. Contexto: qué existe hoy
+
+CAtv opera al aire con una cadena funcional pero manual:
+
+```
+Google Sheet (parrilla) → [humano] → VLC → MistServer 3.4 → VLC → ENDEC (EAS) → Transmisor
+```
+
+El Sheet es un sistema de traffic sorprendentemente completo montado a mano: dashboard de "Now Playing", parrilla semanal y mensual en bloques de 30 min, tabla maestra de 35 programas con ventanas de derechos y detector de conflictos, catálogo de shows, inventario publicitario por duración de spot, y una plantilla de XMLTV.
+
+### Problemas medidos en el Sheet (4 sep 2026)
+
+| Hallazgo | Detalle |
+|---|---|
+| **EPG roto** | El bloque XMLTV sigue siendo la plantilla de ejemplo. El `<channel id>` dice `Caribbean Advantage TV` pero los `<programme>` apuntan a `channel="sports1.channel"`, con fechas de mayo y programas inventados. La guía no refleja el aire. |
+| **30% de dead air** | 103 de 343 slots semanales vacíos. Casi todo el bloque de 1:00–6:00 AM, los siete días. |
+| **18 vencimientos en 60 días** | Incluye *Familia Robinson* (2 días), *Magic Knight Rayearth* (3 y 4 días), *Los Simuladores* (7 días). Sin renovar, esos slots caen a negro. |
+| **Validador que falla en silencio** | *Hellsing* (Id 336) tiene inicio 9/15/2026 y **fin 1/1/2026** — fecha final anterior a la inicial — y el detector lo marca "✓ OK". |
+| **Inventario publicitario en cero** | 0 clientes, 518,400 segundos disponibles, nada vendido. |
+| **Duraciones estimadas** | La columna "Duración" son bloques aproximados, no duración medida del archivo. Todo el relleno es adivinanza. |
+
+### Restricciones del entorno
+
+- **Transmisor licenciado FCC.** Aplican Part 11 (EAS), CALM Act y las reglas de captioning.
+- **EAS resuelto en hardware.** El ENDEC va de último en la cadena y saca la programación automáticamente. No hay que construirlo ni certificarlo.
+- **MistServer 3.4 sobre Windows.** La documentación indica que los instalados 3.4 bajo Windows ya no traen MistTray sino un MistServer shell — consistente con lo que corre Rolando. **En Windows, MistServer no es nativo: corre sobre una capa de compatibilidad Cygwin (`mistserver_cyg64`).** La propia doc de MistServer advierte que Firewall y Defender lo bloquean y recomienda Linux.
+- **La 3.11 rompe el meta-player.** Casi seguro por el nuevo "playback focus" que reordena protocolos e intenta WebRTC/WHEP primero sin poder establecerlo. Mitigación: forzar HLS con `forceType: "html5/application/vnd.apple.mpegurl"`.
+- **Puerto Rico.** El internet no es confiable. Huracanes, cortes de energía.
+
+---
+
+## 3. Objetivos
+
+1. Sacar la programación del Sheet a un modelo de datos que no permita estados inválidos.
+2. Emitir 24/7 sin dead air y sin intervención humana diaria.
+3. Generar un EPG (XMLTV) que diga la verdad.
+4. Convertir el inventario publicitario en ingreso: insertar spots y probar que salieron.
+5. Cumplir CALM Act y no destruir los captions.
+6. **Correr en Windows como servicio nativo, sin Docker, con consumo bajo y sin depender del internet.**
+
+### No-objetivos (v1)
+
+- No se construye EAS. Es hardware certificado, aguas abajo.
+- No se construyen códecs. Eso es ffmpeg.
+- No hay salida SDI ni integración con DeckLink *(pero Windows la deja abierta para el futuro — ver §5.2).*
+- No hay multi-canal ni multi-tenant. Un canal, una estación.
+- No hay ingesta de fuentes en vivo (cámara, satélite) en v1.
+- **No se usa Docker, WSL, ni ninguna capa de virtualización.** Todo nativo.
+
+---
+
+## 4. Usuarios
+
+| Rol | Quién | Qué hace |
+|---|---|---|
+| **Programador** | Rolando | Arma la parrilla, gestiona derechos, aprueba el plan del día siguiente |
+| **Operador de ingest** | Rolando o asistente | Mete material nuevo, revisa la cuarentena |
+| **Vendedor / traffic** | Rolando | Clientes, órdenes de inserción, reportes |
+| **Monitor** | cualquiera | Qué está al aire, qué sigue, alarmas |
+
+Realidad operativa: **es una persona.** El sistema asume que nadie está mirando a las 3 AM.
+
+---
+
+## 5. Decisiones de arquitectura
+
+### 5.1 — Local, no nube. **No negociable.**
+
+El aire corre completo dentro de la estación, en LAN.
+
+- El archivo son terabytes. Subirlo y bajarlo en streaming es absurdo en costo de ancho de banda.
+- La salida va a un transmisor físico. Cada salto de red es un modo de fallo nuevo.
+- **Una estación licenciada no puede salir del aire porque se cayó el proveedor de internet.** En PR eso no es hipotético.
+- El playout necesita precisión de frame.
+- Transcodificar 24/7 en la nube cuesta todos los meses. Una caja local se paga una vez.
+
+La nube queda para lo que puede caerse sin consecuencia: respaldo de base de datos, portal de reportes para anunciantes, y —cuando haya varias estaciones— el plano de control multi-tenant.
+
+### 5.2 — Windows. Qué se gana y qué se paga.
+
+Plataforma fijada por decisión del proyecto. El diseño se ajusta a ella en serio, no por encima.
+
+**Lo que se gana:**
+- **Drivers de QuickSync de Intel más maduros** que VAAPI en Linux. La aceleración por hardware es más predecible.
+- **CasparCG queda disponible.** Windows es su plataforma principal. Si algún día se quiere bug de canal, ticker, lower thirds o el HTML producer, el camino está abierto sin migrar de sistema operativo.
+- **Blackmagic DeckLink** tiene su mejor soporte en Windows. Si mañana la salida al transmisor pasa a SDI, no hay que rehacer nada.
+- Rolando y su entorno ya operan en Windows. Menos fricción de soporte.
+
+**Lo que se paga, y cómo se mitiga:**
+
+| Costo | Mitigación |
+|---|---|
+| Base del sistema ~2–2.5 GB de RAM contra ~400 MB de Debian | Subir el mínimo de RAM a 16 GB (§11) |
+| **Windows Update reinicia la máquina sola** | **Windows IoT Enterprise LTSC** + política de actualización controlada (§12) |
+| Defender escanea en tiempo real terabytes de video | **Exclusiones obligatorias** (§12) |
+| MistServer corre sobre Cygwin, no nativo | **Sacarlo del camino del aire** (§5.8) |
+| Resolución de reloj por defecto de ~15.6 ms | No depender del reloj del SO para precisión de frame (§5.9) |
+| Límite `MAX_PATH` de 260 caracteres | Rutas largas habilitadas + validación en el ingest (§12) |
+
+### 5.3 — Formato de casa: normalizar en el ingest, no en el aire
+
+**Esta es la decisión que sostiene el requisito de bajo consumo, y en Windows pesa aún más** porque el sistema base ya se come 2 GB.
+
+Todo lo que entra se transcodifica **una sola vez, offline, en background** a un formato único:
+
+| Parámetro | Valor |
+|---|---|
+| Video | H.264, resolución y tasa de frames del transmisor |
+| GOP | **Cerrado**, longitud fija — los bordes de clip caen siempre en I-frame |
+| Audio | AAC o AC-3, configuración fija de canales |
+| Loudness | **−24 LKFS, true peak máx −2 dBTP** (ATSC A/85) |
+| Contenedor | MPEG-TS |
+
+Consecuencia: como todos los clips comparten parámetros exactos y GOP cerrado, **el playout es splice de transport stream por stream-copy. Cero transcodificación en vivo.** El motor solo reescribe PTS/DTS y contadores de continuidad, y empalma.
+
+Es lo que hace la televisión de verdad. Y es la diferencia frente a ErsatzTV y Tunarr, que transcodifican al vuelo — de ahí sus problemas documentados en los bordes de programa y su consumo de máquina.
+
+*Fallback:* material no normalizado a tiempo se re-encodifica con QuickSync (`h264_qsv`). Camino de excepción, no el normal.
+
+### 5.4 — Separar *reglas* de *plan*
+
+El Sheet mezcla las dos y por eso se rompe.
+
+- **Regla:** "Kojak, Lun–Vie, 8:00 AM, del 8/9 al 12/20." Es lo que el humano edita.
+- **Plan:** "2026-09-05 08:00:00.000 → episodio 14, archivo X, duración real 00:24:31, luego relleno 00:05:29." Es lo que sale al aire.
+
+El sistema **resuelve reglas → plan con 48 horas de anticipación** y lo materializa en la base de datos.
+
+- Se puede **revisar y corregir el aire de mañana antes de que ocurra.**
+- El motor de playout no tiene lógica de negocio: lee el plan y ejecuta el reloj.
+- **El EPG se genera del plan**, así que dice la verdad. Ese es el bug de hoy.
+- Al emitirse, la fila pasa de `planned` a `aired` con timestamps reales. **El as-run no es otra tabla: es el plan con la verdad encima.**
+
+### 5.5 — Playout guiado por reloj, no por cola
+
+La parrilla es un contrato con la hora de pared. A la 1:00 PM toca *Los Simuladores* en el minuto 0, pase lo que pase abajo.
+
+Lo confirma el EAS: cuando el ENDEC interrumpe, el playout **sigue corriendo** sin enterarse. Al soltar la alerta ya estamos en el minuto correcto del programa. Un motor de cola acumularía deriva y se desincronizaría del EPG.
+
+### 5.6 — Un solo ejecutable, servicio nativo de Windows, sin Docker
+
+El frontend se compila a estáticos y se **embebe en el binario** (`go:embed`). No hay runtime de Node, ni Docker, ni servidor web aparte.
+
+El binario **se registra a sí mismo como Servicio de Windows** (vía `kardianos/service`, que envuelve la API nativa de servicios):
+
+```
+punyair.exe install     → registra el servicio, arranque automático
+punyair.exe start
+punyair.exe status
+punyair.exe uninstall
+```
+
+Corre como servicio, **no en sesión de escritorio.** Consecuencias buenas: no hace falta auto-login, arranca antes de que nadie inicie sesión, y **se puede entrar por RDP sin perturbar el aire.**
+
+`ffmpeg.exe` y `ffprobe.exe` van **vendorizados junto al binario, con versión fijada** — la build exacta que se probó. En Windows no hay gestor de paquetes, y eso aquí es una ventaja: el despliegue es reproducible y no cambia bajo tus pies.
+
+### 5.7 — SQLite, no Postgres
+
+Un escritor, un canal, una máquina. SQLite en modo WAL sobra: sin proceso aparte, sin tuning, un archivo, respaldo trivial. Para similitud de catálogo, `sqlite-vec`.
+
+**Gotcha de Windows que es requisito duro:** el modo WAL **no funciona sobre recursos de red SMB**. La base de datos vive en **disco local**, nunca en unidad mapeada ni UNC. Sin excepción.
+
+Postgres entra cuando exista el plano de control multi-estación en la nube. No antes.
+
+### 5.8 — Sacar MistServer y VLC del camino del aire *(nuevo en v2)*
+
+**Es la consecuencia más importante de irse a Windows.**
+
+En Windows, MistServer corre sobre Cygwin — una capa de compatibilidad, no código nativo — y su propia documentación advierte que Firewall y Defender lo bloquean. Poner esa capa entre tu playout y el transmisor es aceptar un modo de fallo que no controlas.
+
+La cadena de hoy tiene tres piezas de más:
+
+```
+ANTES:   playout → VLC → MistServer(Cygwin) → VLC → ENDEC → TX
+DESPUÉS: playout ──── UDP-TS / SRT ────────────────→ ENDEC → TX
+                  └── MistServer (preview web, IP) ── ruta no crítica
+```
+
+Nuestro daemon emite **UDP-TS o SRT directo** hacia lo que alimenta al ENDEC. MistServer se queda, pero **solo para el preview web y la distribución IP** — donde un hipo de Cygwin no te saca del aire.
+
+Beneficio triple: menos latencia, menos piezas que pueden fallar de madrugada, y el problema del meta-player de la 3.11 deja de importar porque el player deja de estar en la ruta crítica.
+
+**Requiere confirmar con Rolando qué protocolo exacto acepta el equipo que alimenta el ENDEC.** Es la pregunta abierta #2 y bloquea la F2.
+
+### 5.9 — Precisión de reloj en Windows
+
+Windows tiene resolución de temporizador por defecto de ~15.6 ms. A 29.97 fps un frame dura 33.4 ms, así que el margen es estrecho y depender del `sleep` del sistema operativo es frágil.
+
+**Regla de diseño: la precisión de frame no sale del reloj del SO, sale de la continuidad de PTS del stream.** El planificador despierta con holgura y encola por adelantado; el encoder maneja el instante exacto con su propio reloj de presentación. Además el proceso solicita resolución de 1 ms (`timeBeginPeriod`) mientras está al aire.
+
+Esto es cierto también en Linux, pero en Windows es obligatorio en vez de recomendable.
+
+---
+
+## 6. Arquitectura
+
+```
+                    ┌───────────────────────────────────┐
+   Browser  ◄────►  │  punyair.exe — Servicio de Windows│
+   (LAN o           │  ├─ UI embebida (React, go:embed) │
+    Tailscale)      │  ├─ API REST + WebSocket          │
+                    │  ├─ Resolver de plan              │
+                    │  ├─ Cola de ingest                │
+                    │  └─ SQLite WAL (disco LOCAL)      │
+                    └────────────────┬──────────────────┘
+                                     │ plan resuelto 48h
+                    ┌────────────────▼──────────────────┐
+                    │  punyair-playout.exe (Servicio)   │
+                    │  prioridad ALTA · sin red         │
+                    │  splice TS · watchdog             │
+                    │  ffmpeg.exe vendorizado           │
+                    └────────────────┬──────────────────┘
+                                     │
+              ┌──────────────────────┴───────────────────┐
+              │ UDP-TS / SRT  (ruta crítica)             │ (ruta no crítica)
+              ▼                                          ▼
+        ENDEC (EAS) → Transmisor              MistServer → preview web / IP
+```
+
+Trabajos de fondo —ingest, normalización, Whisper, AI— corren en **Job Objects de Windows con prioridad IDLE y tope de memoria**. Nunca pueden robarle recursos al aire, y se pausan solos si el playout reporta presión.
+
+---
+
+## 7. Modelo de datos (núcleo)
+
+```
+media_asset        archivo físico + análisis técnico
+                   ruta, hash, códec, duración_medida_ms, lufs, true_peak,
+                   tiene_captions, negro_cabeza_ms, negro_cola_ms, estado_normalizacion
+
+title              obra: serie, película, promo, ID de estación, spot
+episode            title + número + media_asset
+
+rights_window      title, fecha_inicio, fecha_fin, corridas_permitidas, corridas_usadas
+                   ← el resolver SE NIEGA a programar fuera de ventana
+
+schedule_rule      title/serie, patrón_de_días, hora, rights_window   ← lo que el humano edita
+
+plan_item          instante exacto + media_asset + duración + tipo + estado
+                   planned → cued → aired → (skipped | preempted)
+                   ← ES el as-run
+
+filler_asset       promos, IDs, interstitials — con duración exacta
+
+advertiser         cliente
+insertion_order    advertiser, spot, cantidad, ventana, daypart, tope/hora
+spot_airing        insertion_order + plan_item + verificación   ← proof-of-play
+```
+
+**Regla de integridad:** un `plan_item` no puede existir sin un `rights_window` vigente. La restricción vive en el esquema, no en el código de validación. Así muere el bug del *Hellsing*.
+
+---
+
+## 8. Requisitos funcionales
+
+### 8.1 Ingest *(el componente de mayor valor)*
+
+- Watch folder + carga por la web. **Validar longitud de ruta** antes de aceptar (ver §12).
+- `ffprobe`: códec, resolución, tasa de frames, canales, **duración real al ms**.
+- Loudness con `ffmpeg ebur128` → LUFS integrado y true peak. Corrección a −24 LKFS.
+- Detección de captions CEA-608/708 y **passthrough garantizado** en la normalización.
+- Detección de negro y silencio en cabeza y cola → recorte de slate, barras y comerciales viejos.
+- Normalización a formato de casa, en cola, en background, con prioridad IDLE.
+- **Cuarentena:** lo que falla no llega al aire. Nunca.
+
+### 8.2 Programación
+
+- Editor de parrilla semanal y mensual, como el Sheet actual pero con validación real.
+- Reglas por patrón de días (`LMMJVSD`), hora y ventana de derechos.
+- **Conflictos deterministas:** solapes, ventana vencida, corridas agotadas, archivo faltante o en cuarentena.
+- **Alertas de vencimiento** a 30/14/7 días. *(Resuelve los 18 vencimientos ciegos.)*
+- Resolver horario que materializa 48h de plan.
+- **Relleno automático:** todo hueco se llena con combinación exacta de la biblioteca de filler. Bin packing determinista. *(Resuelve el 30% de dead air.)*
+- Vista de aprobación del plan del día siguiente.
+
+### 8.3 Playout
+
+- Reloj monotónico + pre-roll generoso (§5.9).
+- Splice de TS por stream-copy. Re-encode con QuickSync solo como excepción.
+- **Cascada de respaldo: programa → filler → slate → barras y tono. Nunca negro.**
+- Watchdog: si el encoder no responde en N ms, corte a slate y alarma.
+- As-run en tiempo real.
+- Modo pánico: loop de emergencia con un botón.
+
+### 8.4 Traffic y publicidad
+
+- Clientes, órdenes de inserción, spots con duración medida.
+- Breaks: posiciones dentro y entre programas, tope por hora, separación entre competidores.
+- Rotación de spots según la orden.
+- **Reconciliación con EAS:** el playout no se entera de que el ENDEC lo sacó del aire, así que el as-run mentiría. Si el ENDEC expone GPI o red, se leen sus eventos y se marcan los tramos tapados. **Los spots afectados no se facturan: se reprograman como make-good.**
+- Reporte de proof-of-play por cliente, en PDF.
+
+### 8.5 EPG
+
+- XMLTV generado **desde el plan resuelto**, no desde las reglas.
+- IDs de canal correctos. *(El bug actual.)*
+- Publicación por HTTP.
+
+### 8.6 Monitoreo
+
+- Vista "Now Playing / Next Up" en vivo por WebSocket.
+- Negro, congelado y silencio con **filtros de ffmpeg** (`blackdetect`, `freezedetect`, `silencedetect`). Deterministas y gratis.
+- Alarmas por WhatsApp o Telegram. A las 3 AM nadie mira la pantalla.
+- **Alarma específica de Windows: reinicio inesperado del sistema.** Si la máquina se reinició sin ventana programada, hay que saberlo de inmediato.
+
+---
+
+## 9. Integración de AI
+
+**Regla que gobierna todo:**
+
+> **AI en el ingest y en la planificación. Cero AI entre el plan y el transmisor.**
+
+Nada que pueda colgarse, tener rate limit o alucinar entra al camino del aire. El daemon de playout es Go determinista, sin dependencias de red. **La estación tiene que salir al aire con el internet caído.**
+
+### Donde sí gana, en orden de retorno
+
+**1 — Metadata en el ingest.** El catálogo está vacío: la mitad de los shows sin sinopsis, sin año, sin rating. Nombre de archivo + frames + transcripción → título, serie, episodio, **sinopsis en español**, género, sugerencia de rating. Llena el EPG, que es lo único que el televidente ve antes de decidir quedarse. Humano aprueba antes de publicar.
+
+**2 — Puntos de corte.** Dónde van los breaks *dentro* del programa. Hoy no hay: bloques fijos de 30 min. Detectar cortes de escena, fundidos y silencios donde de verdad cabe un corte. Es la diferencia entre "tengo 6 minutos de inventario por hora" y "tengo 6 minutos colocados donde no arruinan el show". **Inventario vendible.**
+
+**3 — Captions con Whisper local.** El archivo casi seguro no tiene captions. Whisper sobre el material, revisión humana, y a CEA-608/708. Convierte un pasivo de cumplimiento en una función que nadie a este precio ofrece. Corre en la misma caja, $0.
+
+**4 — Copiloto de programación.** Lenguaje natural sobre el plan. Las dos demos que resuelven sus problemas reales:
+- *"Se me vencen 18 programas en 60 días"* → propone 18 reemplazos de su biblioteca que caben en el slot, respetan la ventana de derechos y encajan con el tono del bloque.
+- *"Llename el bloque de 1 a 6 AM"* → franja temática coherente con lo que ya posee.
+
+**Patrón obligatorio: la AI propone un diff contra el plan, el humano aprueba, el sistema ejecuta.** Nunca escribe al aire directo.
+
+**5 — El lado comercial.** Reporte semanal de proof-of-play **por WhatsApp** al anunciante: *"su spot salió 14 veces esta semana, 3 en horario estelar, aquí el detalle."* Ninguna estación de este tamaño en la isla manda eso hoy.
+
+### Donde la AI es mala idea — explícitamente prohibida
+
+| No usar AI para | Porque |
+|---|---|
+| **Loudness** | Es medición, no juicio. `ebur128`, determinista, auditable. Un modelo cerca de un número de cumplimiento FCC es negligencia. |
+| **Negro, congelado, silencio** | ffmpeg ya lo hace exacto y gratis. |
+| **Conflictos y ventanas de derechos** | Lógica determinista. El validador de hoy falló en silencio; se arregla con código correcto, no con un modelo. |
+| **Decidir qué sale al aire sin humano** | Derechos, ratings y contratos publicitarios son obligaciones legales. |
+
+### Modelos y su ejecución en Windows
+
+- **Ollama nativo para Windows** — pasadas masivas de metadata y embeddings. Reusa el stack de Folio.
+- **Claude (nube)** — copiloto de programación y redacción de reportes. Interactivo, poco frecuente, no crítico.
+- **faster-whisper** — transcripción y captions. Corre en Job Object con prioridad IDLE.
+
+Ninguno arranca automáticamente al bootear. Se lanzan bajo demanda desde la cola de ingest y **se matan solos si el playout reporta presión de recursos.**
+
+---
+
+## 10. Cumplimiento FCC
+
+| Requisito | Cómo se cumple | Dueño |
+|---|---|---|
+| **EAS (Part 11)** | ENDEC certificado, aguas abajo. **Fuera del alcance del software.** El sistema solo lee sus eventos, si los expone, para reconciliar el as-run. | Hardware |
+| **CALM Act / ATSC A/85** | Medición y corrección a **−24 LKFS, true peak −2 dBTP** en el ingest. Log de medición por asset → sustenta el *safe harbor* de la FCC. | Software |
+| **Closed captioning** | Detección y **passthrough garantizado** en la normalización. Generación con Whisper para material sin captions. | Software |
+| **Archivo público / anuncios políticos** | El sistema de traffic es la fuente de esa data. Exportable. | Software |
+
+> **Nota:** esto no es asesoría legal. Las obligaciones exactas dependen de la clase de licencia. **Confirmar con el ingeniero de la estación y con quien le lleve el tema FCC a Rolando** — en particular las exenciones de captioning por ingresos, que probablemente apliquen pero no deben asumirse.
+
+---
+
+## 11. Hardware y presupuesto de recursos
+
+### Máquina recomendada
+
+**Mini PC Intel N100 o N305** con QuickSync. ~$150–250, 6–15W. Sigue siendo suficiente en Windows, pero **con 16 GB de RAM, no 8** — el sistema base se come 2–2.5 GB antes de que arranque nada nuestro.
+
+| Recurso | Mínimo | Recomendado |
+|---|---|---|
+| CPU | 4 núcleos con QuickSync | N100 / N305 o superior |
+| RAM | **16 GB** | 16–32 GB |
+| Disco sistema | 256 GB SSD | 512 GB NVMe |
+| Disco base de datos | **local, nunca de red** | mismo NVMe |
+| Almacenamiento media | según archivo | disco local o NAS *(ver riesgo §15)* |
+| Red | Gigabit | Gigabit |
+
+**Dos cajas idénticas.** Es una licencia FCC: una principal y una de respaldo en frío con la misma imagen y la base replicada. Cuesta poco comparado con salir del aire.
+
+### Presupuesto de recursos estimado *(a validar con medición real)*
+
+| Proceso | RAM | CPU |
+|---|---|---|
+| Windows IoT LTSC base | 2.0–2.5 GB | despreciable |
+| `punyair.exe` (API + UI + SQLite) | 80–120 MB | despreciable |
+| `punyair-playout.exe` | 100–200 MB | despreciable |
+| ffmpeg splice (stream-copy) | ~120 MB | <10% de un núcleo |
+| *ffmpeg re-encode QuickSync (excepción)* | ~300 MB | 15–25% de un núcleo |
+| **Total en aire normal** | **~2.7 GB** | **< 1 núcleo** |
+| Trabajos de fondo (IDLE, Job Object) | tope configurable | lo que sobre, pausable |
+
+De los ~2.7 GB, **2.5 son de Windows**. Lo nuestro pesa menos de 500 MB y menos de un núcleo — igual que en Linux. El costo del sistema operativo se paga con RAM, que es barata, no con complejidad.
+
+---
+
+## 12. Despliegue y operación en Windows
+
+Esta sección es la que más cambia respecto a un despliegue Linux. **Casi todo el riesgo operativo de este proyecto vive aquí.**
+
+### 12.1 Edición de Windows — **la decisión más importante de esta sección**
+
+> **Windows 10 o 11 IoT Enterprise LTSC.**
+
+No Windows 11 Pro. No Home. Razones:
+
+- **Sin actualizaciones de funcionalidad por 10 años.** Solo parches de seguridad. Un aparato de transmisión no puede recibir una versión nueva del sistema operativo sin avisar.
+- **Sin Store, sin Cortana, sin apps de consumidor**, sin las reinstalaciones sorpresa que trae el Windows normal.
+- Diseñado exactamente para esto: equipos dedicados que corren una sola cosa, 24/7, sin nadie sentado al frente.
+
+*Alternativa aceptable:* Windows Server 2022 o 2025, con control de actualizaciones por política. *Inaceptable:* Windows 11 Home o Pro con configuración por defecto.
+
+### 12.2 Windows Update — riesgo operativo #1
+
+**El escenario que hay que impedir: la máquina se reinicia sola a las 3 AM para instalar una actualización y la estación sale del aire.**
+
+- Actualizaciones en modo **notificar, nunca instalar y reiniciar automáticamente.**
+- Política de grupo: `NoAutoRebootWithLoggedOnUsers` y diferimiento de actualizaciones de calidad.
+- Ventana de mantenimiento **manual**, siempre con la caja de respaldo lista.
+- **Alarma si el sistema registra un reinicio inesperado** (§8.6).
+
+### 12.3 Windows Defender — exclusiones obligatorias
+
+La propia documentación de MistServer advierte que Defender bloquea software de servidor. Con terabytes de video leídos a alta tasa, el escaneo en tiempo real degrada el rendimiento y **puede provocar errores de bloqueo de archivo en pleno aire.**
+
+Excluir:
+- El directorio de instalación de la aplicación
+- `punyair.exe`, `punyair-playout.exe`, `ffmpeg.exe`, `ffprobe.exe` como procesos
+- **Todos los directorios de media** — original, normalizado y filler
+- El directorio de la base de datos
+- El directorio de MistServer
+
+Y abrir en Firewall solo los puertos necesarios, con regla explícita por aplicación.
+
+### 12.4 Energía y suspensión
+
+Todo desactivado, sin excepción:
+
+- Plan de energía de **alto rendimiento**
+- Suspensión e hibernación: **nunca**
+- Apagado de disco duro: **nunca**
+- Suspensión selectiva de USB: **desactivada**
+- Apagado de pantalla: permitido (no afecta el servicio)
+- **Arranque automático tras corte de energía** habilitado en BIOS/UEFI
+- **UPS obligatorio**, con apagado ordenado
+
+### 12.5 Rutas largas
+
+El límite `MAX_PATH` de 260 caracteres es real y un archivo de series con nombres largos lo revienta.
+
+- Habilitar rutas largas por política (`LongPathsEnabled`)
+- Manifiesto del ejecutable declarando soporte de rutas largas
+- Prefijo `\\?\` en las llamadas de archivo del daemon
+- **Y aun así: validar la longitud en el ingest y rechazar lo que se pase.** Defensa en profundidad.
+
+### 12.6 Almacenamiento
+
+- **Base de datos SQLite en disco local. Nunca SMB, nunca unidad mapeada.** El modo WAL no funciona sobre red y la corrupción es silenciosa.
+- Media en disco local si cabe. **Si va en NAS por SMB, un hipo de red en pleno aire te tumba el programa** — mitigar con caché local de las próximas N horas del plan, que el resolver ya conoce por adelantado.
+- Un servicio corriendo como `LocalSystem` **no ve las unidades mapeadas del usuario.** Usar rutas UNC completas o una cuenta de servicio dedicada con credenciales guardadas.
+
+### 12.7 Servicios y prioridades
+
+| Proceso | Clase de prioridad |
+|---|---|
+| `punyair-playout.exe` | **HIGH** *(nunca REALTIME — puede matar al sistema entero)* |
+| `punyair.exe` (API/UI) | NORMAL |
+| ffmpeg de ingest, Whisper, Ollama | **IDLE**, dentro de Job Object con tope de memoria |
+
+Ambos servicios con **recuperación automática**: reinicio al primer, segundo y siguientes fallos. Es el equivalente de `Restart=always` en systemd.
+
+### 12.8 Despliegue
+
+```
+punyair-v1.2.3-windows-amd64.zip
+├── punyair.exe              (API + UI embebida)
+├── punyair-playout.exe      (motor)
+├── bin/ffmpeg.exe           (versión fijada)
+├── bin/ffprobe.exe
+├── config.toml
+└── install.ps1              (servicios, exclusiones, energía, rutas largas)
+```
+
+Instalar: descomprimir, correr `install.ps1` como administrador. Actualizar: detener servicios, reemplazar ejecutables, arrancar. **Sin Docker, sin instalador de Node, sin runtime de Python salvo el de Whisper si se usa.**
+
+`install.ps1` deja además un **reporte de verificación**: confirma exclusiones de Defender, plan de energía, rutas largas y política de actualizaciones. Si algo falta, avisa. Que la configuración correcta no dependa de que alguien se acuerde.
+
+### 12.9 Acceso remoto y respaldo
+
+- **Tailscale para Windows.** Sin abrir puertos, sin redirección, funciona detrás de CGNAT. Rolando entra desde el celular; tú entras a dar soporte.
+- **RDP es seguro** porque todo corre como servicio, no en sesión de escritorio.
+- Respaldo: `VACUUM INTO` de SQLite cada hora, a disco local y a la nube. Instantáneas VSS para consistencia. El media se respalda aparte.
+
+---
+
+## 13. Fases
+
+### F1 — Fundación *(2–3 semanas)* · No toca el aire
+Catálogo, ingest con `ffprobe` y medición de loudness, modelo de derechos, editor de parrilla, resolver de plan, **generador de XMLTV correcto**, alertas de vencimiento. AI: metadata en el ingest. Servicio de Windows y `install.ps1` desde el día uno.
+
+Rolando sigue con su VLC. **Valor desde el día uno aunque nunca pasemos a F2.**
+
+### F2 — Playout *(4–6 semanas)*
+Normalización a formato de casa, daemon de playout, splice de TS, **salida directa al ENDEC sacando MistServer y VLC de la ruta crítica (§5.8)**, cascada de respaldo, filler, as-run, monitor, alarmas. **Cero AI.**
+
+*Bloqueada por la pregunta abierta #2: qué protocolo acepta el equipo que alimenta al ENDEC.*
+
+### F3 — Comercial *(4–6 semanas)*
+Traffic, breaks, rotación, reconciliación con EAS, proof-of-play, reportes por WhatsApp. AI: detección de puntos de corte.
+
+### F4 — Producto
+Copiloto de programación, captions con Whisper, multi-canal, plano de control en la nube. **CasparCG para gráficos** si se quiere bug, ticker o lower thirds — disponible por estar en Windows.
+
+---
+
+## 14. Métricas de éxito
+
+| Métrica | Hoy | Meta |
+|---|---|---|
+| Dead air | 30% de slots | < 1% |
+| Exactitud del EPG | 0% (plantilla rota) | 100% contra el as-run |
+| Intervención manual diaria | constante | < 15 min/día |
+| Vencimientos sorpresa | 18 ciegos | 0 |
+| Inventario publicitario vendido | 0 seg | primer cliente facturado y certificado |
+| Interrupciones no planificadas | sin medir | 0 en 30 días |
+| **Reinicios no planificados de Windows** | sin medir | **0** |
+
+---
+
+## 15. Riesgos
+
+| Riesgo | Mitigación |
+|---|---|
+| **Windows Update reinicia el aire** | IoT Enterprise LTSC + política de actualización + alarma de reinicio (§12.1, §12.2). **Riesgo operativo #1.** |
+| **Defender bloquea o degrada** | Exclusiones obligatorias verificadas por `install.ps1` (§12.3) |
+| **MistServer sobre Cygwin en la ruta crítica** | Sacarlo del camino del aire (§5.8). Queda solo para preview. |
+| **Licencia de MistServer.** El repo de GitHub está bajo Unlicense (dominio público), pero `mistserver.org/opensource` todavía describe el modelo viejo AGPLv3 + Pro, donde la edición libre no tenía entrada MPEG-TS ni MP4. Las fuentes se contradicen. | **Verificar el `UNLICENSE` del repo antes de comprometer código comercial.** Decide si esto puede ser producto. Diez minutos de revisión legal. *Nota: si se cumple §5.8, MistServer deja de ser crítico y el riesgo baja mucho.* |
+| **Media en SMB tumba el aire** | Caché local de las próximas N horas del plan (§12.6) |
+| **El ENDEC no expone GPI ni red** | El proof-of-play cae a comparación de señal — funciona, menos exacto |
+| **Material de archivo en mal estado** | Cuarentena en el ingest. Presupuestar tiempo de limpieza. |
+| **Normalizar el archivo toma días de CPU** | Una sola vez, en background, priorizado por lo que se programa primero |
+| **Mercado pequeño y lento** | TV comunitaria, low-power, religiosa y regional de LATAM pagan poco y deciden lento. No esperar SaaS de crecimiento rápido. |
+| **Una sola persona opera la estación** | Todo se degrada solo. Nunca negro, siempre alarma. |
+
+---
+
+## 16. Preguntas abiertas
+
+1. **Marca y modelo del ENDEC**, y si tiene GPI o puerto de red.
+2. **¿Qué protocolo acepta el equipo que alimenta al ENDEC?** UDP-TS, SRT, ASI, HDMI/SDI. **Bloquea la F2 y define §5.8.**
+3. **Resolución y tasa de frames del transmisor** — define el formato de casa.
+4. **¿El material trae captions embebidos?**
+5. **¿Qué edición y versión de Windows corre hoy la máquina de Rolando?** Y si hay presupuesto para licencia IoT Enterprise LTSC.
+6. **¿Dónde vive el media hoy?** Disco local o NAS, y cuántos TB.
+7. **¿Bajo qué licencia salió el binario MistServer 3.4?**
+8. **¿Qué exenciones de captioning le aplican** a la estación?
+9. ¿Hay intención de vender anuncios políticos? Cambia los requisitos de archivo público.
+
+---
+
+## 17. Oportunidad de producto
+
+El playout automation comercial —Florical, Imagine, Pebble, Harmonic— cuesta entre decenas y cientos de miles de dólares. Debajo hay un vacío grande: TV comunitaria, low-power, canales religiosos y regionales de LATAM, todos corriendo en hojas de cálculo y VLC igual que Rolando.
+
+Lo defendible no es la parrilla — eso lo hacen ErsatzTV y Tunarr gratis. Es que **este sistema nace sabiendo qué es −24 LKFS, qué hacer cuando entra un EAS, y cómo probarle a un anunciante que su spot salió.** Ninguno de los libres sabe nada de eso, y los caros no bajan a este precio.
+
+Que corra en Windows sin Docker, instalable con un zip y un script, **amplía el mercado en vez de reducirlo**: las estaciones pequeñas de este perfil corren Windows y no tienen quién les administre un Linux.
+
+Encaja con el patrón de Puny.bz: vertical desatendida, operación real, español nativo, Puerto Rico como jurisdicción de EEUU.
+
+CAtv es el piloto. Si funciona ahí, funciona en cien estaciones iguales.

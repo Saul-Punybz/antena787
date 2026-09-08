@@ -1,0 +1,730 @@
+# PRD — Antena
+
+**Software libre para lanzar y operar canales de televisión**
+
+**Nombre de trabajo:** Antena *(alternativas: Emisora, Torre, Señal — a decidir)*
+**Autor:** Saul Gonzalez · proyecto personal, repositorio en perfil propio
+**Fecha:** 4 de septiembre de 2026
+**Versión:** 5 — **escala de uno a muchos canales · internacional · IA por MCP en la última fase**
+**Licencia:** AGPL-3.0 · contribuciones por DCO
+**Despliegue de referencia:** Caribbean Advantage TV — Rolando Rosa, Puerto Rico
+
+---
+
+## 1. La promesa
+
+> **Que a quien quiere lanzar un canal solo le falte comprar el equipo.**
+>
+> Y que quien ya tiene diez canales pueda operarlos con lo mismo.
+
+Antena es software libre para planificar, emitir y monetizar televisión. Sirve igual a una organización sin fines de lucro con un canal por internet, a una televisora comunitaria con un transmisor, y a un grupo con varias señales y un equipo de gente.
+
+- **Un solo ejecutable.** Sin Docker, sin runtime externo, sin archivos de configuración que editar a mano.
+- **Windows, Linux y ARM** desde el mismo código.
+- **Desde una Raspberry Pi hasta un servidor con varios canales.**
+- **ATSC, ISDB-T, DVB** — y cualquier cosa que acepte una señal.
+- **Todo desde el browser.**
+- **Cero IA en el producto.** Quien la quiera, conecta la suya por MCP (§19).
+
+### La tesis
+
+El playout automation comercial cuesta entre decenas y cientos de miles de dólares. Lo libre que existe está hecho para canales caseros: transcodifica al vuelo, tiene problemas documentados en los bordes de programa, y **no sabe qué es −24 LKFS, ni qué es SCTE-35, ni cómo probarle a un anunciante que su spot salió.**
+
+Entre esos dos mundos hay un vacío lleno de gente en todo el hemisferio: canales universitarios, televisoras comunitarias, emisoras religiosas, estaciones low-power, canales regionales, grupos con varias señales que pagan licencias que no pueden sostener.
+
+---
+
+## 2. Quién es el usuario
+
+**No hay un usuario, hay un rango. El sistema tiene que servir a los dos extremos sin castigar a ninguno.**
+
+| | Extremo pequeño | Extremo grande |
+|---|---|---|
+| Quién | ONG, universidad, comunitaria | Grupo con varias señales |
+| Canales | 1 | 2–20 |
+| Gente | **una persona** | equipo con roles |
+| Conocimiento | sabe instalar software, nada más | tiene ingeniero |
+| Presupuesto | cercano a cero | limitado pero real |
+| Qué necesita | **que funcione sin entender nada** | control fino, API, redundancia |
+
+La forma de servir a ambos es **revelación progresiva**: el sistema arranca en su forma más simple y **cada capacidad avanzada aparece solo cuando alguien la pide**. El usuario de un canal nunca ve multi-canal, ni roles, ni API. El grupo grande los enciende.
+
+---
+
+## 3. Principios de diseño
+
+Gobiernan cualquier decisión. Si algo los viola, está mal aunque sea elegante.
+
+**1 · Detectar antes de preguntar.** El sistema escanea la máquina y la red y averigua lo que pueda. Solo pregunta lo que no puede saber.
+
+**2 · Probar, no asumir.** Ninguna configuración se acepta porque sí. Se prueba y se le muestra al usuario que funcionó.
+
+**3 · Nada de jerga.** El usuario nunca ve *driver*, *códec*, *GOP*, *LKFS*, *demuxer* ni *transport stream*.
+
+**4 · Siempre hay salida.** Cada pregunta tiene "no sé / después" con un valor por defecto que funciona.
+
+**5 · Cero archivos de configuración.** Existe uno, pero lo escribe la aplicación.
+
+**6 · El instalador hace el trabajo sucio.** Antivirus, energía, servicio, rutas, permisos. Automático y verificado.
+
+**7 · Los errores se explican en cristiano.** No "no audio stream detected" sino **"Este video no tiene sonido"**, y qué hacer.
+
+**8 · Si el editor de parrilla es peor que un Excel, fracasamos.**
+
+**9 · Revelación progresiva.** Lo simple por defecto, lo potente a un clic. **Nadie paga complejidad que no usa.**
+
+**10 · Nada asumido sobre el país.** Ni la norma de transmisión, ni la frecuencia de cuadro, ni el formato de subtítulos, ni el volumen, ni el sistema de alertas. Todo es perfil.
+
+**11 · Cero IA en el producto.** El sistema tiene que ser 100% funcional sin un solo modelo. La IA se conecta por fuera (§19).
+
+---
+
+## 4. Motivación: el caso que originó el proyecto
+
+CAtv opera al aire con una cadena funcional pero enteramente manual: un Google Sheet, un humano, VLC, un servidor de streaming, otro VLC, el equipo de alertas y el transmisor.
+
+El Sheet es un sistema de traffic sorprendentemente completo montado a mano. **Merece respeto: alguien resolvió su problema con lo que tenía.** Y aun así, medido el 4 de septiembre de 2026:
+
+| Hallazgo | Detalle |
+|---|---|
+| **Guía rota** | El XMLTV es todavía la plantilla de ejemplo: el canal dice `Caribbean Advantage TV` pero los programas apuntan a `sports1.channel`, con fechas de mayo e items inventados. |
+| **30% de dead air** | 103 de 343 espacios semanales vacíos. Casi todo el bloque de 1:00–6:00 AM, los siete días. |
+| **18 vencimientos en 60 días** | *Familia Robinson* en 2 días, *Los Simuladores* en 7. Sin renovar, esos espacios caen a negro. |
+| **Validador que miente** | *Hellsing* tiene inicio 9/15/2026 y **fin 1/1/2026** — final anterior al inicio — y lo marca "✓ OK". |
+| **Inventario publicitario en cero** | 518,400 segundos disponibles, nada vendido. |
+| **Duraciones estimadas** | No son duración medida. Todo el relleno es adivinanza. |
+
+**Ninguno es exclusivo de CAtv, ni del tamaño de CAtv.** Un grupo con diez canales tiene los mismos problemas multiplicados por diez.
+
+---
+
+## 5. Objetivos
+
+1. **Que una persona sin conocimiento técnico llegue de cero a señal al aire en menos de una hora.**
+2. Que armar y cambiar la parrilla sea **más fácil que en un Excel**.
+3. **Que el mismo sistema opere un canal o veinte** sin que el usuario de uno pague esa complejidad.
+4. **Que funcione en cualquier país** — norma de transmisión, frecuencia de cuadro, subtítulos, volumen y alertas son configuración, no supuestos.
+5. Emitir 24/7 sin dead air y sin intervención humana diaria.
+6. Una guía electrónica que diga la verdad.
+7. **Que el inventario publicitario sea vendible en el mercado moderno** — señalización estándar de cortes.
+8. **Ser 100% funcional sin ninguna IA.**
+9. Aceptar el hardware y los sistemas que la gente ya tiene.
+10. Que un tercero pueda contribuir soporte para su equipo o su país sin entender todo el sistema.
+
+### No-objetivos (v1)
+- No se construye el equipo de alertas de emergencia. Es hardware certificado; Antena **se integra**.
+- No se construyen códecs. Eso es ffmpeg.
+- No se construye **ninguna función de IA dentro del producto** (§19).
+- No se construye publicidad direccionable — se emite la señal para que otros la hagan (§17.1).
+- No hay ingesta de fuentes en vivo (cámara, satélite) en v1.
+- **No se generan clips ni video vertical para TikTok, Shorts o Instagram**, ni hay manejo de redes sociales. Es otro producto, con otros formatos y otro flujo. Antena expone el as-run y el contenido; que otra herramienta —o el asistente por MCP— lo haga.
+
+---
+
+## 6. Los dos modos
+
+**Modo `internet`** — Canal por IP: YouTube, Facebook, Twitch, servidor propio, HLS. **Sin obligaciones regulatorias de radiodifusión.** Volumen −16 LUFS. *Quien opera así nunca ve una pantalla de alertas de emergencia.*
+
+**Para la mayoría de los usuarios de Antena este es el modo principal, no un extra.** Una universidad o una ONG rara vez tendrá transmisor.
+
+**Modo `transmisor`** — Alimenta un transmisor licenciado. Activa el perfil regulatorio del país (§8) con sus validaciones y bitácoras.
+
+**Los dos a la vez (simulcast).** Un canal puede salir por transmisor **y** por internet simultáneamente. Es casi gratis: el contenido ya está normalizado a formato de casa, así que son conexiones adicionales sobre algo ya codificado. **El transmisor da la cobertura; internet da la diáspora** — para una comunitaria de Puerto Rico esa diferencia es enorme.
+
+Simulcast impone tres cosas, y la primera es seria:
+
+1. **Derechos por canal de distribución** (§15). Un programa licenciado para transmisión abierta **casi nunca lo está para internet mundial.** El resolver se niega a mandar por internet lo que no está autorizado. Sin esto, el usuario viola su contrato y además recibe reclamos automáticos de derechos que pueden costarle la cuenta.
+2. **Volumen por salida.** Abierta pide −24 LKFS, la web −16 LUFS. El mismo feed en las dos suena mal en una.
+3. **Reconexión automática.** Un push de 24/7 se cae siempre.
+
+Se elige en la primera pregunta del asistente, con una tercera opción: *"No sé todavía"* → arranca en modo internet, siempre cambiable.
+
+---
+
+## 7. Escala: de un canal a muchos
+
+**Regla: un proceso, un canal.** Es como funciona la televisión de verdad —cada señal tiene su cadena— y mantiene el caso pequeño trivial.
+
+Encima va una capa de administración que puede supervisar varios:
+
+| Se comparte entre canales | Es propio de cada canal |
+|---|---|
+| Biblioteca y catálogo | Parrilla y plan |
+| Ventanas de derechos | Proceso de playout |
+| Almacenamiento de contenido | Salida y perfil de formato |
+| Anunciantes y órdenes | Cortes y as-run |
+| Usuarios y roles | Perfil regulatorio |
+
+Los derechos se comparten a propósito: en un grupo real, una serie se licencia para varias señales con un tope total de corridas. Que el modelo lo sepa evita el error más caro del negocio.
+
+**Para el usuario de un canal, nada de esto existe.** No hay selector de canal, ni pestaña de canales, ni concepto de canal en la interfaz. Aparece cuando añade el segundo.
+
+**Roles, igual.** Instalación nueva: **un usuario, sin fricción de login.** Cuando se añade a una segunda persona, aparecen los roles — programación, tráfico, ingesta, control maestro, administración. **Nadie configura permisos hasta que tiene con quién.**
+
+**Redundancia (para quien la necesite).** Playout principal y de respaldo con conmutación automática: el de respaldo sigue el mismo plan en caliente y toma el aire si el principal calla. Se enciende con una casilla; quien tiene un canal comunitario ni se entera de que existe.
+
+---
+
+## 8. Internacional: qué cambia según el país
+
+**Antena no asume Estados Unidos en ninguna parte.** Lo que cambia entre países es más de lo que parece, y todo es perfil:
+
+| | Américas (ATSC) | Sudamérica y Japón (ISDB-T) | Europa, África, Asia (DVB) |
+|---|---|---|---|
+| Países | EEUU, PR, México, Canadá, Corea | Brasil, Argentina, Chile, Perú, Colombia*, Venezuela, Ecuador, Bolivia, Filipinas | Europa, África, Australia, gran parte de Asia |
+| Cuadros | 59.94 / 29.97 Hz | 59.94 / 29.97 Hz | **50 / 25 Hz** |
+| Subtítulos | CEA-608/708 | **ARIB** | **DVB subtitles, teletexto** |
+| Volumen | **−24 LKFS** (ATSC A/85) | −24 LKFS (ARIB TR-B32) | **−23 LUFS** (EBU R128) |
+| Alertas | EAS | **EWBS** — integrado en la norma | sistemas nacionales |
+| Guía | PSIP · XMLTV | ARIB · XMLTV | DVB-SI · XMLTV |
+
+\* *Colombia usa DVB-T2 pese a estar en Sudamérica. Precisamente por eso el perfil se elige por país, no por continente.*
+
+> **La diferencia entre −24 LKFS y −23 LUFS parece trivial y no lo es.** Una universidad en España o Colombia que instale esto con el número estadounidense incumple su norma. Que el volumen fuera una constante en el código sería un error de diseño con consecuencia legal.
+
+**Lo que NO cambia:** la norma de transmisión la resuelve el encoder o modulador aguas abajo. Antena entrega una señal limpia con el formato correcto. **Por eso el proyecto puede ser internacional sin volverse inmanejable** — la parte específica de cada norma no es nuestra.
+
+Cada perfil de país requiere **fuente citada y un mantenedor que opere en esa jurisdicción.** Sin dueño, se marca experimental. Perfiles al lanzar: `us-fcc`, `internet`. Estructura lista y buscando contribuidor: `eu-ebu`, `isdb-latam`.
+
+> **Nota legal, en el README sin adornos:** Antena ayuda a cumplir, **no certifica**. No sustituye asesoría legal ni al ingeniero de la estación. **Las alertas de emergencia se cumplen con hardware certificado, no con este software.**
+
+---
+
+## 9. Lo que viene: ATSC 3.0 y la evolución regulatoria
+
+**Estado a septiembre de 2026.** La FCC votó 3-2 en mayo de 2026 un marco que obliga a las estaciones **de potencia completa** a completar la transición a ATSC 3.0 hacia el cuarto trimestre de 2027. El simulcast vence el **17 de julio de 2027**. Propuestas previas escalonaban mercados grandes en 2028 y el resto en 2030. **Las fechas se mueven; la dirección no.**
+
+**LPTV, traductores y Class A están hoy exentos.** La NAB no recomienda obligarlos y la LPTV Broadcasters Association argumenta que un mandato sacaría del aire a las estaciones pequeñas por costo. **Buena parte de los usuarios de Antena cae ahí.** Puerto Rico está dentro del movimiento.
+
+**No es una versión nueva de lo mismo — es otra pila:**
+
+| | ATSC 1.0 | ATSC 3.0 |
+|---|---|---|
+| Video | MPEG-2 / H.264 | **HEVC** |
+| Audio | AC-3 | **AC-4** |
+| Transporte | **MPEG-2 TS** | **ROUTE/DASH sobre UDP/IP** |
+
+**Antena lo absorbe sin rearquitectura, y eso valida el diseño:** el formato de casa ya es un perfil (§14), la salida ya es un driver (§14), y "normalizar una vez y empalmar sin recodificar" encaja *mejor* con DASH, que ya viene segmentado.
+
+> **Regla desde el primer commit: el núcleo no puede asumir MPEG-TS en ninguna parte.** Contenedor y códec son propiedades del perfil, nunca constantes del motor. Gratis hacerlo bien ahora, carísimo después.
+
+*Para la v1:* casi toda estación entrega SDI o H.264/TS a un encoder que hace la conversión. Antena no necesita hablar ROUTE/DASH el día uno — solo no cerrarse la puerta.
+
+**Alertas avanzadas (AWARN).** ATSC 3.0 permite alertas geolocalizadas con mapas e instrucciones. El diseño no cambia — siguen siendo hardware aguas abajo — pero aparece un matiz: si la alerta es geolocalizada, **solo parte de la audiencia la vio**, y la reconciliación de spots tapados deja de ser binaria. No es de v1; queda anotado para que el modelo de datos no lo impida.
+
+---
+
+## 10. El asistente de instalación
+
+Se abre solo la primera vez. **Meta: seis preguntas o menos.**
+
+**Paso 1 · ¿Qué vas a hacer?** Tres botones: *Canal por internet* · *Canal con transmisor* · *No sé todavía*
+
+**Paso 2 · Revisión automática.** Sin preguntar nada, reporta en lenguaje llano:
+```
+✓ Procesador con aceleración de video    (los videos se procesan rápido)
+✓ 890 GB libres                          (≈ 400 horas de video)
+✓ Encontré 1 equipo de video en tu red:  192.168.1.40
+⚠ Encontré 1 puerto serial               (podría ser tu equipo de alertas)
+```
+
+**Paso 3 · ¿A dónde va tu señal?** Nunca se pide elegir un *driver*: *A internet* (pegar la clave) · *A un equipo en mi red* (muestra los detectados, con botón **Probar**) · *A una tarjeta de esta máquina* · *Todavía no sé*.
+
+**Paso 4 · La prueba de barras** — *el paso más importante del producto*. Antes de subir un video, manda **barras de color y tono** a la salida y pregunta:
+
+> ### ¿Ves las barras de color?
+> ### [ Sí ]  ·  [ No veo nada ]
+
+**Sí** → funciona. **No** → diagnóstico guiado, un paso a la vez.
+
+*Esta sola pantalla convierte una tarde de frustración en una pregunta que cualquiera contesta. Es la diferencia entre un proyecto que se usa y uno que se abandona en la instalación.*
+
+**Paso 5 · ¿Cómo se ve tu canal?** No se pregunta "1080i59.94". Se pregunta **en qué país estás** (de ahí sale la norma, la frecuencia de cuadro y el perfil regulatorio) y **qué calidad**: *HD completo (1080)* · *HD ligero (720) — recomendado* · *Estándar (SD)*.
+
+**Paso 6 · Tu contenido.** Arrastrar archivos o señalar una carpeta. Avance en lenguaje llano, con los problemas explicados: *"capitulo_12.avi — no tiene sonido"*.
+
+**Paso 7 · Tu primera parrilla.** Cae en el editor con el contenido ya disponible, y ofrece **llenar la semana automáticamente**.
+
+**Paso 8 · Al aire.** Un botón y una cuenta regresiva cancelable.
+
+---
+
+## 11. El editor de parrilla — "la parte del Excel"
+
+**Punto de comparación: la hoja de cálculo que la persona ya usa.** Si esto es más incómodo, el proyecto fracasa aunque todo lo demás funcione.
+
+**Lo que el Sheet hace bien y hay que igualar:** ves la semana completa · escribes directo en la celda · copias y pegas rangos · arrastras para repetir · es obvio qué está vacío.
+
+**Cómo funciona:** una cuadrícula igual —días en columnas, horas en filas—. Arrastrar desde la biblioteca lateral · arrastrar de lado para repetir en varios días · copiar un día entero o una semana y pegarla · clic derecho → *repetir L–V* · *repetir todos los días* · *cambiar* · *quitar* · **deshacer siempre** con `Ctrl+Z` · escribir directo con autocompletado.
+
+**Lo que un Excel no puede hacer:**
+- **Los espacios vacíos se ven vacíos** — en rojo, con botón **Llenar automáticamente** al lado.
+- **Las duraciones son reales y a escala.** Un programa de 24 minutos en un espacio de 30 muestra el hueco de 6.
+- **Los conflictos aparecen mientras editas**, con la explicación al pasar el ratón.
+- **Avisos de vencimiento en la propia cuadrícula:** *"a este programa le quedan 6 días"*.
+- **Vista previa del día completo** antes de que salga al aire.
+
+**Migrar desde una hoja de cálculo: se puede pegar directo desde Excel o Google Sheets.** El sistema empareja los nombres con la biblioteca y muestra qué encontró y qué no. **Sin esto, nadie con meses de parrilla hecha migra.**
+
+---
+
+## 12. Contenido y tablero
+
+**Contenido.** Arrastrar archivos o señalar una carpeta vigilada. Detrás y sin mostrarlo: duración real, medición y corrección de volumen, detección de subtítulos, recorte de negro y barras, conversión al formato de casa. **El usuario ve una barra de progreso, no un códec.** Errores en cristiano. Edición en lote. Quitar es un botón, y si está programado avisa dónde. **Cambiar el formato del canal** después: se reconvierte todo en segundo plano sin sacar el canal del aire.
+
+**Tablero.** Una pantalla que contesta *"¿está todo bien?"*:
+```
+● AL AIRE          Los Simuladores · faltan 14 min
+  Sigue:           Zorro 57 · 4:30 PM
+
+✓ Tu señal está saliendo bien
+✓ Programación cargada para los próximos 12 días
+⚠ 3 programas se te vencen esta semana     [ ver ]
+⚠ 4 videos tienen problemas                [ ver ]
+```
+Verde, amarillo, rojo. Cada aviso lleva a donde se arregla. Alarmas por WhatsApp, Telegram o correo — **porque a las 3 AM nadie está mirando.** *(Con varios canales, una fila por canal y el peor estado arriba.)*
+
+---
+
+## 13. Arquitectura
+
+**13.1 · Normalizar en el ingest, no en el aire.** Todo lo que entra se convierte **una sola vez, en segundo plano** al formato de la casa: un códec, GOP cerrado de largo fijo, audio fijo, volumen al objetivo de la región. Consecuencia: como todos los archivos comparten parámetros exactos, **el playout es empalme sin recodificar. Cero conversión en vivo.** Es lo que hace la televisión de verdad, y la razón de que esto corra en hardware barato.
+
+**13.2 · Separar reglas de plan.** La *regla* es "Kojak, L–V, 8:00 AM, del 8/9 al 12/20". El *plan* es "2026-09-05 08:00:00.000 → episodio 14, archivo X, duración real 00:24:31, luego relleno 00:05:29". El resolver materializa 48 horas por adelantado. Así se **revisa y corrige el aire de mañana antes de que ocurra**, el motor no tiene lógica de negocio, **la guía se genera del plan y por eso dice la verdad**, y al emitirse la fila pasa a `aired` con la hora real — **el as-run no es otra tabla, es el plan con la verdad encima.**
+
+**13.3 · Playout guiado por reloj.** La parrilla es un contrato con la hora de pared. Lo confirma el equipo de alertas: cuando interrumpe, el playout **sigue corriendo** y al soltar ya estamos en el minuto correcto. **La precisión de cuadro no sale del reloj del sistema operativo, sale de la continuidad de marcas de tiempo del flujo.**
+
+**13.4 · Diagrama**
+```
+   Browser ◄──► antena (servicio)
+                ├─ UI · asistente · editor de parrilla
+                ├─ API REST + WebSocket
+                ├─ SERVIDOR MCP  (§19, opcional, apagado)
+                ├─ Resolver de plan · cola de ingest
+                └─ SQLite  (Postgres opcional para varios canales)
+                          │ plan resuelto 48h
+                antena-playout  ×N  (uno por canal)
+                ├─ prioridad alta · sin dependencia de red
+                └─ empalme · SCTE-35 · watchdog · ffmpeg fijado
+                          │
+                ┌─ SALIDA (auto-detectada) ─┐
+                │ internet · red · tarjeta   │
+                └────────────┬───────────────┘
+                   equipo de alertas ── transmisor
+                                       o plataforma IP
+```
+
+**13.5 · Módulos.** El núcleo hace lo indispensable: biblioteca, derechos, parrilla, plan, playout y guía. Todo lo demás son **módulos que se encienden solos cuando hacen falta**:
+
+| Módulo | Se enciende cuando |
+|---|---|
+| `stream-social` | Se añade una salida a YouTube, Facebook o Twitch |
+| `rights-distribution` | Un canal emite por abierta **y** por internet |
+| `ads` | Se registra el primer anunciante |
+| `multichannel` | Se añade el segundo canal *(capa de escala, §20)* |
+| drivers de salida y de alertas | Según el equipo detectado |
+
+Beneficio doble: **el núcleo se mantiene pequeño y auditable**, y quien tiene un canal por internet nunca carga con el código de publicidad ni ve un menú de anunciantes. Es la revelación progresiva (§3.9) llevada a la arquitectura.
+
+**Límite técnico:** módulo = componente con interfaz definida, que el núcleo puede no tener. Nada de dependencias en las dos direcciones.
+
+**13.6 · Multiplataforma.** Go compila estáticamente: `windows/amd64`, `linux/amd64`, `linux/arm64`, `darwin/arm64` (solo desarrollo). Lo dependiente de plataforma se aísla: servicio (Windows Service / systemd), prioridad y límites (Job Objects / cgroups), aceleración (QuickSync, NVENC, VAAPI), rutas. **La aceleración se detecta en ejecución, no en compilación.** El usuario no la configura ni se entera.
+
+**13.7 · Base de datos.** SQLite por defecto: un archivo, sin proceso aparte, sin tuning. **Postgres opcional** cuando hay varios canales o varios usuarios concurrentes — misma capa de acceso, se cambia en la configuración. **Requisito duro en ambas: la base va en disco local, nunca en red.**
+
+---
+
+## 14. Los drivers — invisibles para quien instala
+
+> **El modelo de drivers es para quien contribuye. El usuario nunca ve la palabra "driver".**
+
+**Salida:** `internet` (RTMP/HLS/SRT) · `red` (UDP-TS, SRT, RTP) · `tarjeta` (DeckLink, NDI — compilación aparte por SDK propietario) · `route-dash` (ATSC 3.0, futuro) · `archivo` · `ninguna`.
+
+**Varias salidas por canal, simultáneas.** Un canal puede empujar a YouTube, Facebook, Twitch, su propio servidor y un transmisor al mismo tiempo. **Cada salida lleva su propio objetivo de volumen, su propia autorización de derechos y su propia reconexión automática con espera progresiva.** Una salida caída nunca afecta a las demás ni al aire.
+
+**Sustitución de anuncios por salida.** Como ya se emite SCTE-35 (§16.1), la salida de internet puede reemplazar el corte comercial de la señal abierta por otro contenido — que suele ser obligatorio, porque los spots vendidos para aire rara vez están autorizados para internet. **Casi no hay que construir nada: la marca ya existe.** **Todo driver debe poder emitir SCTE-35** (§17.1), y los que hablan con un encoder externo, SCTE-104.
+
+Los que requieren SDK propietario **no van en las builds oficiales**, para que el binario que se baja quede limpio de dependencias no libres.
+
+**Alertas de emergencia:** `gpi-serial` (contacto seco — lo más universal) · `gpi-gpio` · `sage-endec` · `dasdec` · `syslog` · `snmp-trap` · `cap-poll` (CAP/IPAWS) · **`signal-compare`** · `none`.
+
+> **`signal-compare` es la respuesta a "cualquier marca, cualquier país".** No le habla al equipo: compara la señal que sale contra la que el plan decía y deduce la interrupción. **Funciona con hardware que el proyecto no conoce** — incluido el EWBS de Sudamérica y sistemas nacionales que nadie nos va a prestar.
+
+Regla: **`none` nunca miente.** Si no hay forma de saberlo, el reporte lo dice en la cara en vez de fingir certeza.
+
+**Formatos de casa:** `1080i59.94` · `1080p29.97` · `1080p59.94` (ATSC/ISDB) · `1080i50` · `1080p25` · `720p50` (DVB) · `720p59.94` · `480i59.94` · `576i50` · `custom`. Códec: H.264 (defecto), MPEG-2 (muxes ATSC 1.0 directos), **HEVC + AC-4** (ATSC 3.0), AV1 (libre de regalías, IP). **Contenedor y códec son propiedades del perfil, nunca constantes del motor.**
+
+---
+
+## 15. Modelo de datos (núcleo)
+
+```
+channel         perfil de formato, salida, perfil regulatorio, modo
+media_asset     ruta, hash, códec, duración_medida_ms, lufs, true_peak,
+                subtítulos, negro_cabeza_ms, negro_cola_ms, estado_normalizacion
+title           serie, película, promo, ID de canal, spot
+episode         title + número + media_asset
+rights_window   title, inicio, fin, corridas_permitidas, corridas_usadas,
+                canales_autorizados,       ← compartido entre señales
+                distribucion,              ← abierta | internet | ambas
+                territorio                 ← el resolver SE NIEGA fuera de esto
+schedule_rule   channel, title, patrón_de_días, hora, rights_window
+plan_item       channel, instante, media_asset, duración, estado    ← ES el as-run
+                planned → cued → aired → (skipped | preempted)
+filler_asset    promos, IDs, interstitials, con duración exacta
+advertiser / insertion_order / spot_airing        ← evidencia de emisión
+break_marker    plan_item, offset, duración, tipo   ← origen del SCTE-35
+eas_event       inicio, fin, driver, confianza, alcance_geográfico
+user / role     ausentes hasta que hay una segunda persona
+```
+
+**Regla de integridad:** un `plan_item` no puede existir sin un `rights_window` vigente **que autorice ese canal**. La restricción vive en el esquema, no en el código de validación. Así muere de raíz el bug del *Hellsing*.
+
+---
+
+## 16. Requisitos funcionales
+
+**Contenido** — carpeta vigilada y arrastre · **duración real al ms** · medición y corrección de volumen al objetivo del perfil · detección de subtítulos con **conservación garantizada** en todos los formatos (CEA-608/708, DVB, teletexto, ARIB) · recorte de negro y silencio · conversión en segundo plano · **cuarentena: lo que falla no llega al aire, nunca.**
+
+**Programación** — editor de cuadrícula (§11) · reglas por patrón de días, hora y ventana de derechos · **conflictos deterministas** · **avisos de vencimiento a 30/14/7 días** · resolver horario · **relleno automático** · aprobación del día siguiente.
+
+**Playout** — reloj monotónico con adelanto generoso · empalme sin recodificar · **cascada de respaldo: programa → relleno → cartel → barras y tono. Nunca negro.** · watchdog con corte a cartel y alarma · as-run en tiempo real · **botón de pánico** · conmutación a respaldo (opcional).
+
+**Publicidad** — clientes, órdenes, spots medidos · cortes dentro y entre programas, tope por hora, separación entre competidores · rotación · **reconciliación con alertas: los spots tapados no se facturan, se reprograman** · evidencia de emisión en PDF.
+
+**Salidas simultáneas** — varios destinos por canal · volumen propio por salida · **verificación de derechos de distribución antes de empujar** · reconexión automática con espera progresiva · sustitución de anuncios por salida · alarma cuando una salida lleva caída más de N minutos.
+
+**Guía** — XMLTV **generado del plan**, con identificadores correctos, publicado por HTTP. Exportación a PSIP, DVB-SI y ARIB vía perfil.
+
+**Monitoreo** — tablero en vivo · negro, congelado y silencio con filtros de ffmpeg, deterministas y gratis · alarmas por WhatsApp, Telegram, correo o webhook · **alarma de reinicio inesperado.**
+
+### 16.1 · Señalización de cortes: SCTE-35 y SCTE-104
+
+**La función de mayor apalancamiento del proyecto, y de las más baratas.**
+
+En la arquitectura estándar de la industria, **el sistema de automatización avisa al encoder cuándo empieza un corte.** Ese mensaje viaja por **SCTE-104**, y el encoder lo convierte en marcas **SCTE-35** dentro del flujo. **Antena *es* el sistema de automatización de esa frase.**
+
+Emitir esas marcas cuesta días de trabajo y a cambio la estación queda enchufada, sin construir nada más, a: **inserción del lado del servidor (SSAI) y dinámica (DAI)** · **publicidad direccionable** por hogar, código postal o demografía — la promesa económica central de ATSC 3.0 · **exchanges programáticos**, que es lo que deja a una estación local competir por presupuesto con streaming y redes · **sustitución regional de contenido**.
+
+> **Antena no construye publicidad direccionable. Emite la señal estándar que deja que todos los demás la construyan.** Esa distinción mantiene el proyecto pequeño y a la vez relevante.
+
+Comandos: `splice_insert` (exacto al cuadro) y `time_signal` con descriptores de segmentación. Se emite **in-band** en la salida de red, **en el manifiesto** para HLS/DASH, y por **SCTE-104** hacia un encoder externo.
+
+*Sin esto, el inventario de una estación pequeña es invisible para el mercado moderno. Con esto, es vendible.*
+
+### 16.2 · Integraciones para instalaciones grandes
+**API REST completa** — todo lo que hace la interfaz se puede hacer por API · importación y exportación de parrilla y as-run en CSV y XML · webhooks de eventos · exportación de as-run al formato de los sistemas de traffic existentes. *Nada de esto aparece en la interfaz de quien tiene un canal.*
+
+---
+
+## 17. Hardware
+
+El repositorio incluye una **guía de compra con productos y precios reales**, porque "solo te falta comprar el equipo" obliga a decir qué comprar.
+
+| Escenario | Máquina | Aprox. |
+|---|---|---|
+| Canal por internet, 720p | PC de oficina reciclado, 8 GB | $0 |
+| Canal SD o 720p mínimo | Raspberry Pi 5, 8 GB | ~$80 |
+| Canal 1080 con transmisor | Mini PC Intel N100/N305, 16 GB | ~$200 |
+| 4–6 canales | Servidor con 8+ núcleos, 32 GB | ~$1,500 |
+
+| Proceso | RAM | CPU |
+|---|---|---|
+| `antena` (interfaz + base) | 80–120 MB | despreciable |
+| `antena-playout` (por canal) | 100–200 MB | despreciable |
+| empalme sin recodificar | ~120 MB | <10% de un núcleo |
+| **Antena, un canal al aire** | **< 500 MB** | **< 1 núcleo** |
+| Sistema base | Linux ~400 MB · Windows ~2.5 GB | |
+
+**El costo por canal adicional es casi lineal y muy bajo**, precisamente porque no se recodifica en vivo.
+
+**Dos máquinas idénticas** para cualquier instalación con licencia de transmisión.
+
+---
+
+## 18. Instalación y operación
+
+**En ambas plataformas:** el instalador registra el servicio, configura el arranque automático, **aplica los ajustes del sistema operativo solo** y termina con un **reporte de verificación**. Acceso remoto por Tailscale sin abrir puertos. Respaldo automático cada hora. Actualizaciones **nunca automáticas**.
+
+**Windows** — recomendado **Windows 10/11 IoT Enterprise LTSC**: sin actualizaciones de funcionalidad por 10 años, diseñado para equipos dedicados. El instalador aplica automáticamente **exclusiones de antivirus** (escanear terabytes de video **puede provocar errores de archivo en pleno aire**), plan de energía sin suspensión, arranque tras corte de energía, rutas largas, y política de actualizaciones sin reinicio automático. **Windows Update reiniciando la máquina a las 3 AM es el riesgo operativo #1.**
+
+**Linux** — systemd con reinicio automático y límites por cgroup. Paquetes `.deb` y `.rpm`. **Docker opcional, nunca requerido.**
+
+---
+
+## 19. IA — por MCP, y en la última fase
+
+> ### El producto tiene que ser 100% funcional sin una sola línea de IA.
+> ### La IA llega al final, por fuera, y es opcional.
+
+**Ninguna función de IA se construye dentro de Antena.** Ni claves de API, ni dependencias de modelos, ni costo impuesto a una ONG, ni un proyecto que envejece con el mercado de modelos.
+
+En su lugar, Antena expone un **servidor MCP** (Model Context Protocol) — apagado por defecto — al que el usuario conecta el asistente que quiera: Claude, o cualquier cliente compatible.
+
+### Por qué esto es mejor que construirla adentro
+
+**1 · La regla deja de ser una convención y pasa a ser el protocolo.** Antes decíamos "la IA propone, el humano aprueba". Ahora **el servidor MCP simplemente no expone ninguna herramienta capaz de escribir al aire.** Un modelo no puede sacar un canal del aire porque no existe la función para hacerlo. La garantía es estructural.
+
+**2 · Cada quien trae la suya.** Una ONG sin presupuesto no enciende nada y el sistema está completo. Un grupo grande conecta su propio modelo con sus propias credenciales y su propia política de datos.
+
+**3 · No envejece.** Cuando cambie el mejor modelo, Antena no cambia.
+
+**4 · Sale gratis un buen diseño.** El servidor MCP es la misma superficie que ya necesita la API. Diseñarla bien beneficia a todos, con o sin IA.
+
+**5 · Cualquiera lo extiende.** Alguien puede conectar otro modelo, o su propia automatización, sin tocar el código de Antena.
+
+### El principio que ordena los permisos
+
+No es "la IA no escribe". Es:
+
+> **Mientras más lejos del aire y más reversible, más libre es la herramienta.**
+
+Reorganizar la parrilla del mes que viene es inofensivo y se deshace con un clic. Mover algo que sale en veinte minutos, no. Esa distinción es de **tiempo**, no de tipo de operación, y por eso el permiso se decide por una **ventana de protección** — por defecto **24 horas** — configurable por canal.
+
+### Las herramientas
+
+**Lectura — sin restricción**
+```
+get_channels              get_schedule(canal, rango)
+get_library(filtro)       get_asset(id)
+get_rights(título)        get_expiring(días)        ← los 18 vencimientos
+get_gaps(canal, rango)    ← el 30% de dead air
+get_conflicts(canal)      get_asrun(canal, rango)
+get_ad_inventory()        get_health()
+get_output_config(canal)  get_alarms(rango)
+```
+
+**Escritura libre — reversible, lejos del aire, todo en bitácora**
+```
+set_metadata(asset, campos)      ← títulos, sinopsis, año, género, episodio
+rename_title(id, nombre)
+organize_library(...)            ← series, temporadas, etiquetas
+move_asset(id, destino)          ← mover contenido en la biblioteca
+create_filler_set(...)
+draft_insertion_order(...)       ← borrador, no activo
+```
+
+**Escritura con ventana de protección — libre fuera de la ventana, propuesta dentro**
+```
+set_schedule(canal, cambios)          ← cambiar programas
+move_program(canal, desde, hasta)     ← mover contenido en la parrilla
+fill_gaps(canal, rango)
+update_insertion_order(id, ...)       ← propuesta si la orden ya está activa
+```
+Fuera de la ventana se aplica y queda en bitácora, con deshacer. **Dentro de la ventana la misma llamada devuelve un diff en vez de aplicarlo.** El modelo no elige cuál de las dos cosas pasa.
+
+**Propuesta obligatoria — siempre devuelve un diff, nunca aplica**
+```
+propose_output_change(canal, equipo)   ← cambio de driver por equipo nuevo
+propose_profile_change(canal, ...)     ← formato, país, volumen
+propose_deletion(assets)               ← si están programados
+propose_replacements(vencidos)
+```
+
+**Reportes**
+```
+generate_proof_of_play(anunciante, rango)  ← datos del as-run, DETERMINISTA
+draft_client_report(anunciante, rango)     ← la IA redacta el texto
+send_report(id)                            ← requiere autorización humana
+```
+
+**No existen, y nunca van a existir:** poner algo al aire ahora · facturar · anular el volumen o el perfil regulatorio · desactivar el cumplimiento · mandar cualquier cosa afuera sin aprobación.
+
+### Cambiar el equipo: la propuesta se prueba antes de aplicarse
+
+Caso real: se cambió el encoder. El usuario le dice al asistente *"cambié el encoder, ahora es un Marca X en 192.168.1.55"* y este propone el driver y los ajustes.
+
+**Aplicarlo a ciegas puede sacar la estación del aire.** Por eso reusa lo mejor del asistente de instalación:
+
+```
+1. La IA propone la configuración          (propose_output_change)
+2. El humano la revisa en la interfaz
+3. El sistema manda BARRAS DE COLOR por la salida nueva
+4. "¿Ves las barras?"        [ Sí ]  ·  [ No ]
+5. Sí → se aplica.   No → se revierte sola a la anterior.
+```
+
+**Nunca se compromete una salida que no se probó.** La misma pantalla que resolvió la instalación resuelve el cambio de equipo.
+
+### Los reportes: la IA redacta, no calcula
+
+> **Las cifras salen de una consulta determinista al as-run. La IA solo escribe la prosa alrededor.**
+
+Un reporte de emisión es la evidencia que le das a un cliente de que recibió lo que pagó. **Si un modelo pudiera inventarse cuántas veces salió un spot, sería un registro de negocio falso generado por IA.** Por eso `generate_proof_of_play` no es una herramienta de lenguaje: cuenta filas de `spot_airing`, aplica la reconciliación con alertas —los spots tapados no cuentan— y devuelve números verificables. El PDF lleva referencia a los registros que lo sustentan.
+
+`draft_client_report` toma esos números y les pone el texto. No los toca.
+
+### Enviar: la primera vez siempre la autoriza una persona
+
+`send_report` no manda nada por su cuenta. **El primer envío a cada cliente lo aprueba un humano.** Después, el usuario puede autorizar en la interfaz que ese reporte salga solo cada mes — **la autorización es una decisión humana tomada una vez, no un permiso que el modelo se da a sí mismo.**
+
+### Qué se puede hacer con esto conectado
+
+- *"Se me vencen 18 programas en 60 días"* → propone reemplazos que caben en el espacio y respetan los derechos.
+- *"Mueve Kojak a las 9 y dime qué se rompe"* → lo mueve si es la semana que viene; devuelve un diff si es mañana.
+- *"Llena la ficha de estos 200 videos"* → título, serie, episodio, sinopsis, género. Escritura libre.
+- *"Cambié el encoder"* → propone la configuración y la prueba con barras antes de aplicarla.
+- *"Hazle el reporte del mes a Pepe's Pizza y mándaselo"* → cifras del as-run, texto redactado, y **se detiene a pedir autorización antes de enviarlo.**
+- *"¿Por qué salió negro anoche a las 3?"* → lee as-run, alarmas y bitácora, y explica.
+
+**Todo eso sin una línea de IA dentro de Antena.**
+
+### Lo que queda fuera del MCP
+**Los subtítulos automáticos con Whisper** no son una conversación, son procesamiento de medios en lote. Van como **complemento opcional aparte**, que el usuario instala si quiere, corriendo local, sin costo y sin mandar nada afuera. **Nunca en el núcleo.**
+
+---
+
+## 20. El proyecto abierto y cómo se sostiene
+
+### 20.1 · Licencia
+
+**AGPL-3.0.** Cualquiera usa Antena gratis y para siempre. Lo que impide es que alguien la tome, la cierre y la venda como producto propio: **quien construya algo comercial encima está obligado a liberar todo su código bajo la misma licencia.** La "A" cierra el hueco del SaaS — quien corra una versión modificada como servicio alojado tiene que dar el código a quien lo use.
+
+Efectos buenos de paso: es open source según la definición formal, así que **entra en los repositorios de Debian, Ubuntu, Fedora y Homebrew**, y las empresas dejan a sus empleados contribuir. Y hace limpio distribuir builds de ffmpeg con `--enable-gpl`.
+
+**Contribuciones por DCO** — una línea `Signed-off-by`, como el kernel de Linux. Se acepta la consecuencia: con código de terceros adentro, relicenciar el núcleo deja de ser una decisión unilateral. Es coherente con que el núcleo sea un bien público.
+
+**Patentes de códecs:** el software es libre; las patentes de H.264 y HEVC son asunto aparte que ninguna licencia de software resuelve. Se documenta con honestidad, y se ofrece **AV1 y VP9, libres de regalías,** para la salida por internet.
+
+### 20.2 · Qué es gratis — y no está mutilado
+
+**El núcleo y todos los módulos funcionales, bajo AGPL, para un canal:** streaming a redes sociales, derechos por distribución, publicidad completa con SCTE-35 y evidencia de emisión, perfiles de cumplimiento, servidor MCP. Todo.
+
+> **Sin versión recortada, sin pantallas de recordatorio, sin funciones que caducan, sin marca de agua.** Una organización sin fines de lucro con un canal tiene el producto entero, para siempre, y nunca ve que existe algo de pago.
+
+Eso no es generosidad: **es lo que sostiene la comunidad.** Un proyecto que molesta a sus usuarios libres no recibe contribuciones.
+
+### 20.3 · Qué se paga — la capa de escala
+
+Un **proceso supervisor aparte**, propietario, que se añade encima:
+
+- **Multi-canal** — operar 2 a 20 señales con biblioteca y derechos compartidos
+- **Redundancia** con conmutación automática a respaldo
+- **Roles y multi-usuario**
+- **API REST completa** e integración con sistemas de traffic existentes
+- **Soporte con tiempo de respuesta**
+
+**Por qué este límite y no otro:**
+
+1. **Cobra a quien puede pagar.** Quien tiene seis señales tiene ingeniero y presupuesto. Quien tiene una tiene un voluntario.
+2. **No paywallea nada que el usuario objetivo necesite.** La universidad, la ONG y la comunitaria tienen todo gratis.
+3. **No paywallea seguridad.** Los derechos por distribución impiden que alguien viole su licencia o pierda su cuenta de YouTube. Cobrar por el cinturón de seguridad es distinto a cobrar por el aire acondicionado. **Va gratis, en el núcleo.**
+4. **Es el límite más difícil de reimplementar.** Alguien reescribe "empujar a YouTube" en un fin de semana; nadie reescribe "tienes ocho canales operando con derechos compartidos y conmutación automática".
+5. **Es limpio legalmente.** Para que un componente propietario conviva con un núcleo AGPL tiene que ser proceso aparte, con protocolo documentado, y el núcleo debe funcionar completo sin él. **La capa multi-canal ya cumple los tres requisitos por diseño** (§13.5), no por conveniencia.
+
+### 20.4 · Servicios y patrocinio
+
+Donde de verdad hay dinero en open source: **instalación y puesta al aire, drivers a medida para equipo poco común, perfiles de cumplimiento de un país nuevo, migración desde otro sistema, adiestramiento.**
+
+Y patrocinio por GitHub Sponsors u Open Collective, con la petición honesta en el README: *si Antena te está ayudando a ganar dinero, patrocínala.* Sin bloquear nada a quien no pueda.
+
+### 20.5 · Repositorio
+
+```
+README.md         de cero al aire en menos de una hora — español e inglés
+LICENSE           AGPL-3.0
+CONTRIBUTING.md   DCO, cómo aportar drivers y perfiles
+COMPLIANCE.md     qué hace y qué NO hace Antena por tu cumplimiento legal
+COMPRAR.md        guía de compra de equipo, con precios reales
+docs/
+  drivers/        cómo añadir soporte para tu equipo
+  profiles/       cómo contribuir el cumplimiento de tu país
+  hardware/       MATRIZ DE COMPATIBILIDAD mantenida por la comunidad
+examples/         universidad · ONG · low-power · internet
+```
+
+**La matriz de compatibilidad decide la adopción.** *"¿Sirve con mi equipo?"* es la primera pregunta de todo el que llega. Cada usuario que hace funcionar el suyo la actualiza y el siguiente ya no averigua nada.
+
+GitHub Actions compila cada release para Windows, Linux y ARM, con instaladores, sumas de verificación y binarios firmados. **Sin builds nocturnas: un canal al aire no corre código sin versionar.**
+
+**Documentación en español e inglés desde el día uno.** El mercado natural es LATAM y casi todo el software de broadcast existe solo en inglés. Cuesta poco y es ventaja real. El tono asume alguien que sabe instalar software pero **nunca oyó "LKFS" ni "GOP cerrado"**.
+
+---
+
+## 21. Fases
+
+| Fase | Duración | Entrega |
+|---|---|---|
+| **F1 · Fundación** | 3–4 sem | Contenido con medición real, derechos, **editor de parrilla completo**, resolver, **XMLTV correcto**, avisos de vencimiento. Windows y Linux desde el día uno. No toca el aire. |
+| **F2 · Playout** | 4–6 sem | Formato de casa, motor, empalme, salidas internet y red, **asistente completo con la prueba de barras**, respaldo en cascada, relleno, tablero, alarmas. |
+| **F3 · Público** | 2–3 sem | Repositorio abierto, AGPL-3.0, DCO, CI, instaladores, docs bilingües, matriz de hardware, guía de compra. Modo internet completo. |
+| **F4 · Emisora** | 4–6 sem | Publicidad, cortes, **SCTE-35/104**, reconciliación con alertas, evidencia de emisión. Perfil `us-fcc` completo. |
+| **F5 · Internacional** | 3–4 sem | Perfiles `eu-ebu` e `isdb-latam`, subtítulos DVB/ARIB, exportación PSIP y DVB-SI. **Libre, en el núcleo.** |
+| **F5b · Capa de escala** | 4–6 sem | Multi-canal, roles, redundancia, API completa, Postgres opcional. **Proceso aparte, es la capa de pago (§20.3).** |
+| **F6 · MCP** | 2–3 sem | **Servidor MCP. La última fase, y solo cuando todo lo anterior funcione sin ella.** |
+
+**Al terminar F5 el producto está completo.** F6 es aditiva: si nunca se hiciera, Antena seguiría siendo un sistema entero. *Esa es la prueba de que la IA está en el lugar correcto.*
+
+**F3 va antes que F4 a propósito.** Un canal universitario no necesita publicidad — necesita que el proyecto exista, se baje y funcione.
+
+---
+
+## 22. Métricas de éxito
+
+| Métrica | Meta |
+|---|---|
+| **De cero a barras de color en pantalla** | **< 15 minutos** |
+| **De cero a canal al aire con programación** | **< 1 hora** |
+| **Instalaciones abandonadas en el asistente** | **< 10%** |
+| Preguntas al usuario durante la instalación | ≤ 6 |
+| Migrar una parrilla desde una hoja de cálculo | < 10 minutos |
+| **Funcionalidad completa sin IA** | **100%** |
+| Dead air en el despliegue de referencia | de 30% a < 1% |
+| Exactitud de la guía | 100% contra el as-run |
+| Interrupciones no planificadas | 0 en 30 días |
+| Instalaciones de terceros | 10 canales en 12 meses |
+| **Países distintos con instalación activa** | **3 en 12 meses** |
+| Contribuidores externos con código mezclado | 3 en 12 meses |
+
+---
+
+## 23. Riesgos
+
+| Riesgo | Mitigación |
+|---|---|
+| **La gente abandona en la instalación** | El asistente y la prueba de barras son trabajo principal. Medir dónde se abandona. **Riesgo #1.** |
+| **Servir a grandes complica al pequeño** | Revelación progresiva (§3.9). **Ninguna función de escala aparece hasta que se pide.** Probar el flujo del usuario único en cada release. |
+| **El editor resulta peor que un Excel** | Pegado directo desde hoja de cálculo, deshacer siempre, cuadrícula familiar. **Probarlo con alguien no técnico antes de publicar.** |
+| **Internacionalizar sin conocer las normas** | Cada perfil requiere fuente citada y mantenedor local, o se marca experimental |
+| **Alguien lo usa mal y se mete en un lío regulatorio** | `COMPLIANCE.md` explícito. **Las alertas son hardware.** El modo transmisor obliga a declarar jurisdicción y responsable técnico. |
+| **Windows Update reinicia el aire** | IoT LTSC + política + alarma, aplicado por el instalador |
+| **Nadie contribuye** | Publicar en F3, no al final. Matriz de hardware desde el principio. |
+| **Combinatoria plataformas × perfiles × drivers** | CI que compila todo. **Ninguna combinación no probada se documenta como soportada.** |
+| **El MCP se convierte en puerta trasera al aire** | Ventana de protección de 24h aplicada **en el servidor, no en el prompt**. Cambios de salida siempre probados con barras antes de aplicar. Auditoría de la superficie en cada release. Apagado por defecto. |
+| **Un reporte de emisión con cifras inventadas** | `generate_proof_of_play` es determinista: cuenta filas del as-run. **La IA redacta, no calcula.** El PDF referencia los registros que lo sustentan. |
+| **Envío no autorizado a un cliente** | El primer envío a cada destinatario lo aprueba una persona. El recurrente se autoriza una vez en la interfaz. |
+| **La capa de pago contamina el núcleo** | Proceso aparte con protocolo documentado; **el núcleo tiene que funcionar completo sin ella**, y hay prueba de CI que lo verifica en cada release |
+| **La versión libre se percibe como recortada** | Un canal tiene **todo**: streaming, derechos, publicidad, MCP. Sin avisos, sin caducidad, sin marca de agua. **Regla no negociable.** |
+| **Deuda heredada del piloto** | Los drivers evitan que las particularidades de CAtv se filtren al núcleo |
+
+---
+
+## 24. Preguntas abiertas
+
+**Del proyecto**
+1. **Nombre.** Verificar que no colisione.
+
+**Del despliegue de referencia (CAtv)**
+2. **¿La estación es de potencia completa, Class A o LPTV?** Decide si le aplica el mandato de ATSC 3.0 de 2027 (§9).
+3. Qué protocolo acepta el equipo que alimenta al de alertas — define la primera salida. *Bloquea F2.*
+4. Marca y modelo del equipo de alertas, y si expone contacto seco o red.
+5. Resolución y frecuencia de cuadro del transmisor.
+6. ¿El material trae subtítulos embebidos?
+7. Edición de Windows actual.
+8. Dónde vive el contenido y cuántos TB.
+
+Ninguna bloquea la F1.
+
+---
+
+## 25. Por qué vale la pena
+
+Lanzar un canal de televisión hoy cuesta más en software que en transmisor. Ese es el absurdo que este proyecto ataca.
+
+Pero el software barato no basta si hace falta un ingeniero para encenderlo, ni si solo sirve a un tamaño, ni si solo funciona en un país. **Por eso la facilidad de uso, la escala y la portabilidad no son funciones de este proyecto: son el proyecto.**
+
+Una universidad con un canal de práctica. Una comunitaria que repite el mismo bloque porque no tiene quién arme la parrilla. Una emisora regional que perdió su anunciante porque no pudo probar que el spot salió. Un grupo con seis señales pagando una licencia que no puede sostener. Y todos ellos en cualquier país del hemisferio.
+
+Que cualquiera de ellos pueda comprar un mini PC, bajar un archivo, contestar seis preguntas y estar al aire en una hora.
+
+**Que solo le falte comprar el equipo.**

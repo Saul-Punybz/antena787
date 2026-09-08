@@ -1,0 +1,91 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+  <style>
+    body { margin:0; background:#0E1116; font-family:'IBM Plex Sans',system-ui,sans-serif;
+           color:#E6EDF3; -webkit-font-smoothing:antialiased; }
+    a { color:#22D3EE; text-decoration:none; } a:hover { color:#67E8F9; }
+    .mono { font-family:'IBM Plex Mono',ui-monospace,monospace; font-variant-numeric:tabular-nums; }
+    @keyframes tally { 0%,100%{opacity:1;} 50%{opacity:.25;} }
+  </style>
+</helmet>
+<div style="display:flex;width:1440px;height:900px;background:#0E1116;">
+<div style="width:224px;flex-shrink:0;background:#0B0E12;border-right:1px solid #21262D;display:flex;flex-direction:column;padding:22px 0;">
+  <div style="padding:0 20px 26px;display:flex;align-items:center;gap:10px;">
+    <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#22D3EE" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20v-7"/><path d="M8.5 13 12 4l3.5 9"/><path d="M4.9 16.5a9 9 0 0 1 0-9"/><path d="M19.1 7.5a9 9 0 0 1 0 9"/></svg>
+    <span style="font:600 17px 'IBM Plex Sans',system-ui;color:#E6EDF3;letter-spacing:-.3px;">Antena<span style="color:#22D3EE;">787</span></span></div>
+  <div style="display:flex;flex-direction:column;gap:3px;padding:0 12px;flex-grow:1;"><div style="position:relative;display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:8px;background:#161B22;"><div style="position:absolute;left:0;top:9px;bottom:9px;width:3px;border-radius:0 3px 3px 0;background:#22D3EE;"></div><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#22D3EE" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20v-7"/><path d="M8.5 13 12 4l3.5 9"/><path d="M4.9 16.5a9 9 0 0 1 0-9"/><path d="M19.1 7.5a9 9 0 0 1 0 9"/></svg><span style="font:600 14.5px 'IBM Plex Sans',system-ui;color:#E6EDF3;">Al aire</span></div><div style="position:relative;display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:8px;"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#6E7681" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span style="font:400 14.5px 'IBM Plex Sans',system-ui;color:#8B949E;">Parrilla</span></div><div style="position:relative;display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:8px;"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#6E7681" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/></svg><span style="font:400 14.5px 'IBM Plex Sans',system-ui;color:#8B949E;">Reglas</span></div><div style="position:relative;display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:8px;"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#6E7681" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="9" rx="1.5"/><rect x="3" y="15" width="7" height="6" rx="1.5"/><rect x="14" y="15" width="7" height="6" rx="1.5"/></svg><span style="font:400 14.5px 'IBM Plex Sans',system-ui;color:#8B949E;">Biblioteca</span></div><div style="position:relative;display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:8px;"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#6E7681" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0l-7.2-7.2A2 2 0 0 1 2.8 12V4.8A2 2 0 0 1 4.8 2.8H12a2 2 0 0 1 1.4.6l7.2 7.2a2 2 0 0 1 0 2.8Z"/><circle cx="7.5" cy="7.5" r="1.2"/></svg><span style="font:400 14.5px 'IBM Plex Sans',system-ui;color:#8B949E;">Anuncios</span></div><div style="position:relative;display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:8px;"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#6E7681" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.6v2.6M12 18.8v2.6M21.4 12h-2.6M5.2 12H2.6M18.6 5.4l-1.8 1.8M7.2 16.8l-1.8 1.8M18.6 18.6l-1.8-1.8M7.2 7.2 5.4 5.4"/></svg><span style="font:400 14.5px 'IBM Plex Sans',system-ui;color:#8B949E;">Ajustes</span></div></div>
+  <div style="padding:16px 20px 0;border-top:1px solid #21262D;margin:0 12px;">
+    <div style="font:500 12px 'IBM Plex Sans';color:#6E7681;letter-spacing:.4px;">CANAL</div>
+    <div style="font:500 14px 'IBM Plex Sans';color:#8B949E;margin-top:5px;">Caribbean Advantage TV</div></div></div>
+<div style="flex-grow:1;padding:26px 32px;display:flex;flex-direction:column;gap:18px;overflow:hidden;">
+
+  <div style="display:flex;align-items:center;justify-content:space-between;">
+    <div style="display:flex;align-items:center;gap:11px;">
+      <span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:#FF3B30;animation:tally 1.6s ease-in-out infinite;"></span>
+      <span style="font:700 20px 'IBM Plex Sans';letter-spacing:1.6px;color:#E6EDF3;">AL AIRE · FUENTE EN VIVO</span></div>
+    <div style="display:flex;align-items:center;gap:9px;background:#161B22;border:1px solid #21262D;border-radius:20px;padding:8px 16px;">
+      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#3FB950;"></span>
+      <span style="font:500 13.5px 'IBM Plex Sans';color:#8B949E;">OBS conectado · empujando a Antena787</span></div></div>
+
+  <div style="display:flex;gap:20px;">
+    <div style="flex-grow:1;">
+      <div style="position:relative;height:404px;border-radius:12px;overflow:hidden;border:2px solid #22D3EE;background:linear-gradient(155deg,#0f3a44,#16202b 58%,#10141a);">
+        <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 42% 46%,rgba(34,211,238,.13),transparent 60%);"></div>
+        <div style="position:absolute;left:0;right:0;bottom:0;height:160px;background:linear-gradient(transparent,rgba(6,9,13,.93));"></div>
+        <div style="position:absolute;top:14px;left:16px;display:flex;align-items:center;gap:7px;background:rgba(6,9,13,.7);border-radius:6px;padding:6px 11px;">
+          <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#FF3B30;animation:tally 1.6s ease-in-out infinite;"></span>
+          <span class="mono" style="font-size:11px;letter-spacing:1.1px;color:#E6EDF3;">RECIBIENDO</span></div>
+        <div style="position:absolute;top:14px;right:16px;background:rgba(6,9,13,.7);border-radius:6px;padding:6px 11px;">
+          <span class="mono" style="font-size:11px;color:#8B949E;">1920×1080 · 29.97p</span></div>
+        <div style="position:absolute;left:22px;right:22px;bottom:20px;">
+          <div style="font:700 30px 'IBM Plex Sans';letter-spacing:-.5px;color:#E6EDF3;">RadioOnce Live!</div>
+          <div style="font:400 14px 'IBM Plex Sans';color:#8B949E;margin-top:5px;">10:00 AM – 1:00 PM &nbsp;·&nbsp; lunes a viernes</div>
+          <div style="display:flex;align-items:center;gap:14px;margin-top:14px;">
+            <div style="flex-grow:1;height:5px;border-radius:3px;background:rgba(230,237,243,.14);overflow:hidden;"><div style="width:58%;height:100%;background:#22D3EE;border-radius:3px;"></div></div>
+            <span class="mono" style="font-size:14px;color:#E6EDF3;">faltan 1:15:40</span></div></div></div>
+    </div>
+
+    <div style="width:300px;flex-shrink:0;background:#161B22;border:1px solid #21262D;border-radius:11px;padding:18px 20px;display:flex;flex-direction:column;">
+      <div style="font:600 11.5px 'IBM Plex Sans';letter-spacing:1.2px;color:#6E7681;">AUDIO QUE ESTÁ LLEGANDO</div>
+      <div style="display:flex;gap:16px;margin-top:16px;justify-content:center;align-items:flex-start;">
+        <div style="display:flex;flex-direction:column;align-items:flex-end;padding-top:3px;"><div style="font-family:ui-monospace,monospace;font-size:9.5px;color:#4d545c;height:28px;">0</div><div style="font-family:ui-monospace,monospace;font-size:9.5px;color:#4d545c;height:28px;">-6</div><div style="font-family:ui-monospace,monospace;font-size:9.5px;color:#4d545c;height:28px;">-12</div><div style="font-family:ui-monospace,monospace;font-size:9.5px;color:#4d545c;height:28px;">-20</div><div style="font-family:ui-monospace,monospace;font-size:9.5px;color:#4d545c;height:28px;">-30</div><div style="font-family:ui-monospace,monospace;font-size:9.5px;color:#4d545c;height:28px;">-45</div><div style="font-family:ui-monospace,monospace;font-size:9.5px;color:#4d545c;height:0px;">-60</div></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:7px;">
+  <div style="position:relative;width:26px;display:flex;flex-direction:column;gap:2px;padding:4px;background:#0d1117;border:1px solid #21262D;border-radius:4px;"><div style="height:6px;border-radius:1px;background:#1a1f27;"></div><div style="height:6px;border-radius:1px;background:#1a1f27;"></div><div style="height:6px;border-radius:1px;background:#1a1f27;"></div><div style="height:6px;border-radius:1px;background:#1a1f27;"></div><div style="height:6px;border-radius:1px;background:#1a1f27;"></div><div style="height:6px;border-radius:1px;background:#1a1f27;"></div><div style="height:6px;border-radius:1px;background:#1a1f27;"></div><div style="height:6px;border-radius:1px;background:#1a1f27;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div>
+  <div style="position:absolute;left:0;right:0;top:16.7%;height:2px;background:#E6EDF3;"></div></div>
+  <span class="mono" style="font-size:11px;color:#8B949E;">IZQ</span></div><div style="display:flex;flex-direction:column;align-items:center;gap:7px;">
+  <div style="position:relative;width:26px;display:flex;flex-direction:column;gap:2px;padding:4px;background:#0d1117;border:1px solid #21262D;border-radius:4px;"><div style="height:6px;border-radius:1px;background:#1a1f27;"></div><div style="height:6px;border-radius:1px;background:#1a1f27;"></div><div style="height:6px;border-radius:1px;background:#1a1f27;"></div><div style="height:6px;border-radius:1px;background:#1a1f27;"></div><div style="height:6px;border-radius:1px;background:#1a1f27;"></div><div style="height:6px;border-radius:1px;background:#1a1f27;"></div><div style="height:6px;border-radius:1px;background:#1a1f27;"></div><div style="height:6px;border-radius:1px;background:#1a1f27;"></div><div style="height:6px;border-radius:1px;background:#1a1f27;"></div><div style="height:6px;border-radius:1px;background:#1a1f27;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div><div style="height:6px;border-radius:1px;background:#3FB950;"></div>
+  <div style="position:absolute;left:0;right:0;top:21.3%;height:2px;background:#E6EDF3;"></div></div>
+  <span class="mono" style="font-size:11px;color:#8B949E;">DER</span></div></div>
+      <div style="margin-top:16px;padding-top:15px;border-top:1px solid #21262D;">
+        <div style="display:flex;align-items:center;gap:9px;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#3FB950;"></span>
+        <span style="font:500 13.5px 'IBM Plex Sans';color:#E6EDF3;">Audio normal</span></div>
+        <div style="font:400 12px 'IBM Plex Sans';color:#8B949E;margin-top:6px;line-height:1.45;">Si esto se queda en silencio más de 15 segundos, entra el relleno y te llega una alerta.</div></div></div>
+  </div>
+
+  <div style="display:flex;gap:14px;background:#161B22;border:1px solid #21262D;border-radius:11px;padding:18px 24px;">
+    <div style="flex-grow:1;"><div style="font:600 10.5px 'IBM Plex Sans';letter-spacing:1px;color:#6E7681;">BITRATE</div><div class="mono" style="font-size:21px;color:#3FB950;margin-top:6px;font-weight:500;">6.2 Mbps</div><div style="font:400 11px 'IBM Plex Sans';color:#6E7681;margin-top:2px;">estable hace 1h 44m</div></div><div style="flex-grow:1;"><div style="font:600 10.5px 'IBM Plex Sans';letter-spacing:1px;color:#6E7681;">CUADROS PERDIDOS</div><div class="mono" style="font-size:21px;color:#3FB950;margin-top:6px;font-weight:500;">0</div><div style="font:400 11px 'IBM Plex Sans';color:#6E7681;margin-top:2px;">de 189,420 enviados</div></div><div style="flex-grow:1;"><div style="font:600 10.5px 'IBM Plex Sans';letter-spacing:1px;color:#6E7681;">TIEMPO AL AIRE</div><div class="mono" style="font-size:21px;color:#E6EDF3;margin-top:6px;font-weight:500;">1:44:20</div><div style="font:400 11px 'IBM Plex Sans';color:#6E7681;margin-top:2px;">empezó a las 10:00 AM</div></div><div style="flex-grow:1;"><div style="font:600 10.5px 'IBM Plex Sans';letter-spacing:1px;color:#6E7681;">RETRASO</div><div class="mono" style="font-size:21px;color:#3FB950;margin-top:6px;font-weight:500;">1.2 s</div><div style="font:400 11px 'IBM Plex Sans';color:#6E7681;margin-top:2px;">OBS → transmisor</div></div></div>
+
+  <div>
+    <div style="font:600 11.5px 'IBM Plex Sans';letter-spacing:1.2px;color:#6E7681;margin-bottom:10px;">ESTA SEÑAL SALE A</div>
+    <div style="display:flex;gap:12px;"><div style="flex-grow:1;background:#12161c;border:1px solid #21262D;border-radius:8px;padding:14px 16px;display:flex;align-items:center;gap:12px;">
+  <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#3FB950;flex-shrink:0;"></span>
+  <div style="flex-grow:1;"><div style="font:600 14px 'IBM Plex Sans';color:#E6EDF3;">Transmisor</div><div class="mono" style="font-size:11px;color:#6E7681;margin-top:2px;">UDP-TS · 239.1.1.10:5000</div></div>
+  <span class="mono" style="font-size:12px;color:#3FB950;">al aire</span></div><div style="flex-grow:1;background:#12161c;border:1px solid #21262D;border-radius:8px;padding:14px 16px;display:flex;align-items:center;gap:12px;">
+  <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#3FB950;flex-shrink:0;"></span>
+  <div style="flex-grow:1;"><div style="font:600 14px 'IBM Plex Sans';color:#E6EDF3;">YouTube</div><div class="mono" style="font-size:11px;color:#6E7681;margin-top:2px;">RTMP · RadioOnce PR</div></div>
+  <span class="mono" style="font-size:12px;color:#3FB950;">1,204 viendo</span></div><div style="flex-grow:1;background:#12161c;border:1px solid #21262D;border-radius:8px;padding:14px 16px;display:flex;align-items:center;gap:12px;">
+  <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#6E7681;flex-shrink:0;"></span>
+  <div style="flex-grow:1;"><div style="font:600 14px 'IBM Plex Sans';color:#E6EDF3;">Facebook</div><div class="mono" style="font-size:11px;color:#6E7681;margin-top:2px;">RTMP · apagada</div></div>
+  <span class="mono" style="font-size:12px;color:#6E7681;">—</span></div></div>
+    <div style="font:400 12.5px 'IBM Plex Sans';color:#8B949E;margin-top:11px;">OBS empuja una sola vez, a Antena787. Si YouTube se cae, el transmisor ni se entera.</div></div>
+</div></div></x-dc>
+</body>
+</html>

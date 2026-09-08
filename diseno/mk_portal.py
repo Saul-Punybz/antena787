@@ -1,0 +1,62 @@
+import io
+exec(open('base.py').read())
+out=HEAD+'''<div style="width:390px;height:844px;background:#0E1116;display:flex;flex-direction:column;overflow:hidden;">
+
+  <div style="padding:26px 22px 18px;border-bottom:1px solid #21262D;">
+    <div style="display:flex;align-items:center;gap:9px;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22D3EE" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20v-7"/><path d="M8.5 13 12 4l3.5 9"/><path d="M4.9 16.5a9 9 0 0 1 0-9"/><path d="M19.1 7.5a9 9 0 0 1 0 9"/></svg>
+      <span style="font:500 13px %s;color:#8B949E;">Caribbean Advantage TV</span></div>
+    <div style="font:700 23px %s;color:#E6EDF3;margin-top:14px;line-height:1.25;letter-spacing:-.3px;">Tu anuncio en el canal</div>
+    <div style="font:400 14px %s;color:#8B949E;margin-top:6px;">Hola, Ferretería del Este</div>
+  </div>
+
+  <div style="flex-grow:1;padding:20px 22px;display:flex;flex-direction:column;gap:16px;overflow:hidden;">
+
+    <div style="background:#161B22;border:1px solid #21262D;border-radius:12px;padding:18px 20px;">
+      <div style="font:600 10.5px %s;letter-spacing:1.2px;color:#6E7681;">LO QUE ESTÁS COMPRANDO</div>
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:14px;">
+        <span style="font:600 17px %s;color:#E6EDF3;">20 anuncios</span>
+        <span style="font:700 22px %s;color:#22D3EE;">$180</span></div>
+      <div style="font:400 13.5px %s;color:#8B949E;margin-top:6px;line-height:1.5;">de 30 segundos cada uno, durante septiembre, entre 6:00 AM y 10:00 PM</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid #21262D;">
+        <span style="display:inline-block;width:7px;height:7px;border-radius:50%%;background:#3FB950;"></span>
+        <span style="font:500 12.5px %s;color:#3FB950;">Pagado el 2 de septiembre</span></div>
+    </div>
+
+    <div>
+      <div style="font:600 10.5px %s;letter-spacing:1.2px;color:#6E7681;margin-bottom:11px;">TU ANUNCIO</div>
+      <div style="background:rgba(63,185,80,.08);border:1.5px solid #3FB950;border-radius:12px;padding:18px 20px;">
+        <div style="display:flex;align-items:flex-start;gap:13px;">
+          <div style="width:26px;height:26px;border-radius:50%%;background:#3FB950;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0E1116" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L19 7"/></svg></div>
+          <div style="flex-grow:1;">
+            <div style="font:600 15.5px %s;color:#E6EDF3;line-height:1.35;">Listo. Tu anuncio ya está saliendo.</div>
+            <div style="font:400 13px %s;color:#8B949E;margin-top:7px;line-height:1.5;">Dura <strong style="color:#E6EDF3;">30 segundos exactos</strong> y el sonido está bien.</div>
+          </div></div>
+        <div style="display:flex;align-items:center;gap:11px;margin-top:15px;padding-top:15px;border-top:1px solid rgba(63,185,80,.22);">
+          <div style="width:62px;height:36px;border-radius:5px;background:linear-gradient(145deg,#2b3346,#151a22);flex-shrink:0;"></div>
+          <div style="flex-grow:1;overflow:hidden;">
+            <div style="font:500 12.5px %s;color:#E6EDF3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">ferreteria-septiembre.mp4</div>
+            <div class="mono" style="font-size:11px;color:#6E7681;margin-top:2px;">18.4 MB · 30.0 s</div></div>
+          <span style="font:500 12.5px %s;color:#22D3EE;flex-shrink:0;">Cambiar</span></div>
+      </div>
+    </div>
+
+    <div style="background:#161B22;border:1px solid #21262D;border-radius:12px;padding:18px 20px;">
+      <div style="font:600 10.5px %s;letter-spacing:1.2px;color:#6E7681;">CÓMO VA</div>
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:13px;">
+        <span style="font:600 15px %s;color:#E6EDF3;">14 de 20 salieron</span>
+        <span style="font:400 12.5px %s;color:#8B949E;">campaña en curso</span></div>
+      <div style="height:8px;border-radius:4px;background:#0E1116;margin-top:11px;overflow:hidden;">
+        <div style="width:70%%;height:100%%;background:#22D3EE;"></div></div>
+      <div style="font:400 12px %s;color:#6E7681;margin-top:10px;line-height:1.5;">Te mandamos por WhatsApp el reporte de cuándo salió cada uno.</div>
+    </div>
+
+    <div style="flex-grow:1;"></div>
+    <div style="text-align:center;padding-bottom:6px;">
+      <div style="font:400 12px %s;color:#4d545c;line-height:1.6;">¿Algo no cuadra? Escríbele a Rolando<br>por WhatsApp desde este mismo enlace.</div></div>
+  </div>
+</div>
+'''%(F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F)+FOOT
+io.open('Portal.dc.html','w',encoding='utf-8').write(out); plain('Portal',out)
+print('Portal ok')

@@ -1,0 +1,671 @@
+# PRD — Antena787
+
+**Software libre para lanzar y operar canales de televisión**
+
+**Autor:** Saul Gonzalez · proyecto personal, repositorio en perfil propio
+**Fecha:** 4 de septiembre de 2026
+**Versión:** 7 — **verificada contra el Sheet completo · biblioteca desde Plex · fuentes en vivo**
+**Licencia:** AGPL-3.0 · contribuciones por DCO
+**Despliegue de referencia:** Caribbean Advantage TV — Rolando Rosa, Puerto Rico *(consentimiento confirmado)*
+
+> **Nota de la v6.** Esta versión corrige tres supuestos de las anteriores que **tres investigaciones independientes refutaron**: el motor de playout no puede ser empalme de TS sin recodificar (§13.1), la aceleración por hardware no es opcional (§17), y Antena787 no debe escribir SCTE-35 sino hablar SCTE-104 (§16.1). Las decisiones corregidas están marcadas ⚠.
+
+---
+
+## 1. La promesa
+
+> **Que a quien quiere lanzar un canal solo le falte comprar el equipo.**
+> Y que quien ya tiene diez canales pueda operarlos con lo mismo.
+
+- **Un solo ejecutable.** Sin Docker, sin runtime externo, sin archivos de configuración que editar a mano.
+- **Windows, Linux y ARM** desde el mismo código.
+- **ATSC, ISDB-T, DVB** — y cualquier cosa que acepte una señal.
+- **Todo desde el browser.**
+- **Cero IA en el producto.** Quien la quiera, conecta la suya por MCP (§19).
+
+### La tesis, ahora verificada
+
+El playout comercial cuesta entre decenas y cientos de miles de dólares. Y **el hueco de abajo es real** — confirmado por investigación independiente, no por intuición:
+
+- Ningún comparador de la industria lista **un solo competidor open source** en traffic de TV. Solo propietarios.
+- **ErsatzTV y Tunarr tienen cero SCTE-35 y cero concepto de contrato, avail o as-run comercial** — verificado por búsqueda de código, no leyendo documentación. Su "filler" es rellenar tiempo con contenido al azar.
+- **Rivendell delega explícitamente** el traffic a software propietario de radio. Nunca lo resolvió.
+- El único intento end-to-end documentado —CasparPlay + Adempiere, desplegado en Deepto TV, Bangladesh— **está muerto: 16 commits, Python 2.7.**
+
+Entre esos dos mundos hay un vacío lleno de gente en todo el hemisferio.
+
+---
+
+## 2. Quién es el usuario
+
+**No hay un usuario, hay un rango.**
+
+| | Extremo pequeño | Extremo grande |
+|---|---|---|
+| Quién | ONG, universidad, comunitaria | Grupo con varias señales |
+| Canales | 1 | 2–20 |
+| Gente | **una persona** | equipo con roles |
+| Conocimiento | sabe instalar software, nada más | tiene ingeniero |
+| Presupuesto | cercano a cero | limitado pero real |
+
+Se sirve a ambos con **revelación progresiva**: el sistema arranca en su forma más simple y cada capacidad avanzada aparece solo cuando alguien la pide.
+
+---
+
+## 3. Principios de diseño
+
+**1 · Detectar antes de preguntar.**
+**2 · Probar, no asumir.** La pregunta *"¿ves las barras de color?"* vale más que cincuenta campos correctos.
+**3 · Nada de jerga.** El usuario nunca ve *driver*, *códec*, *GOP*, *LKFS* ni *transport stream*.
+**4 · Siempre hay salida.** Cada pregunta tiene "no sé" con un valor por defecto que funciona.
+**5 · Cero archivos de configuración.** Existe uno, pero lo escribe la aplicación.
+**6 · El instalador hace el trabajo sucio.** Antivirus, energía, servicio, rutas, permisos.
+**7 · Los errores se explican en cristiano.** No "no audio stream detected" sino **"Este video no tiene sonido"**.
+**8 · La hoja de cálculo es un remedio casero, no la vara de medir.** ⚠ *(corregido en v6 — ver §11)*
+**9 · Revelación progresiva.** Nadie paga complejidad que no usa.
+**10 · Nada asumido sobre el país.**
+**11 · Cero IA en el producto.** 100% funcional sin un solo modelo.
+**12 · Nada de CGo.** ⚠ Enlazar una librería en C mata la compilación cruzada trivial, que es la razón principal de haber escogido Go. Si hace falta una librería en C, **se invoca su binario de línea de comandos.** Es el atajo que un modelo tomaría sin pensarlo; queda prohibido por escrito.
+
+---
+
+## 4. Motivación: el caso que originó el proyecto
+
+CAtv opera al aire con una cadena funcional pero enteramente manual: un Google Sheet, un humano, VLC, un servidor de streaming, otro VLC, el equipo de alertas y el transmisor. **El Sheet merece respeto: alguien resolvió su problema con lo que tenía.** Y aun así, medido el 4 de septiembre de 2026:
+
+| Hallazgo | Detalle |
+|---|---|
+| **Guía rota** | El XMLTV es la plantilla de ejemplo: el canal dice `Caribbean Advantage TV` pero los programas apuntan a `sports1.channel`, con fechas de mayo e items inventados. |
+| **30% de dead air** | 103 de 343 espacios semanales vacíos. Casi todo el bloque de 1:00–6:00 AM, los siete días. |
+| **18 vencimientos en 60 días** | *Familia Robinson* en 2 días, *Los Simuladores* en 7. |
+| **Validador que miente** | *Hellsing*: inicio 9/15/2026, **fin 1/1/2026**, y lo marca "✓ OK". |
+| **Inventario publicitario en cero** | 518,400 segundos disponibles — **12 min/hora × 24 h × 30 días** — y cero clientes cargados. |
+
+> **⚠ Correcciones de la v7, tras leer el Sheet completo tabla por tabla.** Dos afirmaciones de las versiones anteriores eran falsas:
+>
+> **El catálogo NO está vacío.** Son **118 títulos**, con **112 sinopsis, 114 años y 105 clasificaciones**. Las versiones previas miraron las primeras siete filas —justo las vacías— y generalizaron. Consecuencia: *"llenar la ficha de cada programa"* deja de ser la función de IA de mayor retorno para este despliegue.
+>
+> **La columna "Duración" no es duración.** Sus valores son 1, 2, 6 y 10: es la **cantidad de episodios consecutivos por corrida**. *Gaming Longplays = 10* es por lo que ocupa de 6 PM a 11 PM. Es un concepto que el modelo de datos no tenía (§15).
+
+---
+
+## 5. Objetivos
+
+1. **De cero a señal al aire en menos de una hora, sin conocimiento técnico.**
+2. Que armar la parrilla sea fácil de verdad — **no "mejor que un Excel"**.
+3. **Que el mismo sistema opere un canal o veinte** sin que el de uno pague esa complejidad.
+4. **Que funcione en cualquier país.**
+5. Emitir 24/7 sin dead air y sin intervención humana diaria.
+6. Una guía electrónica que diga la verdad.
+7. **Que el inventario publicitario sea vendible en el mercado moderno.**
+8. **Ser 100% funcional sin ninguna IA.**
+9. Aceptar el hardware y los sistemas que la gente ya tiene.
+
+### No-objetivos
+- No se construye el equipo de alertas. Es hardware certificado; Antena787 **se integra**.
+- No se construyen códecs. Eso es ffmpeg.
+- **No se construye un muxer de MPEG-TS propio.** ⚠ Demasiado riesgo, sin base de referencia.
+- **No se forkea CasparCG ni ningún motor ajeno.** ⚠ *(ver §13.1)*
+- **No se parchea ffmpeg.** ⚠ *(ver §16.1)*
+- No se construye publicidad direccionable — se emite la señal para que otros la hagan.
+- No se genera contenido para redes verticales ni hay manejo de redes sociales.
+- ~~No hay ingesta de fuentes en vivo~~ → **⚠ ELIMINADO en v7.** `RadioOnce Live!` ocupa de 10 AM a 1 PM de lunes a viernes en CAtv: **15 horas semanales de su parrilla son en vivo.** Con ese no-objetivo, Antena787 no puede reemplazar su Sheet. **Las fuentes en vivo entran a la F2** (§16).
+
+---
+
+## 6. Los dos modos
+
+**Modo `internet`** — YouTube, Facebook, Twitch, servidor propio, HLS. Sin obligaciones de radiodifusión. Volumen −16 LUFS. **Para la mayoría de los usuarios este es el modo principal, no un extra.**
+
+**Modo `transmisor`** — Alimenta un transmisor licenciado. Activa el perfil regulatorio del país (§8).
+
+**Simulcast:** ambos a la vez. Casi gratis, e impone tres cosas: **derechos por canal de distribución** (§15 — un programa licenciado para abierta casi nunca lo está para internet mundial), **volumen por salida**, y **reconexión automática**.
+
+---
+
+## 7. Escala: de un canal a muchos
+
+**Un proceso, un canal.** Encima, una capa de administración que supervisa varios.
+
+| Se comparte | Es propio de cada canal |
+|---|---|
+| Biblioteca y catálogo | Parrilla y plan |
+| Ventanas de derechos | Proceso de playout |
+| Almacenamiento | Salida y perfil de formato |
+| Anunciantes y órdenes | Cortes y as-run |
+
+Los derechos se comparten a propósito: una serie se licencia para varias señales con un tope total de corridas.
+
+**Para el usuario de un canal nada de esto existe.** Aparece cuando añade el segundo. Roles, igual: un usuario sin fricción de login hasta que hay una segunda persona.
+
+---
+
+## 8. Internacional
+
+| | Américas (ATSC) | Sudamérica y Japón (ISDB-T) | Europa/África/Asia (DVB) |
+|---|---|---|---|
+| Cuadros | 59.94 / 29.97 Hz | 59.94 / 29.97 Hz | **50 / 25 Hz** |
+| Subtítulos | CEA-608/708 | **ARIB** | **DVB, teletexto** |
+| Volumen | **−24 LKFS** | −24 LKFS | **−23 LUFS** |
+| Alertas | EAS | **EWBS** (en la norma) | sistemas nacionales |
+
+*Colombia usa DVB-T2 estando en Sudamérica — por eso el perfil se elige por país, no por continente.*
+
+> **−24 LKFS vs −23 LUFS parece trivial y no lo es.** Una universidad en España o Colombia que instale esto con el número estadounidense incumple su norma.
+
+**Lo que NO cambia:** la norma de transmisión la resuelve el encoder aguas abajo. **Por eso el proyecto puede ser internacional sin volverse inmanejable.**
+
+Cada perfil requiere **fuente citada y mantenedor que opere en esa jurisdicción**, o se marca experimental. Al lanzar: `us-fcc`, `internet`.
+
+> **Nota legal:** Antena787 ayuda a cumplir, **no certifica**. **Las alertas de emergencia se cumplen con hardware certificado, no con este software.**
+
+---
+
+## 9. ATSC 3.0 y la evolución regulatoria
+
+La FCC votó 3-2 en mayo de 2026 obligar a las estaciones **de potencia completa** a completar la transición hacia el cuarto trimestre de 2027. Simulcast vence el **17 de julio de 2027**. **LPTV, traductores y Class A están hoy exentos** — buena parte de los usuarios de Antena787 cae ahí.
+
+ATSC 3.0 es otra pila: **HEVC**, **AC-4**, y **ROUTE/DASH sobre UDP/IP en vez de MPEG-TS.**
+
+> **Regla desde el primer commit: el núcleo no puede asumir MPEG-TS en ninguna parte.** Contenedor y códec son propiedades del perfil, nunca constantes del motor.
+
+**AWARN:** alertas geolocalizadas. Consecuencia futura — si solo parte de la audiencia vio la alerta, la reconciliación de spots tapados deja de ser binaria. Anotado para que `eas_event` no lo impida.
+
+---
+
+## 10. El asistente de instalación
+
+**Meta: seis preguntas o menos.**
+
+1. **¿Qué vas a hacer?** Internet · Transmisor · No sé
+2. **Revisión automática** — reporta en lenguaje llano lo que encontró: aceleración, espacio, equipos en la red, puertos seriales
+3. **¿A dónde va tu señal?** Nunca se pide elegir un driver
+4. **La prueba de barras** — manda barras y tono y pregunta **"¿Ves las barras de color?"** *El paso más importante del producto.*
+5. **¿Cómo se ve tu canal?** País (de ahí sale norma, cuadros y perfil regulatorio) y calidad
+6. **Tu contenido** — arrastrar o señalar carpeta
+7. **Tu primera parrilla** — cae en el editor, con propuesta automática
+8. **Al aire** — un botón
+
+---
+
+## 11. ⚠ El editor de parrilla
+
+**Corrección de la v6.** Las versiones anteriores medían contra el Excel. **El Excel es lo que Rolando usa porque no tenía nada mejor — es un remedio, no una interfaz fácil.** Una cuadrícula de 48 filas × 7 columnas son **336 celdas**: eso no es fácil de usar, es un muro.
+
+**La observación que ordena el diseño: la programación de TV son reglas, no celdas.** *"Kojak, lunes a viernes, 8 AM, de agosto a diciembre"* es **una frase** — y en el Sheet son 110 celdas escritas a mano. La cuadrícula es el **resultado**, no la entrada.
+
+### Tres piezas
+
+**1 · La regla como tarjeta, y eso *es* la parrilla.**
+```
+┌────────────────────────────────────────┐
+│  Kojak                                 │
+│  Lun Mar Mié Jue Vie   ·  8:00 AM      │
+│  del 9 ago al 20 dic   ·  quedan 47 d  │
+└────────────────────────────────────────┘
+```
+Unas 20 tarjetas y hay canal entero. **Nadie escribe 336 celdas nunca.**
+
+**2 · La línea de tiempo como vista, no como formulario.** El día se dibuja horizontal, con bloques de ancho proporcional a la duración **real** — un programa de 24 minutos se ve más corto que el espacio de 30, y **el hueco de 6 minutos es un hueco visible**. La semana son siete líneas apiladas. Se arrastra directo para un cambio puntual y el sistema pregunta **"¿solo hoy, o siempre?"** — como un calendario, que todo el mundo ya entiende.
+
+**3 · Nunca ver una parrilla vacía.** Al terminar de cargar contenido, el sistema **propone la semana completa**. El usuario ajusta una propuesta en vez de enfrentar un lienzo en blanco. El relleno automático es el comportamiento por defecto, no un botón.
+
+Opcionalmente, **franjas** — *"mañana infantil, 6 AM a 12 PM"*, se sueltan series adentro y el sistema las reparte.
+
+**El pegado desde Excel se queda pero cambia de papel:** es **solo herramienta de migración**, se usa una vez.
+
+**Además, una vista de cuadrícula de solo lectura** — la semana en formato de tabla, como el Sheet, para quien necesita terreno familiar o quiere imprimirla. **Se mira, no se edita.** Editar siempre ocurre en la línea de tiempo o en las reglas.
+
+---
+
+## 12. Contenido y tablero
+
+**Contenido.** Arrastrar o carpeta vigilada. Detrás y sin mostrarlo: duración real, medición y corrección de volumen, detección de subtítulos, recorte de negro, conversión al formato de casa. **Barra de progreso, no códecs.** Errores en cristiano. Edición en lote. Cambiar el formato del canal reconvierte todo en segundo plano sin sacarlo del aire.
+
+**Tablero.**
+```
+● AL AIRE          Los Simuladores · faltan 14 min
+  Sigue:           Zorro 57 · 4:30 PM
+
+✓ Tu señal está saliendo bien
+✓ Programación cargada para los próximos 12 días
+⚠ 3 programas se te vencen esta semana     [ ver ]
+⚠ 4 videos tienen problemas                [ ver ]
+```
+Alarmas por WhatsApp, Telegram o correo — **a las 3 AM nadie está mirando.**
+
+---
+
+## 13. ⚠ Arquitectura del motor — corregida en v6
+
+### 13.1 · Por qué el motor es propio y en Go
+
+**Las v1–v5 apostaban a "normalizar una vez y empalmar TS sin recodificar". Tres investigaciones independientes lo refutaron.**
+
+| Lo que decía | Lo que la evidencia mostró |
+|---|---|
+| Empalme por stream-copy | **ffplayout, Tunarr y ErsatzTV decodifican y recodifican.** Ninguno hace stream-copy |
+| <10% de un núcleo | Solo cierto para remux puro sin corrección |
+| Transiciones perfectas | `Non-monotonous DTS`, corrimiento de tiempo de inicio (ffmpeg #8925), fallo silencioso en desajuste de resolución |
+| "Nunca negro" | **El equipo profesional también cae a negro o congela un cuadro en el empalme** — es un modo de operación documentado |
+
+**La matemática del problema de audio:** a 29.97 fps con AAC de 1024 muestras a 48 kHz, los bordes de video y audio coinciden **cada 640 cuadros / 1001 tramas AAC ≈ 21.36 segundos.** En un corte arbitrario la coincidencia es prácticamente imposible. Los sistemas reales no la logran: **reinician el reloj de presentación** en cada empalme y sustituyen las tramas de audio del borde por tramas de silencio.
+
+**Se evaluó CasparCG y se descartó**, no por calidad —SVT corre seis canales nacionales sobre él desde 2006— sino por tamaño y forma: es un **compositor de gráficos en tiempo real** con GPU obligatoria, para un problema que aquí es reproducción secuencial. Y es **un servicio aparte, con su instalación, su configuración, sus logs y sus modos de fallo**, lo que rompe la promesa de "un archivo, un instalador". Para una ONG con un voluntario, *"falló algo en CasparCG"* es infixeable.
+
+**Precedente que valida el camino propio:** ffplayout (Rust) y Tunarr (TypeScript) hacen playout lineal 24/7 orquestando ffmpeg, sin compositor. **No es un proyecto de 20 años en C++ — es orquestación de procesos y tuberías, que es en lo que Go es bueno.**
+
+### 13.2 · Cómo funciona
+
+1. **Encoder persistente** — un ffmpeg que **nunca muere**, con aceleración por hardware, produciendo la salida continua. No se reinicia entre programas; ahí es donde se rompen los demás.
+2. **Un decodificador por clip** que entrega video y audio crudos por tubería al encoder. Modelo de dos procesos, documentado por Tunarr.
+3. **Conformado por clip** — rellenar con silencio si el audio queda corto, sostener el último cuadro si el video queda corto, letterbox si la geometría no cuadra. **ffplayout documenta que hace esto incluso con archivos ya normalizados.**
+4. **Pre-roll** — el siguiente clip se abre y arranca antes de necesitarse.
+5. **Watchdog y cascada** — programa → relleno → cartel → barras y tono.
+
+**Herramientas empaquetadas al lado, con versión fijada:** `ffmpeg`, `ffprobe`, `tsp` (TSDuck). **Binarios, no servicios** — nada que instalar, configurar ni vigilar aparte. Un instalador, una carpeta.
+
+### 13.3 · Normalizar en el ingest sigue siendo correcto
+
+Lo que se cae es "y por eso no hay que recodificar". Normalizar sigue siendo lo que **garantiza el volumen al objetivo regional, conserva los subtítulos, mide la duración real y quita las barras y el slate.** Y reduce el trabajo de conformado en el borde. **El error no fue normalizar; fue creer que normalizar hacía innecesario el encoder.**
+
+### 13.4 · Separar reglas de plan
+
+**Regla:** lo que el humano edita. **Plan:** el instante exacto, el archivo, la duración real. El resolver materializa 48 horas por adelantado. Así se **revisa el aire de mañana antes de que ocurra**, el motor no tiene lógica de negocio, **la guía se genera del plan y por eso dice la verdad**, y al emitirse la fila pasa a `aired` — **el as-run no es otra tabla, es el plan con la verdad encima.**
+
+### 13.5 · Playout guiado por reloj
+
+La parrilla es un contrato con la hora de pared. Lo confirma el equipo de alertas: cuando interrumpe, el playout **sigue corriendo** y al soltar ya estamos en el minuto correcto. **La precisión de cuadro no sale del reloj del sistema operativo, sale de la continuidad de marcas de tiempo del flujo** — crítico en Windows, cuya resolución de temporizador (~15.6 ms) es estrecha frente a los 33.4 ms de un cuadro.
+
+### 13.6 · Módulos
+
+El núcleo hace lo indispensable. Lo demás se enciende solo: `stream-social` (al añadir YouTube), `rights-distribution` (al emitir por abierta e internet), `ads` (al registrar el primer anunciante), `multichannel` (al añadir el segundo canal). **El núcleo se mantiene pequeño y auditable**, y quien tiene un canal por internet nunca carga con el código de publicidad.
+
+### 13.7 · Diagrama
+
+```
+   Browser ◄──► antena  (servicio, binario único)
+                ├─ UI embebida · asistente · editor de línea de tiempo
+                ├─ API REST + WebSocket
+                ├─ SERVIDOR MCP  (§19, opcional, apagado)
+                ├─ Resolver de plan · cola de ingest
+                └─ SQLite  (Postgres opcional, varios canales)
+                          │ plan resuelto 48h
+                antena-playout  ×N  (uno por canal)
+                ├─ prioridad alta · sin dependencia de red
+                ├─ encoder ffmpeg PERSISTENTE (acel. por hardware)
+                ├─ decodificador por clip → tubería
+                └─ conformado · pre-roll · watchdog
+                          │
+                ┌─ SALIDA (auto-detectada) ─┐
+                │ internet · red · tarjeta   │
+                └────────────┬───────────────┘
+                   equipo de alertas ── transmisor
+                                       o plataforma IP
+```
+
+### 13.8 · Multiplataforma y stack
+
+**Go** para el backend, **TypeScript y React** para la interfaz, **embebida en el binario** con `go:embed`.
+
+Go se escoge por **compilación cruzada trivial** (`GOOS=windows go build` → Windows, Linux y ARM desde una máquina), por **binario único sin runtime**, porque **se lee sin haberlo escrito** —lo que importa para conseguir contribuidores— y porque es **el más fácil de auditar**, que es justo el compromiso adquirido en §20.
+
+**No se escoge por rendimiento:** el trabajo en tiempo real está en ffmpeg, no en nuestro código. Las pausas del recolector son de microsegundos contra 33 ms por cuadro.
+
+**La aceleración se detecta en ejecución, no en compilación.**
+
+### 13.9 · Base de datos
+
+SQLite por defecto, modo WAL. Postgres opcional para varios canales. **En ambas: la base va en disco local, nunca en red** — el modo WAL no funciona sobre SMB/NFS y la corrupción es silenciosa.
+
+---
+
+## 14. Los drivers — invisibles para quien instala
+
+> **El modelo de drivers es para quien contribuye. El usuario nunca ve la palabra "driver".**
+
+**Salida:** `internet` (RTMP/HLS/SRT) · `red` (UDP-TS, SRT, RTP) · `tarjeta` (DeckLink, NDI — compilación aparte por SDK propietario) · `route-dash` (ATSC 3.0, futuro) · `archivo` · `ninguna`. **Varias por canal, simultáneas**, cada una con su volumen, su autorización de derechos y su reconexión automática.
+
+**⚠ Señalización de cortes (nuevo en v6):** `scte104-tcp` (al encoder — **la ruta primaria**) · `tsduck-inject` (sin encoder que hable SCTE-104) · `hls-daterange` (interstitials para salida web) · `none`. Ver §16.1.
+
+**Alertas de emergencia:** `gpi-serial` · `gpi-gpio` · `sage-endec` · `dasdec` · `syslog` · `snmp-trap` · `cap-poll` · **`signal-compare`** · `none`.
+
+> **`signal-compare` es la respuesta a "cualquier marca, cualquier país".** No le habla al equipo: compara la señal que sale contra la que el plan decía. **Funciona con hardware que el proyecto nunca va a tener en la mano** — incluido el EWBS de Sudamérica.
+
+Regla: **`none` nunca miente.** Si no hay forma de saberlo, el reporte lo dice en la cara.
+
+**Formatos de casa:** `1080i59.94` · `1080p29.97` · `1080p59.94` · `1080i50` · `1080p25` · `720p50` · `720p59.94` · `480i59.94` · `576i50` · `custom`. Códec: H.264, MPEG-2, **HEVC + AC-4** (ATSC 3.0), AV1.
+
+---
+
+## 15. Modelo de datos
+
+```
+channel         perfil de formato, salidas, perfil regulatorio, modo
+media_asset     ruta, hash, códec, duración_medida_ms, lufs, true_peak,
+                subtítulos, negro_cabeza_ms, negro_cola_ms, estado_normalizacion
+title           serie, película, promo, ID de canal, spot
+episode         title + número + media_asset
+rights_window   title, inicio, fin, corridas_permitidas, corridas_usadas,
+                canales_autorizados, distribucion (abierta|internet|ambas), territorio
+schedule_rule   channel, title, patrón_de_días, hora, rights_window,
+                episodios_por_corrida,     ⚠ N episodios seguidos avanzando en la serie
+                releva_a,                  ⚠ regla que esta sustituye en la misma franja
+                es_repeticion              ⚠ segundo pase del mismo título en el día
+live_source     ⚠ url/entrada, duración prevista, respaldo si no llega la señal
+library_source  ⚠ plex | jellyfin | carpeta — url, token, última sincronización
+plan_item       channel, instante, media_asset, duración, estado    ← ES el as-run
+                planned → cued → aired → (skipped | preempted)
+filler_asset    promos, IDs, interstitials, con duración exacta
+advertiser / insertion_order / spot_airing        ← evidencia de emisión
+break_marker    plan_item, offset, duración, tipo  ← origen del SCTE-104/35
+eas_event       inicio, fin, driver, confianza, alcance_geográfico
+user / role     ausentes hasta que hay una segunda persona
+```
+
+**Regla de integridad:** un `plan_item` no puede existir sin un `rights_window` vigente **que autorice ese canal y esa vía de distribución**. La restricción vive en el esquema, no en el código. Así muere de raíz el bug del *Hellsing*.
+
+---
+
+## 16. Requisitos funcionales
+
+**⚠ Biblioteca desde Plex o Jellyfin** — apuntar Antena787 a un servidor existente y traer catálogo, **carátulas**, sinopsis, años, clasificaciones y rutas. El catálogo de CAtv **salió de Plex** — sus nombres de campo son el esquema de la API de Plex. Es como funcionan ErsatzTV y Tunarr, y **convierte el paso más lento de la instalación en un `GET`**, que es lo que hace realista la meta de una hora.
+
+**Contenido** — carpeta vigilada y arrastre · **duración real al ms** · medición y corrección de volumen · detección de subtítulos con **conservación garantizada** (CEA-608/708, DVB, teletexto, ARIB) · recorte de negro y silencio · conversión en segundo plano · **cuarentena: lo que falla no llega al aire, nunca.**
+
+**Programación** — editor de línea de tiempo (§11) · reglas · **conflictos deterministas** · **avisos de vencimiento a 30/14/7 días** · resolver horario · **relleno automático** · aprobación del día siguiente.
+
+⚠ **Cuatro conceptos que el Sheet de CAtv sí tiene y las versiones anteriores no:**
+
+- **Episodios por corrida.** Una regla emite N episodios seguidos, avanzando en la serie y recordando dónde quedó.
+- **Día de emisión configurable, por defecto 6:00 AM.** En televisión **un programa de las 12:00 AM del martes es, para quien programa, la noche del lunes.** Por eso los patrones de días del Sheet se ven corridos. Una línea de tiempo de 00:00 a 23:59 **muestra la madrugada en el día equivocado** y confunde a quien la usa.
+- **Relevo de franja.** Cuando una regla termina el día 7 y otra empieza el día 8 en la misma hora, **es un relevo, no un conflicto.** Ocurre tres veces en CAtv. El validador tiene que distinguirlos.
+- **Repetición.** El mismo título con dos pases al día — *You're Under Arrest* a las 2 PM y 11 PM. Regla propia marcada como repetición, para que no cuente doble contra las corridas licenciadas.
+
+**⚠ Fuentes en vivo** — un bloque de la parrilla puede ser una entrada en vivo en vez de un archivo. Duración prevista, y **respaldo automático si la señal no llega**: si a la hora de entrar no hay fuente, entra el relleno y suena la alarma. **Nunca negro por una fuente que no apareció.**
+
+**⚠ Vista mensual** — además de la semanal, el mes completo, como la pestaña `Calendar` del Sheet.
+
+**Playout** — reloj monotónico con pre-roll · encoder persistente · conformado por clip · **cascada: programa → relleno → cartel → barras. Nunca negro.** · watchdog · as-run en tiempo real · **botón de pánico**.
+
+**Publicidad** — clientes, órdenes, **spots vendidos por tramo de duración (15 / 30 / 45 / 60 seg), que es como se vende televisión** · carga publicitaria configurable por hora (CAtv asume 12 min/hora) con el tiempo disponible calculado · cortes dentro y entre programas, tope por hora, separación entre competidores · rotación · **reconciliación con alertas: los spots tapados no se facturan, se reprograman** · evidencia de emisión en PDF.
+
+**Salidas simultáneas** — varios destinos por canal · volumen propio por salida · **verificación de derechos de distribución antes de empujar** · reconexión con espera progresiva · sustitución de anuncios por salida.
+
+**Guía** — XMLTV generado **del plan**, validado con `tv_validate_file` del propio proyecto XMLTV **antes de publicarse** — para que el bug de la guía de CAtv no pueda repetirse. Exportación a PSIP, DVB-SI y ARIB vía perfil.
+
+**Monitoreo** — tablero en vivo · negro, congelado y silencio con filtros de ffmpeg, deterministas y gratis · alarmas por WhatsApp, Telegram, correo o webhook · **alarma de reinicio inesperado.**
+
+### 16.1 · ⚠ Señalización de cortes — corregida en v6
+
+**Las versiones anteriores decían que Antena787 emite SCTE-35 in-band. Es incorrecto, y además imposible con ffmpeg.**
+
+**El hecho:** `grep -i scte libavformat/mpegtsenc.c` devuelve **cero resultados**. El muxer de ffmpeg no tiene una línea de SCTE-35. Hay tres series de parches sin mergear —2021, 2023 de LTN Global, 2025 de Net Insight— **ignoradas por falta de revisores, no rechazadas**; el autor del parche de 2023 preguntó si estaba listo para mergear y nadie contestó. El fork de LTN está basado en **ffmpeg n4.3.1 de 2020**, nueve versiones mayores atrás. **Parchear queda descartado** (§5, no-objetivos).
+
+**Lo correcto, y es la arquitectura estándar de la industria:**
+
+> **El sistema de automatización manda SCTE-104 al encoder, y el encoder genera el SCTE-35.**
+
+AWS MediaLive convierte SCTE-104 a SCTE-35 al ingestar. Wowza no genera SCTE-35, solo relaya. Google Ad Manager DAI y MediaTailor dan por hecho que ya está en el stream. La integración Harmonic + Aveco lo confirma. **Antena787 es el sistema de automatización de esa frase.**
+
+**Consecuencia excelente: ffmpeg nunca toca SCTE-35, así que su hueco deja de importar.** Y SCTE-104 desde Go es barato — mensaje TCP autocontenido, **sin PCR, sin PTS, sin contadores de continuidad**. No hay librería Go, pero la especificación es clara y hay referencia en C reutilizable. Estimado: 1–2 semanas.
+
+**Para quien no tiene encoder que hable SCTE-104** — el modo internet, o equipo antiguo — la ruta es TSDuck:
+
+```
+ffmpeg (TS sin SCTE-35, a stdout) │ tsp -I file
+   -P pmt --add-pid 600/0x86
+   -P spliceinject --service 1 --files '/var/antena/cues/*.xml' --pid 600
+   -P continuity --fix  -P pcradjust  -P pcrbitrate  -P regulate
+   -O ip <destino>
+```
+
+Nuestro código **solo escribe un XML** (o manda UDP). Cero manipulación de bitstream. **`Comcast/scte35-go`** (Apache-2.0, activo) construye las secciones `splice_info_section` válidas — la parte difícil ya está resuelta en Go.
+
+**Dos advertencias que hay que validar antes de confiarle ingresos a nadie:**
+- **TSDuck no puede ser el muxer final.** Procesa TS ya muxeado; no empaqueta ES crudo. **ffmpeg sigue siendo indispensable.**
+- **Issue abierto #1497 de TSDuck** reporta ~20s de buffering residual pese a ajustes agresivos, y **no hay caso público de producción 24/7**. Requiere **prueba de resistencia propia de 48–72h** midiendo deriva de PCR, continuidad y latencia real. Va como tarea explícita de la F4.
+
+**Qué se gana con la señal, sin construir nada más:** inserción del lado del servidor (SSAI) y dinámica (DAI) · **publicidad direccionable** por hogar o código postal · **exchanges programáticos** — que es lo que deja a una estación local competir con streaming · sustitución regional.
+
+> **Antena787 no construye publicidad direccionable. Emite la señal estándar que deja que todos los demás la construyan.**
+
+### 16.2 · Integraciones para instalaciones grandes
+**API REST completa** · importación y exportación de parrilla y as-run en CSV y XML · webhooks · exportación al formato de sistemas de traffic existentes. *Nada de esto aparece en la interfaz de quien tiene un canal.*
+
+---
+
+## 17. ⚠ Hardware — corregido en v6
+
+**La aceleración por hardware deja de ser conveniencia y pasa a ser estructural.** Con encoder persistente, recodificar 1080p cuesta **~15% del CPU con QuickSync en un N100**, pero **un núcleo completo por software**. Sin aceleración se rompe el costo casi lineal por canal.
+
+| Escenario | Máquina | Aprox. |
+|---|---|---|
+| Canal por internet, 720p | PC de oficina reciclado con gráficos Intel recientes, 8 GB | $0 |
+| Canal 1080 con transmisor | Mini PC Intel N100/N305, 16 GB | ~$200 |
+| 4–6 canales | Servidor 8+ núcleos con GPU, 32 GB | ~$1,500 |
+
+**⚠ La recomendación de Raspberry Pi de las versiones anteriores queda retirada** hasta verificar si el Pi 5 tiene encoder H.264 por hardware — hay indicios de que se eliminó respecto al Pi 4. **Sin encoder por hardware, la recomendación no se sostiene.** Tarea de verificación antes de publicar la guía de compra.
+
+| Proceso | RAM | CPU |
+|---|---|---|
+| `antena` (interfaz + base) | 80–120 MB | despreciable |
+| `antena-playout` por canal | 100–200 MB | despreciable |
+| **encoder ffmpeg con aceleración** | ~300 MB | **~15% del CPU** |
+| Sistema base | Linux ~400 MB · Windows ~2.5 GB | |
+
+**Dos máquinas idénticas** para cualquier instalación con licencia de transmisión.
+
+**Guía de compra con productos y precios reales en el repositorio** — "solo te falta comprar el equipo" obliga a decir qué comprar.
+
+---
+
+## 18. Instalación y operación
+
+**En ambas plataformas:** el instalador registra el servicio, configura arranque automático, **aplica los ajustes del sistema operativo solo**, y termina con un **reporte de verificación**. Tailscale para acceso remoto sin abrir puertos. Respaldo horario. Actualizaciones **nunca automáticas**.
+
+**Windows** — recomendado **Windows 10/11 IoT Enterprise LTSC**: sin actualizaciones de funcionalidad por 10 años. El instalador aplica **exclusiones de antivirus** (escanear terabytes de video **puede provocar errores de archivo en pleno aire**), energía sin suspensión, arranque tras corte, rutas largas, y política de actualizaciones sin reinicio. **Windows Update reiniciando la máquina a las 3 AM es el riesgo operativo #1.**
+
+**Linux** — systemd con reinicio automático y límites por cgroup. `.deb` y `.rpm`. **Docker opcional, nunca requerido.**
+
+---
+
+## 19. IA — por MCP, y en la última fase
+
+> **El producto tiene que ser 100% funcional sin una sola línea de IA.**
+
+Ninguna función de IA se construye dentro de Antena. En su lugar, un **servidor MCP** apagado por defecto, al que el usuario conecta el asistente que quiera.
+
+**El principio que ordena los permisos:** no es "la IA no escribe", es **mientras más lejos del aire y más reversible, más libre la herramienta.** Lo decide una **ventana de protección de 24 horas**, configurable.
+
+**Lectura — sin restricción:** parrilla, biblioteca, derechos, vencimientos, huecos, conflictos, as-run, inventario, configuración de salida, alarmas.
+
+**Escritura libre — reversible, lejos del aire, en bitácora:** `set_metadata` (títulos, sinopsis, año, género, episodio) · `rename_title` · `organize_library` · `move_asset` · `create_filler_set` · `draft_insertion_order`.
+
+**Escritura con ventana de protección:** `set_schedule` · `move_program` · `fill_gaps` · `update_insertion_order`. Fuera de la ventana se aplica con bitácora y deshacer; **dentro, la misma llamada devuelve un diff.** El modelo no elige cuál ocurre — **lo decide el servidor.**
+
+**Propuesta obligatoria — siempre un diff:** `propose_output_change` (cambio de equipo) · `propose_profile_change` · `propose_deletion` · `propose_replacements`.
+
+**Reportes:** `generate_proof_of_play` (**determinista**) · `draft_client_report` (redacta) · `send_report` (**requiere autorización humana**).
+
+**No existen, y nunca van a existir:** poner algo al aire ahora · facturar · anular el volumen o el perfil regulatorio · desactivar el cumplimiento · mandar algo afuera sin aprobación.
+
+**Cambiar el equipo se prueba antes de aplicarse:** la IA propone → el sistema manda **barras de color** por la salida nueva → *"¿Ves las barras?"* → sí se aplica, no se revierte sola. **Nunca se compromete una salida que no se probó.**
+
+**Los reportes: la IA redacta, no calcula.** Las cifras salen de contar filas de `spot_airing` con la reconciliación de alertas aplicada. **Si un modelo pudiera inventarse cuántas veces salió un spot, sería un registro de negocio falso generado por IA.**
+
+**Enviar:** el primer envío a cada cliente lo aprueba una persona. El recurrente se autoriza una vez en la interfaz.
+
+**Fuera del MCP:** los subtítulos con Whisper son procesamiento en lote, no conversación. Van como complemento opcional aparte.
+
+---
+
+## 20. Cómo se verifica algo construido por IA
+
+**El proyecto lo construye mayormente una IA. Un motor de playout no falla con un error 500 — falla a las 3:14 AM de un martes, en silencio.** Y los errores de este dominio son justo los que un modelo comete con más facilidad y que menos se notan al revisar: deriva de timestamps que aparece a las 40 horas, un contador de continuidad que se desborda, un caso borde de horario de verano.
+
+**Reglas no negociables:**
+
+1. **El motor de playout, el conformado y el watchdog se leen línea por línea por un humano.** Son ~20% del código y 95% del riesgo. La interfaz, el editor y los reportes no requieren ese nivel.
+2. **Prueba de resistencia de 30 días** contra salida a archivo, con verificación automática de cada empalme, **antes de tocar una antena.** Es el único modo de encontrar los errores que solo aparecen con el tiempo.
+3. **Prueba de 48–72h de la cadena TSDuck** midiendo deriva de PCR, continuidad y latencia (§16.1).
+
+**Y una consecuencia legal que sale gratis:** la Oficina de Derechos de Autor de EEUU sostiene que **una obra sin autoría humana no es sujeta de derechos de autor** — y el copyleft de la AGPL funciona porque hay un titular. Código generado sin intervención humana significativa podría no quedar cubierto. **La revisión humana documentada del motor resuelve las dos cosas a la vez.** `CONTRIBUTING.md` declara que el proyecto usa asistencia de IA con revisión humana.
+
+---
+
+## 21. Cómo entra al aire de Rolando
+
+Rolando aceptó ser el despliegue de referencia. **Aceptar no puede significar apagar VLC un lunes.**
+
+1. **Modo sombra** — Antena787 arma el plan, genera la guía y registra el as-run, **pero Rolando sigue emitiendo con VLC**. Se compara lo que Antena787 *habría* puesto contra lo que salió. **Cero riesgo, semanas de evidencia real.** Casi gratis: la F1 ya construye todo lo necesario.
+2. **Salida paralela a archivo** — emite de verdad, a un archivo o stream privado. Una semana de observación.
+3. **Madrugadas primero** — hoy son 30% dead air. Una falla ahí casi nadie la ve, **y es donde el sistema además aporta valor inmediato.** El peor problema de Rolando resulta ser el terreno de pruebas más seguro.
+4. **Aire completo**, con la caja de respaldo lista.
+
+---
+
+## 22. El proyecto abierto y cómo se sostiene
+
+### Licencia
+**AGPL-3.0.** Cualquiera lo usa gratis y para siempre. **Quien construya algo comercial encima está obligado a liberar todo su código bajo la misma licencia.** La "A" cierra el hueco del SaaS. Entra en repos de Debian, Ubuntu, Fedora y Homebrew, y las empresas dejan a sus empleados contribuir.
+
+**Contribuciones por DCO** — `Signed-off-by`, como el kernel. Con código de terceros adentro, relicenciar deja de ser decisión unilateral; es coherente con que el núcleo sea un bien público.
+
+**Patentes de códecs:** el software es libre; las patentes de H.264 y HEVC son asunto aparte que ninguna licencia de software resuelve. Se documenta con honestidad y se ofrece **AV1 y VP9, libres de regalías,** para salida IP.
+
+**Compatibilidad verificada:** TSDuck es **BSD-2-Clause**, `Comcast/scte35-go` **Apache-2.0**, XMLTV **GPL** — todo compatible. Se usan como **binarios empaquetados o librerías Go**, nunca enlazando C (§3.12).
+
+### Qué es gratis — y no está mutilado
+**El núcleo y todos los módulos, para un canal:** streaming a redes, derechos por distribución, publicidad completa con señalización de cortes, cumplimiento, MCP. Todo.
+
+> **Sin versión recortada, sin pantallas de recordatorio, sin funciones que caducan, sin marca de agua.** No es generosidad: **un proyecto que molesta a sus usuarios libres no recibe contribuciones.**
+
+### Qué se paga — la capa de escala
+Un **proceso supervisor aparte**: multi-canal, redundancia con conmutación, roles y multi-usuario, API REST completa, soporte con tiempo de respuesta.
+
+**Por qué este límite:** cobra a quien puede pagar · **no paywallea nada que el usuario objetivo necesite** · **no paywallea seguridad** — los derechos por distribución impiden que alguien viole su licencia, y van gratis en el núcleo · es el límite más difícil de reimplementar · y es limpio legalmente, porque la capa multi-canal ya es proceso aparte por diseño.
+
+**Hueco aceptado conscientemente:** nada impide correr N instancias gratuitas en N puertos, y bajo AGPL es legal. **Lo que se vende no es la capacidad de tener varios canales, es no volverse loco operándolos.** Un modelo que depende de que el usuario no descubra algo obvio no es un modelo.
+
+### Servicios y patrocinio
+Instalación y puesta al aire, drivers a medida, perfiles de cumplimiento de un país nuevo, migración, adiestramiento. Y patrocinio con la petición honesta: *si Antena787 te está ayudando a ganar dinero, patrocínala.* Sin bloquear nada a quien no pueda.
+
+### Repositorio
+```
+README.md         de cero al aire en menos de una hora — español e inglés
+LICENSE           AGPL-3.0
+CONTRIBUTING.md   DCO, asistencia de IA con revisión humana, cómo aportar drivers
+COMPLIANCE.md     qué hace y qué NO hace Antena787 por tu cumplimiento legal
+COMPRAR.md        guía de compra de equipo, con precios reales
+docs/drivers/     cómo añadir soporte para tu equipo
+docs/profiles/    cómo contribuir el cumplimiento de tu país
+docs/hardware/    MATRIZ DE COMPATIBILIDAD mantenida por la comunidad
+examples/         universidad · ONG · low-power · internet
+```
+
+**La matriz de compatibilidad decide la adopción.** *"¿Sirve con mi equipo?"* es la primera pregunta de todo el que llega.
+
+GitHub Actions compila cada release para Windows, Linux y ARM, con instaladores, sumas de verificación y binarios firmados. **Sin builds nocturnas: un canal al aire no corre código sin versionar.**
+
+**Documentación en español e inglés desde el día uno.** El mercado natural es LATAM y casi todo el software de broadcast existe solo en inglés.
+
+---
+
+## 23. Fases
+
+| Fase | Entrega |
+|---|---|
+| **F0 · Prueba de concepto** | ⚠ **Nueva.** Encoder persistente + cambio de clip por tubería + conformado. Medir clic audible, desfase A/V y continuidad. **Valida §13.2 antes de construir encima.** |
+| **F1 · Fundación** | Contenido con medición real, derechos, **editor de línea de tiempo (§11)**, resolver, **XMLTV validado**, avisos de vencimiento. Windows y Linux desde el día uno. **No toca el aire.** Habilita el modo sombra (§21). |
+| **F2 · Playout** | Motor completo, conformado, salidas internet y red, **asistente con la prueba de barras**, cascada de respaldo, relleno, tablero, alarmas. **Prueba de resistencia de 30 días (§20).** |
+| **F3 · Público** | Repositorio abierto, CI, instaladores, docs bilingües, matriz de hardware, guía de compra. Modo internet completo. |
+| **F4 · Emisora** | Publicidad, cortes, **SCTE-104 y TSDuck (§16.1)** con su prueba de 48–72h, reconciliación con alertas, evidencia de emisión. Perfil `us-fcc`. |
+| **F5 · Internacional** | Perfiles `eu-ebu` e `isdb-latam`, subtítulos DVB/ARIB, exportación PSIP y DVB-SI. **Libre, en el núcleo.** |
+| **F5b · Capa de escala** | Multi-canal, roles, redundancia, API completa. **Proceso aparte, es la capa de pago.** |
+| **F6 · MCP** | **La última fase, y solo cuando todo lo anterior funcione sin ella.** |
+
+**Al terminar F5 el producto está completo.** F6 es aditiva: si nunca se hiciera, Antena787 seguiría siendo un sistema entero. *Esa es la prueba de que la IA está en el lugar correcto.*
+
+**F3 va antes que F4 a propósito.** Un canal universitario no necesita publicidad — necesita que el proyecto exista y funcione.
+
+---
+
+## 24. Métricas de éxito
+
+| Métrica | Meta |
+|---|---|
+| **De cero a barras de color en pantalla** | **< 15 minutos** |
+| **De cero a canal al aire con programación** | **< 1 hora** |
+| **Instalaciones abandonadas en el asistente** | **< 10%** |
+| Preguntas durante la instalación | ≤ 6 |
+| **Funcionalidad completa sin IA** | **100%** |
+| Dead air en el despliegue de referencia | de 30% a < 1% |
+| Exactitud de la guía | 100% contra el as-run |
+| Interrupciones no planificadas | 0 en 30 días |
+| Instalaciones de terceros | 10 canales en 12 meses |
+| **Países distintos con instalación activa** | **3 en 12 meses** |
+| Contribuidores externos con código mezclado | 3 en 12 meses |
+
+---
+
+## 25. Riesgos
+
+| Riesgo | Mitigación |
+|---|---|
+| **La gente abandona en la instalación** | Asistente y prueba de barras son trabajo principal. Medir dónde se abandona. **Riesgo #1.** |
+| **⚠ El motor es nuestro y lo escribe una IA** | Revisión humana línea por línea + prueba de resistencia de 30 días (§20). **No negociable.** |
+| **⚠ La cadena TSDuck no rinde** | Issue #1497 sin resolver, sin caso público 24/7. Prueba propia de 48–72h en F4. Plan B: GStreamer `mpegtsmux`, que **sí tiene SCTE-35 nativo real** en el muxer. |
+| **Servir a grandes complica al pequeño** | Revelación progresiva. Probar el flujo del usuario único en cada release. |
+| **El editor no resulta fácil** | Reglas como entrada, línea de tiempo como vista, propuesta automática. **Probarlo con alguien no técnico antes de publicar.** |
+| **Internacionalizar sin conocer las normas** | Cada perfil requiere fuente citada y mantenedor local, o experimental |
+| **Alguien se mete en un lío regulatorio** | `COMPLIANCE.md` explícito. **Las alertas son hardware.** |
+| **Windows Update reinicia el aire** | IoT LTSC + política + alarma, aplicado por el instalador |
+| **Antivirus bloquea o degrada** | Exclusiones automáticas verificadas |
+| **La capa de pago contamina el núcleo** | Proceso aparte; **prueba de CI que verifica que el núcleo opera sin ella** en cada release |
+| **La versión libre se percibe como recortada** | Un canal tiene **todo**. Sin avisos, sin caducidad. **Regla no negociable.** |
+| **El MCP como puerta trasera al aire** | Ventana de protección aplicada **en el servidor, no en el prompt**. Auditoría de la superficie en cada release. |
+| **Reporte de emisión con cifras inventadas** | `generate_proof_of_play` determinista. **La IA redacta, no calcula.** |
+| **Nadie contribuye** | Publicar en F3, no al final. Matriz de hardware desde el principio. |
+| **Combinatoria plataformas × perfiles × drivers** | CI que compila todo. **Ninguna combinación no probada se documenta como soportada.** |
+
+---
+
+## 26. Preguntas abiertas
+
+**Del proyecto**
+1. ~~El nombre~~ → **Antena787**, decidido.
+2. ~~Vista de cuadrícula~~ → **sí**, como vista secundaria de solo lectura junto a la línea de tiempo (§11).
+
+**A verificar antes de publicar**
+3. ¿El Raspberry Pi 5 tiene encoder H.264 por hardware? Decide si la recomendación vuelve (§17).
+
+**⚠ Nuevas, del análisis completo del Sheet**
+3b. **¿Qué es exactamente `RadioOnce Live!`?** ¿Señal en vivo por IP, captura de tarjeta, o un bloque pregrabado con nombre engañoso? **Define el alcance de las fuentes en vivo y bloquea la F2.**
+3c. ¿Rolando corre un servidor Plex o Jellyfin hoy, y Antena787 puede leerlo directo?
+3d. ¿A qué hora considera él que empieza su día de emisión?
+
+**Del despliegue de referencia (CAtv)**
+4. **¿La estación es de potencia completa, Class A o LPTV?** Decide si le aplica el mandato de ATSC 3.0 de 2027 (§9).
+5. **¿El equipo que alimenta al de alertas acepta SCTE-104?** Decide la ruta de señalización (§16.1). *Bloquea F4.*
+6. Qué protocolo acepta ese equipo. *Bloquea F2.*
+7. Marca y modelo del equipo de alertas, y si expone contacto seco o red.
+8. Resolución y frecuencia de cuadro del transmisor.
+9. ¿El material trae subtítulos embebidos?
+10. Edición de Windows actual · dónde vive el contenido y cuántos TB.
+
+**Ninguna bloquea F0 ni F1.**
+
+---
+
+## 27. Por qué vale la pena
+
+Lanzar un canal de televisión hoy cuesta más en software que en transmisor.
+
+Pero el software barato no basta si hace falta un ingeniero para encenderlo, ni si solo sirve a un tamaño, ni si solo funciona en un país. **La facilidad de uso, la escala y la portabilidad no son funciones de este proyecto: son el proyecto.**
+
+Una universidad con un canal de práctica. Una comunitaria que repite el mismo bloque porque no tiene quién arme la parrilla. Una emisora regional que perdió su anunciante porque no pudo probar que el spot salió. Un grupo con seis señales pagando una licencia que no puede sostener. Y todos ellos en cualquier país del hemisferio.
+
+Que cualquiera de ellos pueda comprar un mini PC, bajar un archivo, contestar seis preguntas y estar al aire en una hora.
+
+**Que solo le falte comprar el equipo.**

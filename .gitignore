@@ -1,0 +1,13 @@
+# binarios y artefactos
+/bin/
+/dist/
+*.exe
+*.log
+# ffmpeg local de desarrollo (el release lo trae el instalador)
+/tools/ffmpeg/
+# medios de prueba generados por F0
+/f0/media/
+/f0/out/
+# sistema
+.DS_Store
+diseno/_plain/
