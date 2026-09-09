@@ -83,11 +83,15 @@ func TestF1_46_SinCanalNoSeMandaNada(t *testing.T) {
 	telegramAPI = srv.URL
 	defer func() { telegramAPI = viejo }()
 
+	// Lo que importa es que Notificar no añada ninguna alarma; las que ya
+	// había (en una máquina sin ffmpeg, la de las herramientas) no son de
+	// esta prueba.
+	antes := len(a.Alarms())
 	a.Notificar(context.Background(), "asunto", "texto")
 	if llamadas != 0 {
 		t.Fatalf("con el canal de avisos apagado se mandaron %d avisos", llamadas)
 	}
-	if len(a.Alarms()) != 0 {
+	if len(a.Alarms()) != antes {
 		t.Fatalf("no mandar nada no es una alarma: %+v", a.Alarms())
 	}
 }

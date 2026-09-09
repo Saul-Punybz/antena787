@@ -43,6 +43,11 @@ jobs:
       - name: go build
         run: go build ./...
 
+      # Con ffmpeg: sin él la mitad de las pruebas se salta y el resto ve
+      # la alarma de «no encuentro ffmpeg», que en una máquina real no está.
+      - name: ffmpeg
+        run: sudo apt-get update -q && sudo apt-get install -y -q ffmpeg
+
       - name: go test
         run: go test ./...
 
