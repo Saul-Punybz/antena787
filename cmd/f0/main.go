@@ -36,8 +36,11 @@ func main() {
 
 	switch os.Args[1] {
 	case "media":
+		fs := flag.NewFlagSet("media", flag.ExitOnError)
+		short := fs.Bool("short", false, "clips de una quinta parte (para CI y pruebas rápidas)")
+		fs.Parse(os.Args[2:])
 		fmt.Println("Fabricando archivos de prueba…")
-		die(f0.Make(ffmpeg, media, func(s string) { fmt.Println(s) }))
+		die(f0.Make(ffmpeg, media, *short, func(s string) { fmt.Println(s) }))
 	case "run":
 		fs := flag.NewFlagSet("run", flag.ExitOnError)
 		hours := fs.Float64("hours", 8, "duración de la corrida en horas")
@@ -51,7 +54,7 @@ func main() {
 		fs := flag.NewFlagSet("all", flag.ExitOnError)
 		hours := fs.Float64("hours", 8, "")
 		fs.Parse(os.Args[2:])
-		die(f0.Make(ffmpeg, media, func(s string) { fmt.Println(s) }))
+		die(f0.Make(ffmpeg, media, false, func(s string) { fmt.Println(s) }))
 		die(run(ffmpeg, ffprobe, media, out, time.Duration(*hours*float64(time.Hour)), "", false))
 		die(f0.Analyze(ffmpeg, ffprobe, media, out, func(s string) { fmt.Println(s) }))
 	default:
@@ -101,6 +104,10 @@ func run(ffmpeg, ffprobe, media, out string, dur time.Duration, udp string, one 
 	fmt.Printf("Corriendo %s con %d salida(s) → %s\n", dur, len(outs), out)
 	t0 := time.Now()
 	runErr := srv.Run(ctx, dur)
+	if ctx.Err() != nil {
+		fmt.Println("Parada pedida (Ctrl-C): cerrando limpio…")
+		runErr = nil
+	}
 	finErr := enc.Finish()
 	stats.Close()
 	fmt.Printf("Terminó en %s\n", time.Since(t0).Round(time.Second))

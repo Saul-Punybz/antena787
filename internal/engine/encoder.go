@@ -62,7 +62,10 @@ func StartEncoder(parent context.Context, ffmpeg string, f Format, outs []Output
 	}
 	defer lv.Close()
 
-	ctx, cancel := context.WithCancel(parent)
+	// El encoder NO se mata con el contexto: cuando el servidor deja de
+	// escribir, Finish cierra las entradas y ffmpeg termina solo, con sus
+	// archivos bien cerrados. Matarlo a mitad deja un TS truncado.
+	_, cancel := context.WithCancel(parent)
 	e := &Encoder{Format: f, Outputs: outs, cancel: cancel, done: make(chan error, 1)}
 
 	args := []string{"-nostdin", "-hide_banner", "-loglevel", "warning", "-nostats",
@@ -77,7 +80,7 @@ func StartEncoder(parent context.Context, ffmpeg string, f Format, outs []Output
 	if os.Getenv("ANTENA_DEBUG") != "" {
 		fmt.Fprintln(os.Stderr, "encoder:", ffmpeg, strings.Join(args, " "))
 	}
-	e.Cmd = exec.CommandContext(ctx, ffmpeg, args...)
+	e.Cmd = exec.Command(ffmpeg, args...)
 	e.Cmd.Stderr = &e.Stderr
 	if err := e.Cmd.Start(); err != nil {
 		cancel()
@@ -212,6 +215,9 @@ func (e *Encoder) Finish() error {
 		return nil
 	case <-time.After(60 * time.Second):
 		e.cancel()
+		if e.Cmd.Process != nil {
+			e.Cmd.Process.Kill()
+		}
 		return fmt.Errorf("encoder no terminó en 60 s")
 	}
 }

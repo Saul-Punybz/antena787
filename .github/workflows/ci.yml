@@ -76,3 +76,53 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: "0"
         run: go build ./...
+
+  # Corre de verdad en las tres plataformas, con ffmpeg: pruebas de Go y
+  # una F0 corta (medios de una quinta parte, 2 min de aire, dos vueltas) cuyo reporte no
+  # puede tener ningún FALLA. Es la prueba de "corre en Mac, Linux y
+  # Windows" con evidencia, no con compilación cruzada.
+  plataformas:
+    name: F0 corta en ${{ matrix.os }}
+    needs: verificar
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: ffmpeg (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -q && sudo apt-get install -y -q ffmpeg
+      - name: ffmpeg (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg
+      - name: ffmpeg (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg -y --no-progress
+
+      - name: go test
+        run: go test ./...
+
+      - name: compilar f0
+        run: go build -o bin/f0${{ runner.os == 'Windows' && '.exe' || '' }} ./cmd/f0
+
+      - name: F0 corta
+        shell: bash
+        run: |
+          ffmpeg -version | head -1
+          bin/f0 media -short
+          bin/f0 run -hours 0.035
+          bin/f0 analyze
+          if grep -q 'FALLA' f0/out/REPORTE.md; then
+            echo "El reporte de F0 tiene criterios que FALLAN:"; cat f0/out/REPORTE.md; exit 1
+          fi
+
+      - name: reporte
+        if: always()
+        shell: bash
+        run: cat f0/out/REPORTE.md 2>/dev/null || true

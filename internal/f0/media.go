@@ -5,6 +5,7 @@ package f0
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -100,12 +101,15 @@ func audioExpr(tone int) string {
 }
 
 // Make fabrica todos los archivos en dir y escribe clips.json.
-func Make(ffmpeg, dir string, log func(string)) error {
+func Make(ffmpeg, dir string, short bool, log func(string)) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 	var out []ClipSpec
 	for _, s := range Specs {
+		if short {
+			s.Seconds = math.Max(4, math.Round(s.Seconds/5))
+		}
 		s.File = filepath.Join(dir, s.Name+ext(s))
 		if err := makeOne(ffmpeg, s); err != nil {
 			return fmt.Errorf("%s: %w", s.Name, err)
