@@ -35,9 +35,6 @@ import (
 // tamaño lleve más de diez segundos quieto, un archivo que no se puede abrir
 // para leer no se anuncia, y el reloj de quietud vuelve a empezar.
 func TestF1_01_ArchivoConBloqueoNoSeAnuncia(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("como root todo archivo se abre: este caso no se puede montar")
-	}
 	dir := t.TempDir()
 	reloj := time.Date(2026, 9, 9, 8, 0, 0, 0, time.UTC)
 	w, err := NewWatcher(WatcherOptions{Dir: dir, StableFor: 10 * time.Second, Now: func() time.Time { return reloj }})
@@ -50,12 +47,11 @@ func TestF1_01_ArchivoConBloqueoNoSeAnuncia(t *testing.T) {
 	if err := os.WriteFile(destino, make([]byte, 4096), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// Alguien lo tiene agarrado: en Windows es el programa que copia; aquí se
-	// simula quitándole el permiso de lectura.
-	if err := os.Chmod(destino, 0o000); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(destino, 0o644) })
+	// Alguien lo tiene agarrado: en Windows, abierto sin compartir, como lo
+	// tiene el programa que copia; en Unix, sin permiso de lectura
+	// (bloqueo_windows_test.go / bloqueo_otros_test.go).
+	soltar := bloquear(t, destino)
+	t.Cleanup(soltar)
 
 	sinEventos := func(cuando string) {
 		t.Helper()
@@ -79,9 +75,7 @@ func TestF1_01_ArchivoConBloqueoNoSeAnuncia(t *testing.T) {
 
 	// Se suelta el bloqueo: el reloj de quietud se contó desde el último
 	// intento fallido, así que todavía no toca.
-	if err := os.Chmod(destino, 0o644); err != nil {
-		t.Fatal(err)
-	}
+	soltar()
 	reloj = reloj.Add(3 * time.Second)
 	if err := w.Poll(ctx); err != nil {
 		t.Fatal(err)
@@ -370,13 +364,33 @@ func cuadrosClave(t *testing.T, ffprobe, path string) []int {
 	if err != nil {
 		t.Fatalf("ffprobe -show_entries frame: %v", err)
 	}
+	// Una línea por cuadro: «1» o «0», a veces con coma al final y, en
+	// Windows, con retorno de carro. Cualquier otra línea (datos de al lado
+	// que algún ffprobe intercala) no es un cuadro y no cuenta.
 	var claves []int
-	for i, l := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		if strings.TrimSpace(strings.TrimSuffix(l, ",")) == "1" {
-			claves = append(claves, i)
+	cuadro := 0
+	for _, l := range strings.Split(string(out), "\n") {
+		l = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(l), ","))
+		switch l {
+		case "1":
+			claves = append(claves, cuadro)
+			cuadro++
+		case "0":
+			cuadro++
 		}
 	}
+	if len(claves) == 0 || claves[0] != 0 {
+		t.Logf("salida cruda de ffprobe (primeras líneas): %q", primeras(string(out), 5))
+	}
 	return claves
+}
+
+func primeras(s string, n int) []string {
+	ls := strings.Split(s, "\n")
+	if len(ls) > n {
+		ls = ls[:n]
+	}
+	return ls
 }
 
 // TestF1_07_SeNormalizaUnaSolaVez: la cola normaliza cada archivo una vez y
