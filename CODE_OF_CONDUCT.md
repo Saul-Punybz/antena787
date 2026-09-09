@@ -65,7 +65,7 @@ personas designadas en eventos en línea o presenciales.
 
 Los casos de comportamiento abusivo, acosador o inaceptable de otro modo
 podrán ser reportados a los administradores de la comunidad responsables del
-cumplimiento a través de **[correo por definir]**. Todas las quejas serán
+cumplimiento a través de **saul9saga@gmail.com**. Todas las quejas serán
 evaluadas e investigadas de una manera puntual y justa.
 
 Todos los administradores de la comunidad están obligados a respetar la

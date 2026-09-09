@@ -10,7 +10,7 @@ falla antes de que se haga pública.
 **No abras un issue público** para algo que pueda sacar a un canal del aire o
 exponer datos de una estación. Un issue es visible desde el segundo cero.
 
-Si no puedes usar Security Advisories, escribe a **[correo por definir]** y
+Si no puedes usar Security Advisories, escribe a **saul9saga@gmail.com** y
 di en el asunto que es un reporte de seguridad.
 
 ### Qué ayuda que traiga el reporte
