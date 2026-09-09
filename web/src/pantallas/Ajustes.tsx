@@ -1,0 +1,357 @@
+import { useEffect, useState } from 'react'
+import { api } from '../lib/api'
+import { useEstado } from '../lib/estado'
+import { haceCuanto } from '../lib/fechas'
+import { IconoEquis, IconoOk } from '../componentes/Iconos'
+import type { Ajustes as MapaDeAjustes } from '../lib/tipos'
+
+/**
+ * Ajustes son las buenas prácticas vigiladas para siempre, no aplicadas una
+ * vez. Muestra siempre tres números que no se ven en ningún otro lado: la
+ * deriva del reloj, qué aceleración quedó elegida y con qué resultado, y el
+ * umbral de silencio vigente (PRD §13).
+ *
+ * El volumen se enseña como "volumen de televisión de EE. UU.": la sigla del
+ * estándar nunca sale a pantalla (PRD §4.3).
+ */
+export function Ajustes() {
+  const { estado } = useEstado()
+  const [ajustes, setAjustes] = useState<MapaDeAjustes | null>(null)
+  const [guardado, setGuardado] = useState('')
+
+  useEffect(() => {
+    api.ajustes().then(setAjustes).catch(() => setAjustes(null))
+  }, [])
+
+  async function cambiar(clave: string, valor: string) {
+    if (!ajustes) return
+    const nuevo = { ...ajustes, [clave]: valor }
+    setAjustes(nuevo)
+    await api.guardarAjustes(nuevo).catch(() => {})
+    setGuardado('Guardado')
+    window.setTimeout(() => setGuardado(''), 1600)
+  }
+
+  if (!ajustes) return <p className="cargando">Leyendo los ajustes…</p>
+
+  const salud = [
+    {
+      ok: ajustes.antivirus_exclusiones === 'sí',
+      titulo: 'Exclusiones de antivirus',
+      detalle: 'Carpetas de video y la base de datos, fuera del escaneo',
+    },
+    {
+      ok: ajustes.energia_plan === 'sí',
+      titulo: 'Plan de energía',
+      detalle: 'Sin suspensión, sin apagado de disco',
+    },
+    {
+      ok: ajustes.arranque_tras_corte === 'sí',
+      titulo: 'Arranque tras corte de luz',
+      detalle: 'Habilitado en el BIOS',
+    },
+    {
+      ok: ajustes.rutas_largas === 'sí',
+      titulo: 'Rutas largas',
+      detalle: 'Nombres de más de 260 caracteres permitidos',
+    },
+    {
+      ok: ajustes.actualizaciones_windows === 'sí',
+      titulo: 'Actualizaciones del sistema',
+      detalle:
+        ajustes.actualizaciones_windows === 'sí'
+          ? 'No reinician la máquina sin avisar'
+          : 'Están en automático — pueden reiniciar la máquina al aire',
+    },
+  ]
+  const porArreglar = salud.filter((s) => !s.ok).length
+  const ahora = Date.parse(estado?.ahora ?? new Date().toISOString())
+
+  return (
+    <>
+      <div className="encabezado">
+        <div>
+          <h1 className="titulo-pantalla">Ajustes</h1>
+          <p className="subtitulo">
+            Antena787 v{ajustes.version} · {ajustes.sistema_operativo} · al aire hace{' '}
+            {ajustes.dias_al_aire} días sin interrupciones
+          </p>
+        </div>
+        <div className="fila" style={{ gap: 12 }}>
+          {guardado && <span className="verde" style={{ fontSize: 13 }}>{guardado}</span>}
+          <span
+            className={'franja-modo ' + (porArreglar ? 'franja-modo--sombra' : 'franja-modo--aire')}
+            style={porArreglar ? { borderColor: 'rgba(248,81,73,.45)', color: 'var(--rojo)', background: 'rgba(248,81,73,.1)' } : undefined}
+          >
+            <span className={'punto ' + (porArreglar ? 'punto--problema' : 'punto--bien')} />
+            {porArreglar
+              ? `${porArreglar} cosa${porArreglar === 1 ? '' : 's'} que arreglar`
+              : 'todo en orden'}
+          </span>
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+          gap: 16,
+          alignItems: 'start',
+        }}
+      >
+        {/* Salud de la máquina */}
+        <Tarjeta
+          rotulo="SALUD DE LA MÁQUINA"
+          ancha
+          problema={porArreglar > 0}
+        >
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+              gap: '16px 24px',
+            }}
+          >
+            {salud.map((s) => (
+              <div key={s.titulo} className="fila" style={{ alignItems: 'flex-start', gap: 11 }}>
+                {s.ok ? (
+                  <IconoOk tamano={16} color="var(--verde)" />
+                ) : (
+                  <IconoEquis tamano={16} color="var(--rojo)" />
+                )}
+                <div>
+                  <div style={{ font: '500 14px var(--sans)' }}>{s.titulo}</div>
+                  <div className="tenue" style={{ fontSize: 12.5, marginTop: 2 }}>
+                    {s.detalle}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          {porArreglar > 0 && (
+            <button
+              className="boton"
+              style={{ marginTop: 18 }}
+              onClick={() => cambiar('actualizaciones_windows', 'sí')}
+            >
+              Arreglar las actualizaciones del sistema
+            </button>
+          )}
+        </Tarjeta>
+
+        {/* Respaldo */}
+        <Tarjeta rotulo="RESPALDO">
+          <Linea nombre="Último" valor={haceCuanto(ajustes.respaldo_ultimo, ahora)} verde />
+          <Linea nombre="Cada" valor={ajustes.respaldo_cada} />
+          <Linea nombre="Copias guardadas" valor={ajustes.respaldo_copias} />
+          <Linea nombre="Tamaño" valor={ajustes.respaldo_tamano} />
+          <button className="boton" style={{ marginTop: 16 }}>
+            Bajar una copia
+          </button>
+        </Tarjeta>
+
+        {/* Actualizaciones */}
+        <Tarjeta rotulo="ACTUALIZACIONES">
+          <Linea nombre="Versión" valor={ajustes.version} />
+          <Linea nombre="Hay disponible" valor={ajustes.actualizaciones_disponible} ambar />
+          <Linea nombre="Instalar sola" valor={ajustes.actualizaciones_instalar_sola} verde />
+          <p className="ayuda" style={{ marginTop: 12 }}>
+            Un canal al aire no se actualiza solo. Tú escoges cuándo, con la caja de
+            respaldo lista.
+          </p>
+          <button className="boton" style={{ marginTop: 12 }}>
+            Ver qué cambia
+          </button>
+        </Tarjeta>
+
+        {/* Cumplimiento */}
+        <Tarjeta rotulo="CUMPLIMIENTO" ancha>
+          <Linea nombre="País" valor={ajustes.pais} />
+          <Linea nombre="Perfil" valor={ajustes.perfil} />
+          <Linea nombre="Volumen" valor={ajustes.volumen} verde />
+          <Linea nombre="Subtítulos" valor={ajustes.subtitulos} verde />
+          <Linea nombre="Equipo de alertas" valor={ajustes.equipo_de_alertas} verde />
+        </Tarjeta>
+
+        {/* Acceso remoto */}
+        <Tarjeta rotulo="ACCESO REMOTO">
+          <Linea nombre="Tailscale" valor={ajustes.tailscale} verde />
+          <Linea nombre="Dirección" valor={ajustes.tailscale_direccion} />
+          <Linea nombre="Puertos abiertos" valor={ajustes.puertos_abiertos} verde />
+          <p className="ayuda" style={{ marginTop: 12 }}>
+            Se entra desde el celular sin abrir nada al internet.
+          </p>
+        </Tarjeta>
+
+        {/* Hora */}
+        <Tarjeta rotulo="HORA">
+          <Linea nombre="Sincronizada con" valor={ajustes.hora_servidor} aqua />
+          <Linea nombre="Desvío" valor={`${ajustes.hora_desvio_s} s`} verde />
+          <p className="ayuda" style={{ marginTop: 12 }}>
+            Avisa si pasa de {ajustes.hora_aviso_si_pasa_de_s} s.
+          </p>
+        </Tarjeta>
+
+        {/* Canal */}
+        <Tarjeta rotulo="CANAL">
+          <Linea nombre="Nombre" valor={estado?.canal.nombre ?? '—'} />
+          <Linea nombre="Identificativo" valor={estado?.canal.identificativo ?? '—'} />
+          <Linea nombre="Comunidad de licencia" valor={estado?.canal.comunidad_licencia ?? '—'} />
+          <Linea nombre="Zona horaria" valor={estado?.canal.zona_horaria ?? '—'} />
+          <Linea
+            nombre="El día de emisión empieza"
+            valor={`${String(Math.floor((estado?.canal.hora_inicio_dia_emision ?? 360) / 60)).padStart(2, '0')}:${String((estado?.canal.hora_inicio_dia_emision ?? 360) % 60).padStart(2, '0')}`}
+          />
+        </Tarjeta>
+
+        {/* Aceleración */}
+        <Tarjeta rotulo="ACELERACIÓN DE VIDEO">
+          <Linea nombre="Tarjeta" valor={ajustes.aceleracion_tarjeta} />
+          <Linea nombre="Probada" valor={ajustes.aceleracion_probada} verde />
+          <Linea nombre="Resultado" valor={ajustes.aceleracion_resultado} verde />
+          <p className="ayuda" style={{ marginTop: 12 }}>
+            Se prueba sola cada vez que arranca.
+          </p>
+        </Tarjeta>
+
+        {/* Detector de silencio */}
+        <Tarjeta rotulo="DETECTOR DE SILENCIO">
+          <div className="entre">
+            <div>
+              <div style={{ font: '500 14.5px var(--sans)' }}>Avisa y devuelve el control</div>
+              <div className="tenue" style={{ fontSize: 12.5, marginTop: 3 }}>
+                Si no sale señal más de {ajustes.silencio_umbral_s} s
+              </div>
+            </div>
+            <button
+              className="interruptor"
+              role="switch"
+              aria-checked={ajustes.silencio_avisa === 'sí'}
+              onClick={() =>
+                cambiar('silencio_avisa', ajustes.silencio_avisa === 'sí' ? 'no' : 'sí')
+              }
+            />
+          </div>
+          <div className="entre" style={{ marginTop: 20 }}>
+            <label htmlFor="umbral" style={{ font: '400 14px var(--sans)' }}>
+              Umbral
+            </label>
+            <span className="fila" style={{ gap: 7 }}>
+              <input
+                id="umbral"
+                type="number"
+                min={3}
+                max={120}
+                value={ajustes.silencio_umbral_s}
+                onChange={(e) => cambiar('silencio_umbral_s', e.target.value)}
+                className="mono"
+                style={{
+                  width: 62,
+                  background: 'var(--superficie-2)',
+                  border: '1px solid var(--borde)',
+                  borderRadius: 7,
+                  color: 'var(--texto)',
+                  padding: '7px 9px',
+                  textAlign: 'right',
+                }}
+              />
+              <span className="tenue" style={{ fontSize: 12 }}>
+                s
+              </span>
+            </span>
+          </div>
+        </Tarjeta>
+
+        {/* Asistente de IA */}
+        <Tarjeta rotulo="ASISTENTE DE IA" ancha>
+          <div className="entre">
+            <div>
+              <div style={{ font: '500 14.5px var(--sans)' }}>Conectar un asistente</div>
+              <div className="tenue" style={{ fontSize: 12.5, marginTop: 3 }}>
+                Apagado. Antena787 funciona completa sin esto.
+              </div>
+            </div>
+            <button
+              className="interruptor"
+              role="switch"
+              aria-checked={ajustes.asistente_ia === 'encendido'}
+              onClick={() =>
+                cambiar(
+                  'asistente_ia',
+                  ajustes.asistente_ia === 'encendido' ? 'apagado' : 'encendido',
+                )
+              }
+            />
+          </div>
+          <p className="ayuda" style={{ marginTop: 14 }}>
+            Si lo enciendes, el asistente puede leer y proponer cambios — nunca poner algo
+            al aire ni facturar.
+          </p>
+        </Tarjeta>
+      </div>
+    </>
+  )
+}
+
+function Tarjeta({
+  rotulo,
+  children,
+  ancha,
+  problema,
+}: {
+  rotulo: string
+  children: React.ReactNode
+  ancha?: boolean
+  problema?: boolean
+}) {
+  return (
+    <section
+      className="tarjeta"
+      style={{
+        padding: '18px 22px 22px',
+        gridColumn: ancha ? 'span 2' : undefined,
+        borderColor: problema ? 'rgba(248,81,73,.5)' : 'var(--borde)',
+      }}
+    >
+      <div className="rotulo" style={{ marginBottom: 16 }}>
+        {rotulo}
+      </div>
+      {children}
+    </section>
+  )
+}
+
+function Linea({
+  nombre,
+  valor,
+  verde,
+  ambar,
+  aqua,
+}: {
+  nombre: string
+  valor: string
+  verde?: boolean
+  ambar?: boolean
+  aqua?: boolean
+}) {
+  return (
+    <div className="entre" style={{ padding: '7px 0', fontSize: 14 }}>
+      <span className="apagado">{nombre}</span>
+      <span
+        style={{
+          fontWeight: 500,
+          textAlign: 'right',
+          color: verde
+            ? 'var(--verde)'
+            : ambar
+              ? 'var(--ambar)'
+              : aqua
+                ? 'var(--aqua)'
+                : 'var(--texto)',
+        }}
+      >
+        {valor}
+      </span>
+    </div>
+  )
+}

@@ -1,0 +1,629 @@
+/* Antena787 — la paleta y las piezas del diseño (diseno/*.dc.html).
+   Sin framework de UI: variables de CSS y clases propias. */
+
+:root {
+  --fondo: #0e1116;
+  --fondo-lateral: #0b0e12;
+  --superficie: #161b22;
+  --superficie-2: #1a1f27;
+  --borde: #21262d;
+  --texto: #e6edf3;
+  --texto-2: #8b949e;
+  --texto-3: #6e7681;
+  --texto-4: #3d444d;
+  --aqua: #22d3ee;
+  --aqua-claro: #67e8f9;
+  --verde: #3fb950;
+  --ambar: #d29922;
+  --rojo: #f85149;
+  --gris: #6e7681;
+  --tally: #ff3b30;
+  --sans: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+  --rayado-rojo: repeating-linear-gradient(
+    45deg,
+    rgba(248, 81, 73, 0.5),
+    rgba(248, 81, 73, 0.5) 4px,
+    rgba(248, 81, 73, 0.16) 4px,
+    rgba(248, 81, 73, 0.16) 8px
+  );
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#raiz {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--fondo);
+  color: var(--texto);
+  font-family: var(--sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--aqua);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--aqua-claro);
+}
+
+button {
+  font-family: inherit;
+}
+
+.mono {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes tally {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* ── el armazón ─────────────────────────────────────────────────── */
+
+.app {
+  display: flex;
+  min-height: 100vh;
+  background: var(--fondo);
+}
+
+/* El modo se ve como color de fondo y texto, nunca como un icono solo
+   (docs/adr/0008-never-interrupt-air.md). */
+.app[data-modo='sombra'] {
+  background:
+    linear-gradient(180deg, rgba(210, 153, 34, 0.07), rgba(210, 153, 34, 0) 220px),
+    var(--fondo);
+}
+
+.lateral {
+  width: 224px;
+  flex-shrink: 0;
+  background: var(--fondo-lateral);
+  border-right: 1px solid var(--borde);
+  display: flex;
+  flex-direction: column;
+  padding: 22px 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+
+.lateral__marca {
+  padding: 0 20px 26px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font: 600 17px var(--sans);
+  letter-spacing: -0.3px;
+}
+.lateral__marca span span {
+  color: var(--aqua);
+}
+
+.lateral__menu {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 0 12px;
+  flex-grow: 1;
+}
+
+.lateral__enlace {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-radius: 8px;
+  font: 400 14.5px var(--sans);
+  color: var(--texto-2);
+}
+.lateral__enlace:hover {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--texto);
+}
+.lateral__enlace--activo {
+  background: var(--superficie);
+  color: var(--texto);
+  font-weight: 600;
+}
+.lateral__enlace--activo::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--aqua);
+}
+
+.lateral__pie {
+  padding: 16px 20px 0;
+  border-top: 1px solid var(--borde);
+  margin: 0 12px;
+}
+.lateral__pie dt {
+  font: 500 12px var(--sans);
+  color: var(--texto-3);
+  letter-spacing: 0.4px;
+}
+.lateral__pie dd {
+  margin: 5px 0 0;
+  font: 500 14px var(--sans);
+  color: var(--texto-2);
+}
+
+.contenido {
+  flex-grow: 1;
+  min-width: 0;
+  padding: 26px 32px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.encabezado {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.titulo-pantalla {
+  font: 700 24px var(--sans);
+  letter-spacing: -0.4px;
+  margin: 0;
+}
+.subtitulo {
+  font: 400 13.5px var(--sans);
+  color: var(--texto-2);
+  margin: 3px 0 0;
+}
+
+/* El punto de tally: siempre en el mismo sitio del encabezado. */
+.tally {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--tally);
+  flex-shrink: 0;
+  animation: tally 1.6s ease-in-out infinite;
+}
+.tally--apagado {
+  background: var(--texto-4);
+  animation: none;
+}
+
+.rotulo-aire {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  font: 700 19px var(--sans);
+  letter-spacing: 2.2px;
+}
+
+.reloj {
+  font: 400 14px var(--mono);
+  color: var(--texto-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* La franja de modo: color de fondo + texto, nunca un icono solo. */
+.franja-modo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px;
+  border-radius: 8px;
+  font: 500 13px var(--sans);
+}
+.franja-modo--sombra {
+  background: rgba(210, 153, 34, 0.13);
+  border: 1px solid rgba(210, 153, 34, 0.4);
+  color: #f0c674;
+}
+.franja-modo--aire {
+  background: rgba(63, 185, 80, 0.12);
+  border: 1px solid rgba(63, 185, 80, 0.35);
+  color: var(--verde);
+}
+.franja-modo--demo {
+  background: rgba(34, 211, 238, 0.1);
+  border: 1px solid rgba(34, 211, 238, 0.35);
+  color: var(--aqua);
+}
+
+/* ── piezas ─────────────────────────────────────────────────────── */
+
+.tarjeta {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+}
+.tarjeta--aviso {
+  border-left: 3px solid var(--ambar);
+}
+.tarjeta--problema {
+  border-left: 3px solid var(--rojo);
+}
+
+.rotulo {
+  font: 600 11px var(--sans);
+  letter-spacing: 1.4px;
+  color: var(--texto-3);
+  text-transform: uppercase;
+}
+
+.boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  color: var(--texto);
+  border-radius: 8px;
+  padding: 10px 18px;
+  font: 500 14px var(--sans);
+  cursor: pointer;
+}
+.boton:hover:not(:disabled) {
+  border-color: var(--texto-3);
+}
+.boton--primario {
+  background: var(--aqua);
+  border-color: var(--aqua);
+  color: #06141a;
+  font-weight: 600;
+}
+.boton--primario:hover:not(:disabled) {
+  background: var(--aqua-claro);
+  border-color: var(--aqua-claro);
+}
+.boton--peligro {
+  color: var(--rojo);
+  border-color: rgba(248, 81, 73, 0.4);
+}
+.boton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pastillas {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.pastilla {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  color: var(--texto-2);
+  border-radius: 7px;
+  padding: 7px 15px;
+  font: 500 13px var(--sans);
+  cursor: pointer;
+}
+.pastilla--activa {
+  border-color: var(--aqua);
+  color: var(--texto);
+}
+.pastilla--roja {
+  border-color: rgba(248, 81, 73, 0.45);
+  color: var(--rojo);
+}
+
+.punto {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--texto-3);
+}
+.punto--bien {
+  background: var(--verde);
+}
+.punto--aviso {
+  background: var(--ambar);
+}
+.punto--problema {
+  background: var(--rojo);
+}
+
+.verde {
+  color: var(--verde);
+}
+.ambar {
+  color: var(--ambar);
+}
+.rojo {
+  color: var(--rojo);
+}
+.aqua {
+  color: var(--aqua);
+}
+.apagado {
+  color: var(--texto-2);
+}
+.tenue {
+  color: var(--texto-3);
+}
+
+/* Pills del patrón de días */
+.dias {
+  display: flex;
+  gap: 3px;
+}
+.dias__dia {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 21px;
+  height: 21px;
+  border-radius: 5px;
+  font: 600 11px var(--sans);
+  background: var(--superficie-2);
+  color: var(--texto-4);
+  border: 0;
+  padding: 0;
+}
+.dias__dia--encendido {
+  background: rgba(34, 211, 238, 0.16);
+  color: var(--aqua);
+}
+button.dias__dia {
+  cursor: pointer;
+}
+
+.etiqueta {
+  display: inline-block;
+  border-radius: 5px;
+  padding: 4px 9px;
+  font: 600 10.5px var(--sans);
+  letter-spacing: 0.6px;
+}
+.etiqueta--renovar {
+  background: rgba(248, 81, 73, 0.16);
+  color: var(--rojo);
+}
+.etiqueta--vivo {
+  background: rgba(34, 211, 238, 0.14);
+  color: var(--aqua);
+}
+.etiqueta--nota {
+  background: var(--superficie-2);
+  color: var(--texto-2);
+  font-weight: 500;
+  letter-spacing: 0;
+  font-size: 11.5px;
+}
+
+/* La carátula: un degradado con las iniciales, como los mockups. */
+.caratula {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: linear-gradient(145deg, #2b3346, #151a22);
+}
+.caratula span {
+  font: 700 24px var(--sans);
+  color: rgba(255, 255, 255, 0.13);
+}
+
+/* ── panel lateral (nunca un modal encima del aire) ─────────────── */
+
+.panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(460px, 100vw);
+  background: var(--fondo-lateral);
+  border-left: 1px solid var(--borde);
+  box-shadow: -18px 0 48px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  z-index: 40;
+  animation: entra-panel 0.16s ease-out;
+}
+@keyframes entra-panel {
+  from {
+    transform: translateX(28px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+.panel__cabeza {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid var(--borde);
+}
+.panel__cuerpo {
+  padding: 20px 22px;
+  overflow-y: auto;
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.panel__pie {
+  padding: 16px 22px;
+  border-top: 1px solid var(--borde);
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+.panel__cerrar {
+  background: none;
+  border: 0;
+  color: var(--texto-3);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+.panel__cerrar:hover {
+  color: var(--texto);
+}
+
+/* ── formularios ───────────────────────────────────────────────── */
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.campo > label {
+  font: 500 13px var(--sans);
+  color: var(--texto-2);
+}
+.campo input[type='text'],
+.campo input[type='time'],
+.campo input[type='date'],
+.campo input[type='number'],
+.campo input[type='password'],
+.campo select,
+.campo textarea {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  color: var(--texto);
+  padding: 10px 12px;
+  font: 400 14px var(--sans);
+  width: 100%;
+}
+.campo textarea {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  min-height: 180px;
+  resize: vertical;
+}
+.campo input:focus,
+.campo select:focus,
+.campo textarea:focus {
+  outline: none;
+  border-color: var(--aqua);
+}
+.campo .ayuda {
+  font: 400 12.5px var(--sans);
+  color: var(--texto-3);
+}
+.error-en-cristiano {
+  background: rgba(248, 81, 73, 0.1);
+  border: 1px solid rgba(248, 81, 73, 0.35);
+  border-radius: 8px;
+  padding: 11px 14px;
+  color: #ffb3ae;
+  font: 400 13px var(--sans);
+}
+
+.interruptor {
+  width: 44px;
+  height: 25px;
+  border-radius: 13px;
+  background: var(--superficie-2);
+  border: 1px solid var(--borde);
+  position: relative;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+.interruptor::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: var(--texto-3);
+  transition: 0.15s;
+}
+.interruptor[aria-checked='true'] {
+  background: var(--aqua);
+  border-color: var(--aqua);
+}
+.interruptor[aria-checked='true']::after {
+  left: 21px;
+  background: #06141a;
+}
+
+/* ── pantalla de entrar ────────────────────────────────────────── */
+
+.entrar {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.entrar__caja {
+  width: 100%;
+  max-width: 380px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 14px;
+  padding: 32px 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.entrar__clave {
+  font-family: var(--mono);
+  font-size: 28px;
+  letter-spacing: 14px;
+  text-align: center;
+  padding: 14px 12px !important;
+}
+
+/* ── utilidades ─────────────────────────────────────────────────── */
+
+.fila {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.entre {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.columna {
+  display: flex;
+  flex-direction: column;
+}
+.crece {
+  flex-grow: 1;
+}
+.cargando {
+  color: var(--texto-3);
+  font-size: 13.5px;
+  padding: 20px 0;
+}
