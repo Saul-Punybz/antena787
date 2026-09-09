@@ -1937,6 +1937,14 @@ Rolando o una máquina equivalente**, no en la laptop del desarrollador.
 | CPU y RAM con una salida, y con dos | **medidos**, y reemplazan los estimados del §18 |
 | ¿Cuántas sesiones de encoder de hardware aguanta la máquina? | medido |
 
+**Ocho horas es el criterio en la máquina de destino. En desarrollo bastan
+dos:** el límite de deriva son 20 ms en 8 horas —2.5 ms por hora— y el
+analizador resuelve 1 ms, así que a las 2 horas cualquier deriva real ya se
+ve. La primera corrida larga (Mac M4, 8 de septiembre de 2026, 1 h 55 min,
+413,302 cuadros, 276 cortes) pasó todo lo medible con deriva máxima de
+1 ms: `docs/f0/REPORTE-mac-m4-2026-09-08.md`. La de la PC de CAtv sigue
+pendiente y es la que cierra F0.
+
 **Si falla el desfase o los cuadros perdidos, el diseño del servidor de
 cuadros se replantea antes de la F1.** Cinco días de trabajo en F0 valen más
 que doce semanas construidas sobre un supuesto.
