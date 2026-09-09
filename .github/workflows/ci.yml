@@ -122,10 +122,12 @@ jobs:
       - name: F0 corta
         shell: bash
         run: |
+          # macOS no trae «timeout»: un tope portátil con bash.
+          con_tope() { local s=$1; shift; "$@" & local p=$!; ( sleep "$s"; kill -9 "$p" 2>/dev/null ) & local w=$!; wait "$p"; local rc=$?; kill "$w" 2>/dev/null; return $rc; }
           ffmpeg -version | head -1
-          echo "== f0 media -short =="; timeout -s KILL 600 bin/f0 media -short
-          echo "== f0 run =="; timeout -s KILL 600 bin/f0 run -hours 0.035
-          echo "== f0 analyze =="; timeout -s KILL 600 bin/f0 analyze
+          echo "== f0 media -short =="; con_tope 600 bin/f0 media -short
+          echo "== f0 run =="; con_tope 600 bin/f0 run -hours 0.035
+          echo "== f0 analyze =="; con_tope 600 bin/f0 analyze
           if grep -q 'FALLA' f0/out/REPORTE.md; then
             echo "El reporte de F0 tiene criterios que FALLAN:"; cat f0/out/REPORTE.md; exit 1
           fi
