@@ -101,10 +101,6 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    # Windows: el motor de F0 se cuelga al cerrar decodificadores (issue
-    # #14). Corre igual y deja su diagnóstico, pero no tumba el run hasta
-    # que se arregle; el resto de plataformas sí bloquean.
-    continue-on-error: ${{ matrix.os == 'windows-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
