@@ -89,6 +89,9 @@ jobs:
   plataformas:
     name: F0 corta en ${{ matrix.os }}
     needs: verificar
+    # Si algo se cuelga (pasó en Windows el 9 sept 2026), que falle en
+    # minutos y con diagnóstico, no a las seis horas y sin log.
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -120,12 +123,24 @@ jobs:
         shell: bash
         run: |
           ffmpeg -version | head -1
-          bin/f0 media -short
-          bin/f0 run -hours 0.035
-          bin/f0 analyze
+          echo "== f0 media -short =="; timeout -s KILL 600 bin/f0 media -short
+          echo "== f0 run =="; timeout -s KILL 600 bin/f0 run -hours 0.035
+          echo "== f0 analyze =="; timeout -s KILL 600 bin/f0 analyze
           if grep -q 'FALLA' f0/out/REPORTE.md; then
             echo "El reporte de F0 tiene criterios que FALLAN:"; cat f0/out/REPORTE.md; exit 1
           fi
+
+      # Pase lo que pase, lo último que hizo el motor y qué procesos había:
+      # es lo que hace falta para entender un cuelgue en una plataforma
+      # que no tenemos a mano.
+      - name: diagnóstico
+        if: always()
+        shell: bash
+        run: |
+          echo "== medios =="; ls -la f0/media 2>/dev/null || true
+          echo "== salida =="; ls -la f0/out 2>/dev/null || true
+          echo "== últimos eventos =="; tail -n 15 f0/out/events.jsonl 2>/dev/null || true
+          echo "== últimas estadísticas =="; tail -n 8 f0/out/stats.csv 2>/dev/null || true
 
       - name: reporte
         if: always()
