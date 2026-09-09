@@ -43,14 +43,53 @@ asistente está abierto.
 
 | | |
 |---|---|
-| `GET /biblioteca` | Títulos con carátula, tipo, `episodios` (cuántos), `duracion_ms`, `estado_material` (`listo` / `aún no listo para aire` / `cuarentena`), `en_la_parrilla`, y `hora` / `regla_hasta` de la regla que lo programa. `material` y `duracion` son los mismos dos primeros en texto, y se mantienen por compatibilidad. |
-| `GET /biblioteca/{id}` · `PUT /biblioteca/{id}` | Ficha del título: los mismos campos de la lista más `lista_de_episodios[]`, cada episodio con su `duracion_ms` y su `estado_material`. `PUT` edita nombre, sinopsis, tipo, carátula. |
+| `GET /biblioteca` | Títulos con carátula, tipo, `episodios` (cuántos), `duracion_ms`, `estado_material` (`listo` / `aún no listo para aire` / `cuarentena`), `en_la_parrilla`, y `hora` / `regla_hasta` de la regla que lo programa. `material` y `duracion` son los mismos dos primeros en texto, y se mantienen por compatibilidad. Si el título tiene archivo propio, lleva además el sonido de ese archivo (ver abajo). |
+| `GET /biblioteca/{id}` · `PUT /biblioteca/{id}` | Ficha del título: los mismos campos de la lista más `lista_de_episodios[]`, cada episodio con su `duracion_ms`, su `estado_material` y el sonido de su archivo. `PUT` edita nombre, sinopsis, tipo, carátula. |
 | `GET /material` · `GET /material/{id}` | `media_asset` con medidas. |
-| `PUT /material/{id}` | `negro_intencional`, `sin_logo`, `subtitulos_externos`, `marcas_de_corte_ms` (confirmar marcas candidatas). |
-| `GET /cuarentena` | Los assets en cuarentena con `motivo_en_cristiano`. |
-| `POST /cuarentena/{id}/dejar-pasar` | `{"quien":"Rolando"}` → estado `listo`, `dejado_pasar_por`, entrada en `audit_log`. |
+| `PUT /material/{id}` | `negro_intencional`, `sin_logo`, `subtitulos_externos`, `marcas_de_corte_ms` (confirmar marcas candidatas) y `pista_audio_aire` (ver abajo). |
+| `GET /cuarentena` | Los assets en cuarentena con `motivo_en_cristiano` y `motivo_codigo`. |
+| `POST /cuarentena/{id}/dejar-pasar` | `{"quien":"Rolando"}` → estado `listo`, `dejado_pasar_por`, entrada en `audit_log`. `409` si el archivo no trae sonido (ver abajo). |
 | `POST /material/subir` | multipart; cae en la carpeta vigilada. |
 | `GET /relleno` | La biblioteca de relleno; vacía → aviso. |
+
+### El sonido del material (F1-58 a F1-63)
+
+Todo lo que sale al aire lleva audio. Cada título con archivo propio y cada
+entrada de `lista_de_episodios[]` llevan estos cinco campos, todos
+**opcionales**: no salen cuando el título no tiene archivo, y las rutas de al
+lado no salen cuando no hubo ninguna.
+
+| Campo | Qué es |
+|---|---|
+| `material_id` | El número del archivo (`media_asset`), que es el que se le pasa a `PUT /material/{id}`. |
+| `pistas_audio` | Las pistas de sonido que trae el archivo: `[{"indice":0,"idioma":"en","canales":2,"titulo":"Original en inglés"}]`. `indice` empieza en cero y es el que entiende quien arma la copia de casa. `idioma` viene del propio archivo, ya unificado (`spa` y `esp` salen como `es`); vacío si el archivo no lo dice. |
+| `pista_audio_aire` | El `indice` de la que sale al aire. De fábrica, la primera en el idioma de `idioma_audio_preferido`; si el archivo no trae ninguna en ese idioma, la primera que trae. |
+| `audio_sidecar` | Ruta del archivo de sonido que estaba al lado del video y se metió en la copia de casa. Vacío cuando el video ya traía su sonido. |
+| `subtitulos_sidecar` | Ruta del archivo de subtítulos que estaba al lado. Los `.srt` y `.vtt` entran en la copia de casa; los `.scc` se guardan tal cual. |
+
+`PUT /material/{id}` con `{"pista_audio_aire": 1}` cambia la pista que se va a
+oír. Devuelve `200` con el archivo entero más `material_id` y
+`estado_material`: al cambiar la pista, la copia de casa hay que rehacerla, así
+que el archivo vuelve a la cola de normalización y su `estado_material` pasa a
+`"aún no listo para aire"` hasta que esté. Errores: `400` con
+`{"error":"ese archivo no tiene esa pista de sonido: escoge una de las que
+trae","campo":"pista_audio_aire"}` si el índice no existe —no se cambia nada—
+y `404` si el archivo no está. El cambio queda en `audit_log`. El cuerpo
+admite a la vez los demás campos de `PUT /material/{id}`.
+
+`GET /cuarentena` añade `motivo_codigo` a cada archivo parado: hoy
+`"sin_audio"` cuando el archivo no trae sonido, y `""` en todo lo demás. La
+base guarda el motivo escrito para una persona y no el código, así que el
+código se deduce de ese texto (`ingest.TextoSinAudio`); cuando haya más de un
+código valdrá la pena guardarlo en su propia columna.
+
+Un archivo con `motivo_codigo` `"sin_audio"` **no** se puede dejar pasar:
+`POST /cuarentena/{id}/dejar-pasar` contesta `409` con
+`{"error":"Este archivo no trae sonido y todo lo que sale al aire lleva audio:
+pon a su lado un archivo de audio con el mismo nombre y se procesa solo."}`.
+Ese es el camino: se deja el `.wav` (o `.m4a`, `.aac`, `.mp3`, `.flac`) con el
+mismo nombre en la carpeta vigilada y el archivo se vuelve a procesar solo,
+sobre la misma ficha, sin que nadie tenga que apretar nada.
 
 ## Importar
 
@@ -84,6 +123,7 @@ Todos viven en `settings` y se leen y escriben por `GET`/`PUT /ajustes`.
 | `guia_destino_http` | Destino opcional al que se le manda la guía por `POST` (`application/xml`, 10 s de espera) cada vez que se publica. Que falle deja alarma y nada más: la guía local y el aire siguen igual (F1-49). |
 | `fichas_en_linea` | `si` / `no` (de fábrica `no`). Enciende la búsqueda de fichas por internet: TVmaze y la portada de los discos, que no piden clave, y TMDB si hay clave. |
 | `clave_tmdb` | La clave de TMDB. Secreto: sale tapado. |
+| `idioma_audio_preferido` | `es` / `en` (de fábrica `es`). Cuando un archivo trae varias pistas de sonido, sale al aire la primera en ese idioma; si no trae ninguna, la primera del archivo (F1-60). Vale para lo que entre a partir de ahí: cambiarlo no vuelve a procesar lo que ya está fichado. |
 | `avisos_canal` | `ninguno` / `telegram` / `correo`. Por dónde sale el aviso de vencimiento de los 7 días (F1-46). |
 | `avisos_telegram_token` · `avisos_telegram_chat` | La clave del bot y el chat al que se escribe. La clave es secreta. |
 | `avisos_correo_para` · `avisos_smtp_servidor` · `avisos_smtp_usuario` · `avisos_smtp_clave` | A quién se le escribe y por qué servidor (`servidor:puerto`, con cifrado en cuanto el servidor lo ofrezca). La contraseña es secreta. |

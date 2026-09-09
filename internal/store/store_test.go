@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -877,37 +878,50 @@ func TestBaseNuevaYBaseMigradaQuedanIguales(t *testing.T) {
 		t.Fatalf("la base nueva quedó en la versión %d (%v), se esperaba %d", v, err, SchemaVersion())
 	}
 
-	// Una base como la que dejó la versión 1 publicada: solo schema.sql.
-	ruta := filepath.Join(t.TempDir(), "vieja.db")
-	db, err := openDB(ruta)
-	if err != nil {
-		t.Fatalf("no se pudo crear la base vieja: %v", err)
-	}
-	if _, err := db.ExecContext(ctx, schemaSQL); err != nil {
-		t.Fatalf("no se pudo aplicar el esquema de la versión 1: %v", err)
-	}
-	if _, err := db.ExecContext(ctx, "PRAGMA user_version = 1"); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Close(); err != nil {
-		t.Fatal(err)
-	}
+	// Una base parada en cada versión publicada tiene que llegar al mismo
+	// sitio: la 1 (solo schema.sql) y la 2 (schema.sql más migracion2).
+	for _, caso := range []struct {
+		version int
+		pasos   []string
+	}{
+		{1, []string{schemaSQL}},
+		{2, []string{schemaSQL, migracion2}},
+	} {
+		ruta := filepath.Join(t.TempDir(), "vieja.db")
+		db, err := openDB(ruta)
+		if err != nil {
+			t.Fatalf("no se pudo crear la base vieja: %v", err)
+		}
+		for _, paso := range caso.pasos {
+			if _, err := db.ExecContext(ctx, paso); err != nil {
+				t.Fatalf("no se pudo armar una base de la versión %d: %v", caso.version, err)
+			}
+		}
+		if _, err := db.ExecContext(ctx, fmt.Sprintf("PRAGMA user_version = %d", caso.version)); err != nil {
+			t.Fatal(err)
+		}
+		if err := db.Close(); err != nil {
+			t.Fatal(err)
+		}
 
-	vieja, err := Open(ruta)
-	if err != nil {
-		t.Fatalf("la base de la versión 1 no migró: %v", err)
-	}
-	t.Cleanup(func() { _ = vieja.Close() })
+		vieja, err := Open(ruta)
+		if err != nil {
+			t.Fatalf("la base de la versión %d no migró: %v", caso.version, err)
+		}
+		t.Cleanup(func() { _ = vieja.Close() })
 
-	if v, err := vieja.Version(ctx); err != nil || v != SchemaVersion() {
-		t.Fatalf("la base migrada quedó en la versión %d (%v), se esperaba %d", v, err, SchemaVersion())
-	}
-	if a, b := esquemaDe(t, nueva), esquemaDe(t, vieja); a != b {
-		t.Fatalf("una base nueva y una migrada no quedaron iguales\n--- nueva ---\n%s\n--- migrada ---\n%s", a, b)
-	}
-	// Y la migración deja respaldo de la base que ya existía.
-	if LatestBackup(ruta) == "" {
-		t.Fatal("migrar una base que ya existía tiene que dejar un respaldo")
+		if v, err := vieja.Version(ctx); err != nil || v != SchemaVersion() {
+			t.Fatalf("la base de la versión %d quedó en la %d (%v), se esperaba %d",
+				caso.version, v, err, SchemaVersion())
+		}
+		if a, b := esquemaDe(t, nueva), esquemaDe(t, vieja); a != b {
+			t.Fatalf("una base nueva y una migrada desde la versión %d no quedaron iguales\n--- nueva ---\n%s\n--- migrada ---\n%s",
+				caso.version, a, b)
+		}
+		// Y la migración deja respaldo de la base que ya existía.
+		if LatestBackup(ruta) == "" {
+			t.Fatalf("migrar una base de la versión %d tiene que dejar un respaldo", caso.version)
+		}
 	}
 }
 

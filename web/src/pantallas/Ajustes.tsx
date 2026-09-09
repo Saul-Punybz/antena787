@@ -214,6 +214,25 @@ export function Ajustes() {
           </p>
         </Tarjeta>
 
+        {/* Audio */}
+        <Tarjeta rotulo="AUDIO">
+          <div className="campo">
+            <label htmlFor="idioma-audio">Idioma de la pista de audio para el aire</label>
+            <select
+              id="idioma-audio"
+              value={ajustes.idioma_audio_preferido ?? 'es'}
+              onChange={(e) => cambiar('idioma_audio_preferido', e.target.value)}
+            >
+              <option value="es">Español</option>
+              <option value="en">Inglés</option>
+            </select>
+            <span className="ayuda">
+              Cuando un archivo trae varias pistas, se elige la primera en este idioma;
+              si no hay, la primera del archivo.
+            </span>
+          </div>
+        </Tarjeta>
+
         {/* Detector de silencio */}
         <Tarjeta rotulo="DETECTOR DE SILENCIO">
           <div className="entre">

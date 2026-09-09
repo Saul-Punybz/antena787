@@ -76,6 +76,13 @@ const (
 	// pide una. Vacío = no se consulta.
 	KeyTMDBKey = "clave_tmdb"
 
+	// KeyAudioLanguage es el idioma en el que el canal quiere el aire
+	// ("es"/"en", de fábrica "es"): cuando un archivo trae varias pistas de
+	// sonido, sale la primera en ese idioma (F1-60). Cambiarlo vale para lo
+	// que entre a partir de ahí; lo que ya está fichado no se vuelve a
+	// procesar solo.
+	KeyAudioLanguage = "idioma_audio_preferido"
+
 	// Los avisos que salen de la máquina (F1-46). KeyNoticeChannel vale
 	// "ninguno", "telegram" o "correo".
 	KeyNoticeChannel = "avisos_canal"

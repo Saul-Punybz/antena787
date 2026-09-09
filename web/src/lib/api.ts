@@ -10,6 +10,7 @@
 import { responder, suscribirDemo } from '../demo/servidor'
 import type {
   Ajustes,
+  CambioDeMaterial,
   CambioDePlan,
   Canal,
   ElementoDelPlan,
@@ -19,6 +20,7 @@ import type {
   FilaDelPlan,
   Guia,
   Instalacion,
+  MaterialDeAudio,
   MesDelPlan,
   Regla,
   ReglaNueva,
@@ -143,6 +145,14 @@ export const api = {
   }) => pedir<{ regla_creada: number }>('/plan/llenar-con-diferido', conCuerpo('POST', v)),
 
   guia: (dia: string) => pedir<Guia>(`/guia?dia=${dia}`),
+
+  /**
+   * Cambia algo del archivo en sí. Hoy: cuál de sus pistas de sonido sale al
+   * aire. El archivo vuelve a la cola y queda «aún no listo para aire» hasta
+   * que se rehace con esa pista (F1-61).
+   */
+  cambiarMaterial: (id: number, cambio: CambioDeMaterial) =>
+    pedir<MaterialDeAudio>(`/material/${id}`, conCuerpo('PUT', cambio)),
 
   biblioteca: () => pedir<TituloDeBiblioteca[]>('/biblioteca'),
   titulo: (id: number) => pedir<FichaDeTitulo>(`/biblioteca/${id}`),

@@ -24,14 +24,40 @@ const (
 	WatchStableFor = 10 * time.Second
 )
 
+// WatchedExtensions es todo lo que la carpeta vigilada levanta: el material
+// de siempre más los archivos de subtítulos, que no son material pero avisan
+// de que un video puede volver a procesarse (F1-62).
+func WatchedExtensions() []string {
+	out := MediaExtensions()
+	return append(out, SidecarExtensions...)
+}
+
 // TempSuffixes son los archivos a medio hacer que hay que dejar en paz.
 var TempSuffixes = []string{".part", ".partial", ".crdownload", ".tmp", ".temp", ".filepart", "~", ".!ut", ".downloading"}
 
+// Los dos tipos de aviso de la carpeta vigilada. EventMedia es lo de
+// siempre: un archivo de material que se ingiere por su cuenta. EventSidecar
+// es un archivo que acompaña a un video —el sonido de un video mudo, o unos
+// subtítulos— y que NUNCA se ingiere solo: lo que hay que volver a procesar
+// es el video, y para eso está Found.For (F1-58, F1-62).
+const (
+	EventMedia   = "material"
+	EventSidecar = "al_lado"
+)
+
 // Found es un archivo que terminó de copiarse y está listo para el ingest.
+//
+// Kind dice de qué aviso se trata. En EventSidecar, For lleva la ruta del
+// video al que acompaña: quien recibe el aviso vuelve a correr el ingest de
+// ESE video (ingest.ReingestSidecar hace justo eso), y así un video que
+// quedó en cuarentena por mudo sale de cuarentena en cuanto llega su audio.
+// El archivo de al lado no se guarda como material aparte.
 type Found struct {
 	Path      string
 	SizeBytes int64
 	At        time.Time
+	Kind      string // EventMedia o EventSidecar
+	For       string // solo en EventSidecar: el video al que acompaña
 }
 
 // WatcherOptions configura la carpeta vigilada.
@@ -39,7 +65,7 @@ type WatcherOptions struct {
 	Dir        string        // carpeta a vigilar
 	Interval   time.Duration // 0 = WatchInterval
 	StableFor  time.Duration // 0 = WatchStableFor
-	Extensions []string      // nil = MediaExtensions()
+	Extensions []string      // nil = WatchedExtensions()
 	Recursive  bool          // mirar también las subcarpetas
 	Now        func() time.Time
 }
@@ -76,7 +102,7 @@ func NewWatcher(opts WatcherOptions) (*Watcher, error) {
 		opts.StableFor = WatchStableFor
 	}
 	if len(opts.Extensions) == 0 {
-		opts.Extensions = MediaExtensions()
+		opts.Extensions = WatchedExtensions()
 	}
 	if opts.Now == nil {
 		opts.Now = time.Now
@@ -138,9 +164,16 @@ func (w *Watcher) Poll(ctx context.Context) error {
 			e.since = now
 			return
 		}
+		kind, para := classify(path)
+		if kind == "" {
+			// Unos subtítulos que todavía no acompañan a nada: no son
+			// material y no se anuncian. Si más tarde llega el video, la
+			// siguiente pasada sí los anuncia.
+			return
+		}
 		e.emitted = true
 		select {
-		case w.events <- Found{Path: path, SizeBytes: info.Size(), At: now}:
+		case w.events <- Found{Path: path, SizeBytes: info.Size(), At: now, Kind: kind, For: para}:
 		case <-ctx.Done():
 		}
 	})
@@ -181,6 +214,26 @@ func (w *Watcher) walk(fn func(string, os.FileInfo)) error {
 		fn(path, info)
 		return nil
 	})
+}
+
+// classify decide qué es un archivo que ya terminó de copiarse: material que
+// entra por su cuenta, o un archivo que acompaña a un video. Un .wav que no
+// acompaña a ningún video es música y entra como material, que es lo que
+// siempre ha hecho; el mismo .wav al lado de "spot.mp4" es el sonido de ese
+// spot y no se guarda aparte (F1-58).
+func classify(path string) (kind, para string) {
+	if EsSidecarDeSubtitulos(path) {
+		if v, ok := VideoForSidecar(path); ok {
+			return EventSidecar, v
+		}
+		return "", ""
+	}
+	if EsSidecarDeAudio(path) {
+		if v, ok := VideoForSidecar(path); ok {
+			return EventSidecar, v
+		}
+	}
+	return EventMedia, ""
 }
 
 // interesting filtra lo que no es material: temporales, ocultos y todo lo

@@ -396,6 +396,42 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   son visibles en ninguna pantalla.
   *Alcance de F1 (9 de septiembre de 2026): el servidor informa `hay_anunciantes` leyendo la tabla; el alta de anunciantes (la pantalla que hace pasar de cinco a seis) es F4.*
 
+### Audio de todo el material (decisión del 9 de septiembre de 2026, §9 paso 1)
+
+- **F1-58** [AUTO] — Dado un archivo de video sin pista de audio y, a su lado
+  en la carpeta vigilada, un archivo de audio con el **mismo nombre** y otra
+  extensión (`.wav`, `.m4a`, `.aac`, `.mp3`, `.flac`) · Cuando el ingest lo
+  procesa · Entonces **no** va a cuarentena: el audio de al lado se muxea en el
+  formato de casa, el `media_asset` guarda de dónde salió (`audio_sidecar`), y
+  el archivo queda `listo` con su volumen medido en dos pasadas como cualquier
+  otro. Si el audio de al lado llega **después** de que el video ya está en
+  cuarentena por mudo, el ingest lo detecta y vuelve a procesar el video solo.
+- **F1-59** [AUTO] — Dado un archivo de video sin audio y **sin** archivo de
+  audio al lado · Cuando termina el ingest · Entonces queda en `cuarentena`
+  con un motivo que dice qué hacer (*«no trae sonido: pon a su lado un archivo
+  de audio con el mismo nombre»*), y **no existe** camino para soltarlo mudo:
+  todo lo que sale al aire lleva audio.
+- **F1-60** [AUTO] — Dado un archivo con **varias pistas de audio**
+  etiquetadas por idioma y un canal con `idioma_audio_preferido` = `es` ·
+  Cuando el ingest lo procesa · Entonces guarda la lista de pistas
+  (`pistas_audio`: índice, idioma, canales, título) y elige para el aire la
+  primera pista en `es`; si ninguna está en ese idioma, la primera del
+  archivo. El formato de casa se genera con **esa** pista.
+- **F1-61** [AUTO] — Dado un archivo con varias pistas ya normalizado · Cuando
+  el programador cambia `pista_audio_aire` desde Biblioteca · Entonces el
+  cambio se guarda, el archivo vuelve a la cola de normalización y el nuevo
+  formato de casa sale con la pista elegida; mientras tanto aparece *«aún no
+  listo para aire»*.
+- **F1-62** [AUTO] — Dado un archivo de video con un archivo de subtítulos al
+  lado con el mismo nombre (`.srt`, `.vtt`, `.scc`) · Cuando el ingest lo
+  procesa · Entonces guarda la ruta en `subtitulos_sidecar`; los `.srt`/`.vtt`
+  se muxean en el formato de casa como pista de texto; los `.scc` se guardan
+  sin tocar para que F2 los reinserte como CEA-608.
+- **F1-63** [AUTO] — Dado el esquema de `media_asset` · Cuando se busca dónde
+  irá la **segunda pista al aire** (SAP: español/inglés) · Entonces existe
+  `pista_audio_sap` (nulo hasta F2) y ningún otro campo hay que inventar
+  después: el motor de F2 la lleva al mux sin cambiar el esquema.
+
 ---
 
 ## F2 · Playout (motor, decks, fuentes en vivo, manual, diferido, grabación, salidas)
@@ -977,7 +1013,7 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
 ## Resumen
 
 - **F0:** 9 criterios (F0-01 a F0-09).
-- **F1:** 57 criterios (F1-01 a F1-57).
+- **F1:** 63 criterios (F1-01 a F1-63; los seis últimos, del 9 de septiembre de 2026, audio de todo el material).
 - **F2:** 110 criterios (F2-01 a F2-110).
 - **Total: 176 criterios de aceptación**, de los cuales **150 son [AUTO]** y
   **26 son [MANUAL]**.

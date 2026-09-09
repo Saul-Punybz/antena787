@@ -75,6 +75,13 @@ func (a *App) watch(ctx context.Context, dir string, portal bool) error {
 				a.acceptFromPortal(ctx, found.Path)
 				continue
 			}
+			// Un archivo que acompaña a un video —el sonido de uno mudo, o
+			// unos subtítulos— nunca entra como material aparte: lo que se
+			// vuelve a procesar es el video (F1-58, F1-62).
+			if found.Kind == ingest.EventSidecar {
+				a.ReingestSidecar(ctx, found.Path)
+				continue
+			}
 			a.IngestFile(ctx, found.Path)
 		}
 	}()
@@ -132,7 +139,7 @@ func (a *App) IngestFile(ctx context.Context, path string) {
 	}
 
 	asset, title, episodes, ingestErr := ingest.Ingest(ctx, deps, path)
-	if err := a.Store.Media.Insert(ctx, &asset); err != nil {
+	if err := guardarFicha(ctx, a, &asset); err != nil {
 		a.Publish("ingest", "material", "no se pudo guardar "+filepath.Base(path)+": "+err.Error())
 		return
 	}
@@ -146,6 +153,91 @@ func (a *App) IngestFile(ctx context.Context, path string) {
 	}
 	a.Queue.Enqueue(asset.ID, a.airsAt(ctx, asset.ID))
 	a.Publish("ingest", "material", "entró "+filepath.Base(path))
+}
+
+// ReingestSidecar vuelve a procesar el video al que acompaña un archivo que
+// acaba de aparecer a su lado: el sonido de un video mudo o unos subtítulos.
+// Es lo que saca de cuarentena a un archivo que llegó sin sonido en cuanto
+// alguien deja el audio junto a él, sin que nadie tenga que tocar nada
+// (F1-58, F1-62).
+//
+// El archivo de al lado no se guarda como material aparte y el video no
+// estrena ficha: se actualiza la que ya tenía.
+func (a *App) ReingestSidecar(ctx context.Context, sidecar string) {
+	if a.yaLoSabe(ctx, sidecar) {
+		return
+	}
+	deps, err := a.ingestDeps(ctx)
+	if err != nil {
+		a.Publish("ingest", "material", err.Error())
+		return
+	}
+	asset, title, episodes, ingestErr := ingest.ReingestSidecar(ctx, deps, sidecar)
+	if asset.Path == "" {
+		// No acompaña a ningún video de la carpeta: no hay nada que volver
+		// a procesar.
+		if ingestErr != nil {
+			a.Publish("ingest", "material", ingest.Plain(ingestErr))
+		}
+		return
+	}
+	if err := guardarFicha(ctx, a, &asset); err != nil {
+		a.Publish("ingest", "material", "no se pudo guardar "+filepath.Base(asset.Path)+": "+err.Error())
+		return
+	}
+	if ingestErr != nil {
+		a.Incident("cuarentena", fmt.Sprintf("%s: %s", filepath.Base(asset.Path), asset.PlainReason))
+		return
+	}
+	if err := a.saveCatalog(ctx, &asset, title, episodes); err != nil {
+		a.Publish("ingest", "material", "no se pudo fichar "+filepath.Base(asset.Path)+": "+err.Error())
+	}
+	a.Queue.Enqueue(asset.ID, a.airsAt(ctx, asset.ID))
+	a.Publish("ingest", "material", "entró "+filepath.Base(asset.Path))
+}
+
+// guardarFicha deja el archivo en la base después del ingest. Con la
+// persistencia puesta (ingestDeps la pone siempre) el ingest ya lo guardó él
+// mismo y le anotó las pistas de sonido y los archivos de al lado: entonces
+// no se vuelve a escribir la fila, que borraría justo esos apuntes. Solo se
+// guarda aquí lo que el ingest no llegó a guardar —un archivo que ni se pudo
+// medir, o una base que falló en ese momento—, y SaveAsset se encarga de que
+// nunca haya dos fichas del mismo archivo.
+func guardarFicha(ctx context.Context, a *App, asset *model.MediaAsset) error {
+	if asset.ID != 0 {
+		return nil
+	}
+	return (&persist{a: a}).SaveAsset(ctx, asset)
+}
+
+// yaLoSabe dice si el archivo de al lado ya está anotado en la ficha del
+// video al que acompaña y el video no está parado. La carpeta vigilada
+// reavisa de todo lo que hay cada vez que arranca la máquina: sin esto, cada
+// arranque volvería a procesar todos los videos que tienen unos subtítulos o
+// un sonido al lado, y a rehacer sus copias de casa para nada.
+func (a *App) yaLoSabe(ctx context.Context, sidecar string) bool {
+	video, ok := ingest.VideoForSidecar(sidecar)
+	if !ok {
+		return false
+	}
+	asset, err := a.Store.Media.GetByPath(ctx, video)
+	if err != nil || asset.State == model.AssetQuarantine {
+		return false
+	}
+	return asset.AudioSidecar == sidecar || asset.SubtitulosSidecar == sidecar
+}
+
+// RequeueNormalize devuelve un archivo a la cola de normalización. Lo llama
+// la API cuando alguien cambia la pista de sonido que sale al aire: el store
+// ya dejó el archivo en «pendiente» y la copia de casa hay que rehacerla con
+// la pista nueva (F1-61).
+func (a *App) RequeueNormalize(ctx context.Context, assetID int64) {
+	a.Queue.Enqueue(assetID, a.airsAt(ctx, assetID))
+	nombre := "el archivo"
+	if asset, err := a.Store.Media.Get(ctx, assetID); err == nil {
+		nombre = filepath.Base(asset.Path)
+	}
+	a.Publish("material", "pista", nombre+" vuelve a la cola con la pista de sonido que elegiste")
 }
 
 // saveCatalog deja el título y sus episodios apuntando al archivo. Un título
@@ -177,14 +269,31 @@ func (a *App) saveCatalog(ctx context.Context, asset *model.MediaAsset, title mo
 		return err
 	}
 
+	// Un archivo que se vuelve a procesar —porque su sonido llegó después—
+	// no estrena episodios: los que ya están puestos se quedan como están.
+	yaPuestos, _ := a.Store.Episode.ListByTitle(ctx, title.ID)
 	for i := range episodes {
 		episodes[i].TitleID = title.ID
 		episodes[i].MediaAssetID = &asset.ID
+		if yaEstaElEpisodio(yaPuestos, episodes[i]) {
+			continue
+		}
 		if err := a.Store.Episode.Insert(ctx, &episodes[i]); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// yaEstaElEpisodio dice si ese episodio ya está fichado en el título: mismo
+// número de temporada y de episodio.
+func yaEstaElEpisodio(puestos []model.Episode, e model.Episode) bool {
+	for _, p := range puestos {
+		if p.Season == e.Season && p.Number == e.Number {
+			return true
+		}
+	}
+	return false
 }
 
 // DiasDeCola es hasta dónde se mira hacia adelante buscando cuándo sale al
@@ -325,8 +434,24 @@ func (a *App) ingestDeps(ctx context.Context) (ingest.Deps, error) {
 		ChannelID:   nil,
 		ComputeHash: true,
 		Providers:   a.fichasEnLinea(ctx),
-		Now:         a.now,
+		// El idioma en el que el canal quiere el aire decide qué pista de
+		// sonido sale cuando el archivo trae varias (F1-60).
+		Preferencias: ingest.Preferencias{IdiomaAudio: a.idiomaAudio(ctx)},
+		// Con la persistencia puesta, el ingest anota él mismo las pistas
+		// que trae el archivo y de dónde salieron el sonido y los subtítulos
+		// de al lado (F1-58, F1-60, F1-62).
+		Persist: &persist{a: a},
+		Now:     a.now,
 	}, nil
+}
+
+// idiomaAudio es el idioma en el que el canal quiere el aire. De fábrica,
+// español: esto es Puerto Rico (F1-60).
+func (a *App) idiomaAudio(ctx context.Context) string {
+	if s := a.setting(ctx, KeyAudioLanguage); s != "" {
+		return s
+	}
+	return ingest.IdiomaAudioPorDefecto
 }
 
 // fichasEnLinea enciende la búsqueda de fichas por internet si el ajuste lo
@@ -431,7 +556,7 @@ func (a *App) normalizeOne(ctx context.Context, j ingest.Job) (string, error) {
 	}
 	dst := ingest.NormalizedPathFor(dir, asset.Path, ".mkv")
 	lufs, peak := a.loudnessTarget(ctx)
-	opts := ingest.NormalizeOptionsFor(asset, m)
+	opts := ingest.NormalizeOptionsFor(asset, m, a.preferenciasDe(ctx, asset))
 	reporte, err := ingest.Normalize(ctx, a.FFmpeg, asset.Path, dst, FormatOf(ch.FormatProfile), lufs, peak, opts)
 	if err != nil {
 		return "", err
@@ -445,15 +570,87 @@ func (a *App) normalizeOne(ctx context.Context, j ingest.Job) (string, error) {
 	return dst, nil
 }
 
+// preferenciasDe arma lo que la normalización no puede adivinar de un
+// archivo ya fichado: el idioma que quiere el canal, la pista que eligió una
+// persona y de dónde salieron el sonido y los subtítulos de al lado (F1-58,
+// F1-60 a F1-62).
+//
+// La pista elegida solo se manda cuando del archivo se sabe qué pistas trae:
+// de un archivo del que no se apuntó ninguna, el cero guardado no es una
+// elección de nadie y quien decide es el ingest.
+func (a *App) preferenciasDe(ctx context.Context, asset model.MediaAsset) ingest.Preferencias {
+	p := ingest.Preferencias{
+		IdiomaAudio:       a.idiomaAudio(ctx),
+		AudioSidecar:      asset.AudioSidecar,
+		SubtitulosSidecar: asset.SubtitulosSidecar,
+	}
+	if len(asset.PistasAudio) > 0 {
+		elegida := asset.PistaAudioAire
+		p.PistaAudio = &elegida
+	}
+	return p
+}
+
 // persist es el puente entre la cola de normalización y el store. Cuando un
 // archivo queda listo, pide un recálculo: ya puede entrar al plan.
 type persist struct{ a *App }
 
 func (p *persist) SaveAsset(ctx context.Context, asset *model.MediaAsset) error {
-	if asset.ID == 0 {
+	if asset.ID != 0 {
+		return p.a.Store.Media.Update(ctx, asset)
+	}
+	// El mismo archivo puede estar ya fichado: pasa cuando el sonido llega
+	// después y hay que volver a procesar un video que quedó en cuarentena
+	// por mudo (F1-58). Entonces se actualiza su ficha, no se crea otra, y
+	// lo que puso una persona a mano se respeta.
+	viejo, err := p.a.Store.Media.GetByPath(ctx, asset.Path)
+	if err != nil {
 		return p.a.Store.Media.Insert(ctx, asset)
 	}
+	asset.ID = viejo.ID
+	asset.CreatedAt = viejo.CreatedAt
+	asset.ChannelID = viejo.ChannelID
+	asset.IntentionalBlack = viejo.IntentionalBlack
+	asset.NoLogo = viejo.NoLogo
+	asset.LetThroughBy = viejo.LetThroughBy
+	asset.PistaAudioSAP = viejo.PistaAudioSAP
 	return p.a.Store.Media.Update(ctx, asset)
+}
+
+// SetAudioTracks anota qué pistas de sonido trae el archivo y cuál de ellas
+// sale al aire (F1-60). El índice es el que ve ffmpeg: la primera pista es
+// la cero.
+func (p *persist) SetAudioTracks(ctx context.Context, assetID int64, pistas []ingest.AudioTrack, pistaAire int) error {
+	asset, err := p.a.Store.Media.Get(ctx, assetID)
+	if err != nil {
+		return err
+	}
+	lista := make([]model.PistaAudio, 0, len(pistas))
+	for _, t := range pistas {
+		lista = append(lista, model.PistaAudio{
+			Indice:  t.Index,
+			Idioma:  t.Language,
+			Canales: t.Channels,
+			Titulo:  t.Title,
+		})
+	}
+	asset.PistasAudio = lista
+	asset.PistaAudioAire = pistaAire
+	asset.UpdatedAt = p.a.Now()
+	return p.a.Store.Media.Update(ctx, &asset)
+}
+
+// SetSidecars anota de dónde salieron el sonido y los subtítulos que venían
+// al lado del video (F1-58, F1-62).
+func (p *persist) SetSidecars(ctx context.Context, assetID int64, audio, subtitulos string) error {
+	asset, err := p.a.Store.Media.Get(ctx, assetID)
+	if err != nil {
+		return err
+	}
+	asset.AudioSidecar = audio
+	asset.SubtitulosSidecar = subtitulos
+	asset.UpdatedAt = p.a.Now()
+	return p.a.Store.Media.Update(ctx, &asset)
 }
 
 func (p *persist) SetNormalizeState(ctx context.Context, assetID int64, state, normalizedPath, plainReason string) error {

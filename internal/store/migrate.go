@@ -26,6 +26,7 @@ type Migration struct {
 // eso una base nueva y una migrada terminan idénticas.
 var migrations = []Migration{
 	{Version: 2, SQL: migracion2},
+	{Version: 3, SQL: migracion3},
 }
 
 // migracion2 cierra tres huecos de integridad del plan (F1-12, F1-22, F1-26
@@ -83,6 +84,32 @@ BEGIN
       AND NEW.instante_planeado_ms < p.instante_planeado_ms + p.duracion_planeada_ms
   );
 END;
+`
+
+// migracion3 le da al archivo su sonido (F1-58 a F1-63): qué pistas de audio
+// trae, cuál va al aire, dónde queda la segunda (SAP, reservada para F2) y de
+// qué archivos de al lado salieron el audio y los subtítulos.
+//
+// Las columnas nuevas no van en schema.sql: ese archivo es la foto de la
+// versión 1 y todas las bases —nuevas y viejas— suben por estos mismos
+// escalones, que es lo que hace que terminen idénticas.
+const migracion3 = `
+-- Las pistas de audio que trae el archivo, tal como las vio el ingest:
+-- JSON [{"indice":0,"idioma":"es","canales":2,"titulo":"Español"}, ...].
+ALTER TABLE media_asset ADD COLUMN pistas_audio TEXT NOT NULL DEFAULT '[]';
+
+-- Cuál de esas pistas se oye al aire: su índice dentro de la lista.
+ALTER TABLE media_asset ADD COLUMN pista_audio_aire INTEGER NOT NULL DEFAULT 0;
+
+-- La segunda pista al aire (español/inglés). Vacía hasta F2, pero el hueco
+-- ya está hecho: el motor no tendrá que cambiar el esquema para usarla.
+ALTER TABLE media_asset ADD COLUMN pista_audio_sap INTEGER;
+
+-- El archivo de audio que estaba al lado y se metió dentro del video.
+ALTER TABLE media_asset ADD COLUMN audio_sidecar TEXT NOT NULL DEFAULT '';
+
+-- El archivo de subtítulos que estaba al lado, con el mismo nombre.
+ALTER TABLE media_asset ADD COLUMN subtitulos_sidecar TEXT NOT NULL DEFAULT '';
 `
 
 // SchemaVersion es la versión a la que lleva este binario.

@@ -21,6 +21,10 @@ var (
 	// ErrFueraDeVigencia es el trigger que ata el día de emisión de un
 	// plan_item a las fechas de su regla (PRD §15).
 	ErrFueraDeVigencia = errors.New("ese día queda fuera de las fechas de la regla")
+
+	// ErrPistaInexistente es elegir para el aire una pista de sonido que el
+	// archivo no trae (F1-61).
+	ErrPistaInexistente = errors.New("ese archivo no tiene esa pista de sonido")
 )
 
 // ErrCorrupt dice que la base no pasó PRAGMA integrity_check. Lleva la ruta

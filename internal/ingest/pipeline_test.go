@@ -483,19 +483,91 @@ type registroVolumen struct {
 	nota           string
 }
 
+// registroAudio es lo que la base guardaría de las pistas de sonido y de los
+// archivos de al lado (F1-58, F1-60, F1-62).
+type registroAudio struct {
+	pistas      []AudioTrack
+	pistaAire   int
+	audio       string
+	subtitulos  string
+	vecesPistas int
+}
+
 type persistenciaDePrueba struct {
 	mu      sync.Mutex
 	assets  []model.MediaAsset
 	estados map[int64][]estadoNorm
 	volumen map[int64]registroVolumen
+	audio   map[int64]registroAudio
 }
 
 func (p *persistenciaDePrueba) SaveAsset(ctx context.Context, a *model.MediaAsset) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	// Un archivo que ya tiene ID se actualiza en su sitio: es lo que pasa
+	// cuando el ingest vuelve a correr sobre el mismo video porque apareció
+	// el audio de al lado (F1-58).
+	if a.ID != 0 {
+		for i := range p.assets {
+			if p.assets[i].ID == a.ID {
+				p.assets[i] = *a
+				return nil
+			}
+		}
+	}
+	for i := range p.assets {
+		if p.assets[i].Path == a.Path {
+			a.ID = p.assets[i].ID
+			p.assets[i] = *a
+			return nil
+		}
+	}
 	a.ID = int64(len(p.assets) + 1)
 	p.assets = append(p.assets, *a)
 	return nil
+}
+
+// SetAudioTracks y SetSidecars guardan lo que el ingest averiguó del sonido.
+func (p *persistenciaDePrueba) SetAudioTracks(ctx context.Context, id int64, pistas []AudioTrack, pistaAire int) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.audio == nil {
+		p.audio = map[int64]registroAudio{}
+	}
+	r := p.audio[id]
+	r.pistas, r.pistaAire, r.vecesPistas = pistas, pistaAire, r.vecesPistas+1
+	p.audio[id] = r
+	return nil
+}
+
+func (p *persistenciaDePrueba) SetSidecars(ctx context.Context, id int64, audio, subtitulos string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.audio == nil {
+		p.audio = map[int64]registroAudio{}
+	}
+	r := p.audio[id]
+	r.audio, r.subtitulos = audio, subtitulos
+	p.audio[id] = r
+	return nil
+}
+
+func (p *persistenciaDePrueba) sonido(id int64) registroAudio {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.audio[id]
+}
+
+// guardado devuelve el asset con ese ID tal como quedó en la "base".
+func (p *persistenciaDePrueba) guardado(id int64) (model.MediaAsset, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, a := range p.assets {
+		if a.ID == id {
+			return a, true
+		}
+	}
+	return model.MediaAsset{}, false
 }
 
 func (p *persistenciaDePrueba) SetNormalizeState(ctx context.Context, id int64, state, path, reason string) error {
@@ -559,6 +631,8 @@ func (soloEstado) SaveAsset(context.Context, *model.MediaAsset) error { return n
 func (soloEstado) SetNormalizeState(context.Context, int64, string, string, string) error {
 	return nil
 }
+func (soloEstado) SetAudioTracks(context.Context, int64, []AudioTrack, int) error { return nil }
+func (soloEstado) SetSidecars(context.Context, int64, string, string) error       { return nil }
 
 func (p *persistenciaDePrueba) last(id int64) estadoNorm {
 	p.mu.Lock()

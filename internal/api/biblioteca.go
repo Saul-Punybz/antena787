@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"antena787/internal/app"
 	"antena787/internal/ingest"
 	"antena787/internal/model"
+	"antena787/internal/store"
 )
 
 // SubidaMaxBytes es lo más grande que se acepta por POST /material/subir:
@@ -25,6 +27,50 @@ const (
 	EstadoNoListo    = "aún no listo para aire"
 	EstadoCuarentena = "cuarentena"
 )
+
+// audioOut son los campos de sonido que Biblioteca pinta de cada archivo
+// (web/src/lib/tipos.ts, `AudioDelMaterial`): cuál es el archivo, qué pistas
+// trae, cuál sale al aire y de dónde salieron el sonido y los subtítulos que
+// vinieron al lado (F1-58 a F1-62). Todos son opcionales: un título sin
+// material no manda ninguno y la pantalla pinta igual.
+type audioOut struct {
+	MaterialID        *int64             `json:"material_id,omitempty"`
+	PistasAudio       []model.PistaAudio `json:"pistas_audio,omitempty"`
+	PistaAudioAire    *int               `json:"pista_audio_aire,omitempty"`
+	AudioSidecar      string             `json:"audio_sidecar,omitempty"`
+	SubtitulosSidecar string             `json:"subtitulos_sidecar,omitempty"`
+}
+
+// audioDe lee el sonido de un archivo. Sin archivo —o si ya no está— no
+// manda nada.
+func (s *Server) audioDe(ctx context.Context, assetID *int64) audioOut {
+	if assetID == nil {
+		return audioOut{}
+	}
+	a, err := s.App.Store.Media.Get(ctx, *assetID)
+	if err != nil {
+		return audioOut{}
+	}
+	id, pista := a.ID, a.PistaAudioAire
+	return audioOut{
+		MaterialID:        &id,
+		PistasAudio:       a.PistasAudio,
+		PistaAudioAire:    &pista,
+		AudioSidecar:      a.AudioSidecar,
+		SubtitulosSidecar: a.SubtitulosSidecar,
+	}
+}
+
+// motivoCodigo traduce el motivo en cristiano de un archivo parado a su
+// código. La base guarda el texto y no el código, así que se reconoce por el
+// texto: hoy el único que hace falta es el del material sin sonido, que no
+// tiene botón de dejarlo pasar (F1-59).
+func motivoCodigo(motivo string) string {
+	if ingest.TextoSinAudio(motivo) {
+		return ingest.MotivoSinAudio
+	}
+	return ""
+}
 
 // titleOut es un título con lo que hace falta para pintarlo en Biblioteca:
 // cuántos episodios tiene, en qué estado está su material, cuánto dura, y si
@@ -46,6 +92,9 @@ type titleOut struct {
 	// estado_material y duracion_ms, en texto.
 	Material string `json:"material"`
 	Duration string `json:"duracion,omitempty"`
+
+	// El sonido del archivo del título, si tiene uno propio.
+	audioOut
 }
 
 // episodeOut es un episodio con el estado de su material, que es lo que la
@@ -54,6 +103,9 @@ type episodeOut struct {
 	model.Episode
 	DurMs  int64  `json:"duracion_ms"`
 	Estado string `json:"estado_material"`
+
+	// El sonido del archivo de ese episodio.
+	audioOut
 }
 
 func (s *Server) bibliotecaList(w http.ResponseWriter, r *http.Request) {
@@ -121,7 +173,7 @@ func (s *Server) estadoDelMaterial(ctx context.Context, assets []int64) (estado 
 
 func (s *Server) titleOut(ctx context.Context, t model.Title, reglas map[int64]model.ScheduleRule) titleOut {
 	eps, _ := s.App.Store.Episode.ListByTitle(ctx, t.ID)
-	out := titleOut{Title: t, Episodes: len(eps)}
+	out := titleOut{Title: t, Episodes: len(eps), audioOut: s.audioDe(ctx, t.MediaAssetID)}
 
 	assets := []int64{}
 	if t.MediaAssetID != nil {
@@ -167,7 +219,10 @@ func (s *Server) bibliotecaGet(w http.ResponseWriter, r *http.Request) {
 			assets = append(assets, *e.MediaAssetID)
 		}
 		estado, ms := s.estadoDelMaterial(ctx, assets)
-		lista = append(lista, episodeOut{Episode: e, DurMs: ms, Estado: estado})
+		lista = append(lista, episodeOut{
+			Episode: e, DurMs: ms, Estado: estado,
+			audioOut: s.audioDe(ctx, e.MediaAssetID),
+		})
 	}
 	// La ficha es el título entero, con la lista de episodios dentro
 	// (web/src/lib/tipos.ts, `FichaDeTitulo`).
@@ -267,7 +322,8 @@ func (s *Server) materialGet(w http.ResponseWriter, r *http.Request) {
 
 // materialPut es donde una persona confirma lo que la máquina solo pudo
 // sospechar: que ese negro es a propósito, que ese spot va sin logo, dónde
-// están los subtítulos y en qué milisegundos van los cortes.
+// están los subtítulos, en qué milisegundos van los cortes y cuál de las
+// pistas de sonido es la que sale al aire (F1-61).
 func (s *Server) materialPut(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(w, r, "id")
 	if !ok {
@@ -284,10 +340,38 @@ func (s *Server) materialPut(w http.ResponseWriter, r *http.Request) {
 		NoLogo           *bool    `json:"sin_logo"`
 		ExternalCaptions *string  `json:"subtitulos_externos"`
 		BreakMarks       *[]int64 `json:"marcas_de_corte_ms"`
+		PistaAudioAire   *int     `json:"pista_audio_aire"`
 	}
 	if !decode(w, r, &body) {
 		return
 	}
+
+	// La pista de sonido se cambia aparte: el store la valida, deja el
+	// archivo pendiente de normalizar y lo anota en la bitácora, todo en la
+	// misma escritura (F1-61).
+	if body.PistaAudioAire != nil {
+		err := s.App.Store.Media.SetPistaAudioAire(ctx, id, *body.PistaAudioAire)
+		switch {
+		case errors.Is(err, store.ErrPistaInexistente):
+			fail(w, http.StatusBadRequest,
+				store.ErrPistaInexistente.Error()+": escoge una de las que trae", "pista_audio_aire")
+			return
+		case errors.Is(err, store.ErrNotFound):
+			failStore(w, err, "ese archivo")
+			return
+		case err != nil:
+			failStore(w, err, "cambiar la pista de sonido")
+			return
+		}
+		// El cambio ya quedó en la bitácora: lo anota el store dentro de la
+		// misma escritura que lo hizo.
+		s.App.RequeueNormalize(ctx, id)
+		// La fila cambió por debajo: lo que se guarda ahora sale de ella.
+		if refrescado, err := s.App.Store.Media.Get(ctx, id); err == nil {
+			old = refrescado
+		}
+	}
+
 	nuevo := old
 	if body.IntentionalBlack != nil {
 		nuevo.IntentionalBlack = *body.IntentionalBlack
@@ -308,10 +392,39 @@ func (s *Server) materialPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.auditDiff(r, "media_asset", &nuevo.ID, old, nuevo)
-	writeJSON(w, http.StatusOK, nuevo)
+	writeJSON(w, http.StatusOK, s.materialOut(ctx, nuevo))
+}
+
+// materialOut es el archivo tal como lo contesta PUT /material/{id}: todo lo
+// medido, como siempre, más los dos campos con los que Biblioteca lo pinta
+// (web/src/lib/tipos.ts, `MaterialDeAudio`): cuál es el archivo y en qué
+// estado quedó. Después de cambiarle la pista de sonido, «aún no listo para
+// aire» hasta que la copia de casa se rehaga (F1-61).
+func (s *Server) materialOut(ctx context.Context, a model.MediaAsset) any {
+	raw, err := jsonMarshal(a)
+	if err != nil {
+		return a
+	}
+	campos := map[string]any{}
+	if err := jsonUnmarshal(raw, &campos); err != nil {
+		return a
+	}
+	campos["material_id"] = a.ID
+	estado, _ := s.estadoDelMaterial(ctx, []int64{a.ID})
+	campos["estado_material"] = estado
+	return campos
 }
 
 // ── la cuarentena ─────────────────────────────────────────────────────
+
+// enCuarentenaOut es un archivo parado tal como lo pinta la pantalla de
+// cuarentena (web/src/lib/tipos.ts, `EnCuarentena`): el archivo entero más el
+// código del motivo, que es lo que decide si se le puede pintar el botón de
+// dejarlo pasar.
+type enCuarentenaOut struct {
+	model.MediaAsset
+	MotivoCodigo string `json:"motivo_codigo"`
+}
 
 func (s *Server) cuarentenaList(w http.ResponseWriter, r *http.Request) {
 	list, err := s.App.Store.Media.List(r.Context(), model.AssetQuarantine)
@@ -319,10 +432,11 @@ func (s *Server) cuarentenaList(w http.ResponseWriter, r *http.Request) {
 		failStore(w, err, "leer la cuarentena")
 		return
 	}
-	if list == nil {
-		list = []model.MediaAsset{}
+	out := make([]enCuarentenaOut, 0, len(list))
+	for _, a := range list {
+		out = append(out, enCuarentenaOut{MediaAsset: a, MotivoCodigo: motivoCodigo(a.PlainReason)})
 	}
-	writeJSON(w, http.StatusOK, list)
+	writeJSON(w, http.StatusOK, out)
 }
 
 // dejarPasar es el botón "dejarlo pasar bajo mi responsabilidad" (auditoría
@@ -344,6 +458,15 @@ func (s *Server) dejarPasar(w http.ResponseWriter, r *http.Request) {
 		failStore(w, err, "ese archivo")
 		return
 	}
+	// Todo lo que sale al aire lleva sonido: un archivo mudo no se deja
+	// pasar, se arregla poniéndole el audio al lado (F1-59).
+	if motivoCodigo(old.PlainReason) == ingest.MotivoSinAudio {
+		fail(w, http.StatusConflict,
+			"Este archivo no trae sonido y todo lo que sale al aire lleva audio: pon a su lado un archivo de audio con el mismo nombre y se procesa solo.",
+			"")
+		return
+	}
+
 	quien := strings.TrimSpace(body.Quien)
 	if quien == "" {
 		quien = autor(r)

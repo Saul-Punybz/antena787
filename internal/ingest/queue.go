@@ -31,6 +31,14 @@ type Persist interface {
 	// SetNormalizeState mueve estado_normalizacion y, si terminó bien, apunta
 	// la ruta normalizada; si terminó mal, el motivo en cristiano.
 	SetNormalizeState(ctx context.Context, assetID int64, state, normalizedPath, plainReason string) error
+	// SetAudioTracks guarda las pistas de sonido que trae el archivo —índice,
+	// idioma, canales y título— y cuál de ellas sale al aire. pistaAire es el
+	// índice dentro de la lista, no el número de stream del contenedor
+	// (F1-60). Una lista vacía es un archivo cuyo sonido vino de al lado.
+	SetAudioTracks(ctx context.Context, assetID int64, pistas []AudioTrack, pistaAire int) error
+	// SetSidecars guarda de dónde salieron el sonido y los subtítulos que
+	// venían al lado del video (F1-58, F1-62). Cadena vacía = no había.
+	SetSidecars(ctx context.Context, assetID int64, audio, subtitulos string) error
 }
 
 // PersistLoudness es Persist más la parte del volumen: lo implementa quien,

@@ -174,8 +174,61 @@ type MediaAsset struct {
 	IntentionalBlack bool       `json:"negro_intencional" db:"negro_intencional"`
 	NoLogo           bool       `json:"sin_logo" db:"sin_logo"`
 	LetThroughBy     string     `json:"dejado_pasar_por" db:"dejado_pasar_por"`
-	CreatedAt        time.Time  `json:"creado" db:"creado_ms"`
-	UpdatedAt        time.Time  `json:"actualizado" db:"actualizado_ms"`
+
+	// Sonido del archivo (F1-58 a F1-63). Todo lo que sale al aire lleva
+	// audio: aquí queda qué pistas trae, cuál va al aire y de dónde salió.
+	PistasAudio       []PistaAudio `json:"pistas_audio" db:"pistas_audio"`             // JSON en la base
+	PistaAudioAire    int          `json:"pista_audio_aire" db:"pista_audio_aire"`     // índice dentro de PistasAudio
+	PistaAudioSAP     *int         `json:"pista_audio_sap" db:"pista_audio_sap"`       // segunda pista al aire; vacío hasta F2
+	AudioSidecar      string       `json:"audio_sidecar" db:"audio_sidecar"`           // archivo de audio de al lado que se muxeó
+	SubtitulosSidecar string       `json:"subtitulos_sidecar" db:"subtitulos_sidecar"` // archivo de subtítulos de al lado
+
+	CreatedAt time.Time `json:"creado" db:"creado_ms"`
+	UpdatedAt time.Time `json:"actualizado" db:"actualizado_ms"`
+}
+
+// PistaAudio es una de las pistas de sonido que trae el archivo, tal como la
+// vio el ingest: su número dentro del archivo, el idioma que declara, cuántos
+// canales lleva y el nombre con que viene rotulada.
+type PistaAudio struct {
+	Indice  int    `json:"indice"`
+	Idioma  string `json:"idioma"`
+	Canales int    `json:"canales"`
+	Titulo  string `json:"titulo"`
+}
+
+// idiomasEquivalentes junta las etiquetas que en la práctica quieren decir lo
+// mismo: un archivo puede venir rotulado "es", "spa" o "esp" y es el mismo
+// español. La clave es la etiqueta ya en minúsculas.
+var idiomasEquivalentes = map[string]string{
+	"es": "es", "spa": "es", "esp": "es",
+	"en": "en", "eng": "en",
+}
+
+// idiomaNormalizado devuelve la etiqueta comparable de un idioma: sin
+// espacios, en minúsculas y con los equivalentes unificados.
+func idiomaNormalizado(idioma string) string {
+	limpio := strings.ToLower(strings.TrimSpace(idioma))
+	if igual, ok := idiomasEquivalentes[limpio]; ok {
+		return igual
+	}
+	return limpio
+}
+
+// PistaPreferida devuelve el índice de la primera pista en ese idioma. Si
+// ninguna lo trae —o el archivo no declara pistas— devuelve 0: la primera del
+// archivo, que es lo que se oye si no se elige nada (F1-60).
+func (m MediaAsset) PistaPreferida(idioma string) int {
+	buscado := idiomaNormalizado(idioma)
+	if buscado == "" {
+		return 0
+	}
+	for _, p := range m.PistasAudio {
+		if idiomaNormalizado(p.Idioma) == buscado {
+			return p.Indice
+		}
+	}
+	return 0
 }
 
 // AirablePath es lo que sale al aire: la copia normalizada si existe.

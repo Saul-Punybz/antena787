@@ -3,9 +3,18 @@ import { Caratula } from '../componentes/Caratula'
 import { Panel } from '../componentes/Panel'
 import { IconoBuscar } from '../componentes/Iconos'
 import { api } from '../lib/api'
+import { nombreDeArchivo, nombreDePista } from '../lib/audio'
 import { duracionLarga, fechaDeRegla, minutosAHora12, hhMmAMinutos } from '../lib/fechas'
 import { useEstado } from '../lib/estado'
-import type { EnCuarentena, FichaDeTitulo, TituloDeBiblioteca } from '../lib/tipos'
+import type {
+  AudioDelMaterial,
+  EnCuarentena,
+  EpisodioDeBiblioteca,
+  EstadoMaterial,
+  FichaDeTitulo,
+  MaterialDeAudio,
+  TituloDeBiblioteca,
+} from '../lib/tipos'
 
 export function Biblioteca() {
   const { estado } = useEstado()
@@ -215,19 +224,34 @@ export function Biblioteca() {
                 <div className="ambar" style={{ fontSize: 13, marginTop: 3 }}>
                   {c.motivo_en_cristiano}
                 </div>
+                {c.motivo_codigo === 'sin_audio' && (
+                  <div className="tenue" style={{ fontSize: 12.5, marginTop: 4, maxWidth: 520 }}>
+                    Pon a su lado un archivo de audio con el mismo nombre (.wav, .m4a,
+                    .aac, .mp3 o .flac) y se procesa solo.
+                  </div>
+                )}
                 <div className="mono tenue" style={{ fontSize: 11.5, marginTop: 4 }}>
                   {c.ruta}
                 </div>
               </div>
-              <button className="boton" onClick={() => setDejarPasar(c)} style={{ flexShrink: 0 }}>
-                Dejarlo pasar bajo mi responsabilidad
-              </button>
+              {c.motivo_codigo !== 'sin_audio' && (
+                <button className="boton" onClick={() => setDejarPasar(c)} style={{ flexShrink: 0 }}>
+                  Dejarlo pasar bajo mi responsabilidad
+                </button>
+              )}
             </li>
           ))}
         </ul>
       </section>
 
-      {ficha && <FichaLateral ficha={ficha} alCerrar={() => setFicha(null)} anio={anio} />}
+      {ficha && (
+        <FichaLateral
+          ficha={ficha}
+          alCerrar={() => setFicha(null)}
+          alActualizar={setFicha}
+          anio={anio}
+        />
+      )}
       {dejarPasar && (
         <PanelDejarPasar
           item={dejarPasar}
@@ -337,10 +361,12 @@ function Estante({
 function FichaLateral({
   ficha,
   alCerrar,
+  alActualizar,
   anio,
 }: {
   ficha: FichaDeTitulo
   alCerrar: () => void
+  alActualizar: (f: FichaDeTitulo) => void
   anio: number
 }) {
   const color =
@@ -372,6 +398,11 @@ function FichaLateral({
         )}
       </div>
 
+      <SonidoDelMaterial
+        material={ficha}
+        alCambiar={(cambio) => alActualizar({ ...ficha, ...cambio })}
+      />
+
       {ficha.lista_de_episodios.length > 0 && (
         <div>
           <div className="rotulo" style={{ marginBottom: 10 }}>
@@ -381,7 +412,6 @@ function FichaLateral({
             {ficha.lista_de_episodios.map((e) => (
               <li
                 key={e.id}
-                className="entre"
                 style={{
                   padding: '9px 12px',
                   borderRadius: 8,
@@ -390,20 +420,33 @@ function FichaLateral({
                   fontSize: 13.5,
                 }}
               >
-                <span>
-                  <span className="mono tenue">
-                    T{e.temporada} E{String(e.numero).padStart(2, '0')}
-                  </span>{' '}
-                  {e.nombre}
-                </span>
-                <span
-                  className={e.estado_material === 'listo' ? 'tenue' : 'ambar'}
-                  style={{ fontSize: 12.5 }}
-                >
-                  {e.estado_material === 'listo'
-                    ? duracionLarga(e.duracion_ms)
-                    : e.estado_material}
-                </span>
+                <div className="entre">
+                  <span>
+                    <span className="mono tenue">
+                      T{e.temporada} E{String(e.numero).padStart(2, '0')}
+                    </span>{' '}
+                    {e.nombre}
+                  </span>
+                  <span
+                    className={e.estado_material === 'listo' ? 'tenue' : 'ambar'}
+                    style={{ fontSize: 12.5 }}
+                  >
+                    {e.estado_material === 'listo'
+                      ? duracionLarga(e.duracion_ms)
+                      : e.estado_material}
+                  </span>
+                </div>
+                <SonidoDelMaterial
+                  material={e}
+                  alCambiar={(cambio) =>
+                    alActualizar({
+                      ...ficha,
+                      lista_de_episodios: ficha.lista_de_episodios.map((otro) =>
+                        otro.id === e.id ? { ...otro, ...cambio } : otro,
+                      ) as EpisodioDeBiblioteca[],
+                    })
+                  }
+                />
               </li>
             ))}
           </ul>
@@ -415,6 +458,101 @@ function FichaLateral({
         </div>
       )}
     </Panel>
+  )
+}
+
+/**
+ * El sonido de un archivo: con qué pista sale al aire y de dónde salieron el
+ * audio y los subtítulos cuando vinieron en un archivo de al lado (F1-58 a
+ * F1-62). Un archivo de una sola pista y sin nada al lado no enseña nada.
+ */
+function SonidoDelMaterial({
+  material,
+  alCambiar,
+}: {
+  material: AudioDelMaterial & { estado_material: EstadoMaterial }
+  alCambiar: (cambio: Partial<AudioDelMaterial> & { estado_material?: EstadoMaterial }) => void
+}) {
+  const [error, setError] = useState('')
+  const [cambiado, setCambiado] = useState(false)
+  const [guardando, setGuardando] = useState(false)
+
+  const pistas = material.pistas_audio ?? []
+  const audio = material.audio_sidecar?.trim() ?? ''
+  const subtitulos = material.subtitulos_sidecar?.trim() ?? ''
+  const hayQueElegir = pistas.length > 1 && material.material_id !== undefined
+  if (!hayQueElegir && !audio && !subtitulos) return null
+
+  async function elegir(indice: number) {
+    const id = material.material_id
+    if (id === undefined) return
+    const pistaAntes = material.pista_audio_aire
+    const estadoAntes = material.estado_material
+    setError('')
+    setGuardando(true)
+    // El aviso sale de una: el archivo se rehace con la pista nueva (F1-61).
+    setCambiado(true)
+    alCambiar({ pista_audio_aire: indice, estado_material: 'aún no listo para aire' })
+    try {
+      const m: MaterialDeAudio = await api.cambiarMaterial(id, { pista_audio_aire: indice })
+      alCambiar({
+        pista_audio_aire: m.pista_audio_aire ?? indice,
+        estado_material: m.estado_material ?? 'aún no listo para aire',
+      })
+    } catch (e) {
+      setCambiado(false)
+      setError((e as Error).message)
+      alCambiar({ pista_audio_aire: pistaAntes, estado_material: estadoAntes })
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <div style={{ display: 'grid', gap: 8, marginTop: hayQueElegir ? 12 : 8 }}>
+      {hayQueElegir && (
+        <div className="campo">
+          <label htmlFor={`pista-audio-${material.material_id}`}>Pista de audio al aire</label>
+          <select
+            id={`pista-audio-${material.material_id}`}
+            value={material.pista_audio_aire ?? pistas[0].indice}
+            disabled={guardando}
+            onChange={(e) => void elegir(Number(e.target.value))}
+          >
+            {pistas.map((p, i) => (
+              <option key={p.indice} value={p.indice}>
+                {nombreDePista(p, i + 1)}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      {cambiado && material.estado_material === 'aún no listo para aire' && (
+        <span
+          className="ambar"
+          style={{
+            fontSize: 12,
+            border: '1px solid var(--ambar)',
+            borderRadius: 6,
+            padding: '3px 8px',
+            justifySelf: 'start',
+          }}
+        >
+          aún no listo para aire
+        </span>
+      )}
+      {error && <div className="error-en-cristiano">{error}</div>}
+      {audio && (
+        <div className="tenue" style={{ fontSize: 12.5 }}>
+          Audio: archivo de al lado · <span className="mono">{nombreDeArchivo(audio)}</span>
+        </div>
+      )}
+      {subtitulos && (
+        <div className="tenue" style={{ fontSize: 12.5 }}>
+          Subtítulos: <span className="mono">{nombreDeArchivo(subtitulos)}</span>
+        </div>
+      )}
+    </div>
   )
 }
 

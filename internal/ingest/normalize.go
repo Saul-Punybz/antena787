@@ -36,7 +36,22 @@ type NormalizeOptions struct {
 	KeepCaptions   bool // conservar los streams de subtítulos si el contenedor deja
 	EmbeddedCEA608 bool // el video de origen trae 608 dentro (Measure.CaptionFormat)
 
-	NoAudio    bool // el original no trae sonido: se le pone silencio de casa
+	// AudioTrack es qué pista de sonido del original sale al aire: la N de
+	// «a:N», que es como las cuenta ffmpeg. 0 es la primera, que es lo que
+	// vale para la inmensa mayoría de los archivos (F1-60).
+	AudioTrack int
+
+	// AudioSidecar es el archivo de sonido que vino al lado del video, para
+	// el material que no trae pista propia. Cuando está puesto, el sonido
+	// sale de ahí —se mide y se corrige igual que cualquier otro— y
+	// AudioTrack no se mira (F1-58).
+	AudioSidecar string
+
+	// SubtitleSidecar es el archivo de subtítulos que vino al lado, ya en un
+	// formato que el contenedor de casa sabe llevar (.srt o .vtt). Los .scc
+	// no se ponen aquí: se guardan sin tocar y los reinserta F2 (F1-62).
+	SubtitleSidecar string
+
 	SkipVerify bool // no medir el resultado (más rápido, menos comprobado)
 
 	ExtraOutputArgs []string // lo que el perfil quiera añadir al final
@@ -60,8 +75,9 @@ type LoudnessReport struct {
 	TargetLUFS     float64
 	TargetTruePeak float64
 
-	// Lo que midió la primera pasada, antes de corregir nada. Si el archivo
-	// no trae sonido no se mide: quedan todos en cero.
+	// Lo que midió la primera pasada, antes de corregir nada. Siempre se
+	// mide: desde F1-58 todo lo que se normaliza lleva sonido, sea el suyo o
+	// el del archivo de al lado.
 	MeasuredLUFS      float64 // volumen integrado del original
 	MeasuredTruePeak  float64 // pico real del original, en dBTP
 	MeasuredLRA       float64 // rango de volumen del original
@@ -71,15 +87,15 @@ type LoudnessReport struct {
 	// Lo que mide la copia ya normalizada. Es una medición de verdad, no una
 	// estimación: la tercera corrida de ffmpeg vuelve a escuchar el
 	// resultado. Verified dice si esa comprobación llegó a correr
-	// (SkipVerify y los archivos sin sonido la saltan).
+	// (SkipVerify la salta).
 	OutputLUFS     float64 // volumen integrado de la copia de casa
 	OutputTruePeak float64 // pico real de la copia, en dBTP
 	OutputLRA      float64 // rango de volumen de la copia
 	Verified       bool
 
 	// Passes es el registro de que se hicieron las dos pasadas: 2 = medir y
-	// corregir, que es lo que exige F1-03; nunca 1. Es 0 cuando el archivo
-	// no trae sonido y no había nada que medir.
+	// corregir, que es lo que exige F1-03; nunca 1. Un archivo que llega
+	// hasta aquí siempre tiene sonido que medir (F1-58, F1-59).
 	Passes int
 
 	// CaptionsKept dice si los subtítulos del original llegaron a la copia.
@@ -128,17 +144,22 @@ func Normalize(ctx context.Context, ffmpeg, src, dst string, f engine.Format, ta
 	}
 
 	// ── pasada 1: medir ───────────────────────────────────────────────
-	if !opts.NoAudio {
-		m, err := measureLoudness(ctx, ffmpeg, src, targetLUFS, truePeak)
-		if err != nil {
-			return rep, err
-		}
-		rep.MeasuredLUFS, rep.MeasuredTruePeak = m.inputI, m.inputTP
-		rep.MeasuredLRA, rep.MeasuredThreshold = m.inputLRA, m.inputThresh
-		rep.TargetOffset = m.offset
-		rep.Passes = 1
-		opts.measured = &m
+	// El sonido puede venir del propio archivo —de la pista elegida— o de un
+	// archivo de al lado. Se mide el que vaya a salir al aire, que es el que
+	// hay que corregir (F1-58, F1-60).
+	audioSrc, audioTrack := src, opts.AudioTrack
+	if opts.AudioSidecar != "" {
+		audioSrc, audioTrack = opts.AudioSidecar, 0
 	}
+	m, err := measureLoudness(ctx, ffmpeg, audioSrc, audioTrack, targetLUFS, truePeak)
+	if err != nil {
+		return rep, err
+	}
+	rep.MeasuredLUFS, rep.MeasuredTruePeak = m.inputI, m.inputTP
+	rep.MeasuredLRA, rep.MeasuredThreshold = m.inputLRA, m.inputThresh
+	rep.TargetOffset = m.offset
+	rep.Passes = 1
+	opts.measured = &m
 
 	// ── pasada 2: corregir y conformar ────────────────────────────────
 	rep.VideoFilter = videoConform(f, opts.Deinterlace)
@@ -146,7 +167,7 @@ func Normalize(ctx context.Context, ffmpeg, src, dst string, f engine.Format, ta
 
 	args := normalizeArgs(src, dst, f, opts, rep, true)
 	if err := runFFmpeg(ctx, ffmpeg, args); err != nil {
-		if !opts.KeepCaptions {
+		if !opts.KeepCaptions && opts.SubtitleSidecar == "" {
 			return rep, Plainf(err, "no se pudo convertir el archivo al formato de casa")
 		}
 		// Los subtítulos son la causa más probable: hay contenedores que no
@@ -156,14 +177,10 @@ func Normalize(ctx context.Context, ffmpeg, src, dst string, f engine.Format, ta
 		if err2 := runFFmpeg(ctx, ffmpeg, args); err2 != nil {
 			return rep, Plainf(err2, "no se pudo convertir el archivo al formato de casa")
 		}
-	} else if opts.KeepCaptions {
+	} else if opts.KeepCaptions || opts.SubtitleSidecar != "" {
 		rep.CaptionsKept = true
 	}
-	if opts.NoAudio {
-		rep.Passes = 0
-	} else {
-		rep.Passes = 2
-	}
+	rep.Passes = 2
 	if keepMs > 0 {
 		rep.OutputDurationMs = keepMs
 	}
@@ -177,8 +194,8 @@ func Normalize(ctx context.Context, ffmpeg, src, dst string, f engine.Format, ta
 	}
 
 	// ── verificación: medir el resultado ──────────────────────────────
-	if !opts.SkipVerify && !opts.NoAudio {
-		m, err := measureLoudness(ctx, ffmpeg, dst, targetLUFS, truePeak)
+	if !opts.SkipVerify {
+		m, err := measureLoudness(ctx, ffmpeg, dst, 0, targetLUFS, truePeak)
 		if err != nil {
 			return rep, err
 		}
@@ -195,23 +212,41 @@ func normalizeArgs(src, dst string, f engine.Format, opts NormalizeOptions, rep 
 		args = append(args, "-ss", secs(opts.TrimHeadMs))
 	}
 	args = append(args, "-i", src)
-	if opts.NoAudio {
-		args = append(args, "-f", "lavfi", "-i",
-			fmt.Sprintf("anullsrc=r=%d:cl=stereo", f.SampleRate))
+
+	// El sonido de al lado y los subtítulos de al lado entran como entradas
+	// aparte. El recorte de cabeza se aplica a cada una: si no, el audio
+	// llegaría corrido justo lo que se quitó del principio.
+	entradaAudio, entradaSub := 0, -1
+	if opts.AudioSidecar != "" {
+		if opts.TrimHeadMs > 0 {
+			args = append(args, "-ss", secs(opts.TrimHeadMs))
+		}
+		args = append(args, "-i", opts.AudioSidecar)
+		entradaAudio = 1
 	}
-	if keep := opts.SourceDurationMs - opts.TrimHeadMs - opts.TrimTailMs; keep > 0 && (opts.TrimTailMs > 0 || opts.TrimHeadMs > 0) {
+	if withCaptions && opts.SubtitleSidecar != "" {
+		args = append(args, "-i", opts.SubtitleSidecar)
+		entradaSub = entradaAudio + 1
+	}
+
+	keep := opts.SourceDurationMs - opts.TrimHeadMs - opts.TrimTailMs
+	switch {
+	case keep > 0 && (opts.TrimTailMs > 0 || opts.TrimHeadMs > 0):
+		args = append(args, "-t", secs(keep))
+	case keep > 0 && opts.AudioSidecar != "":
+		// Manda la imagen: un archivo de sonido más largo que el video no
+		// alarga la copia de casa.
 		args = append(args, "-t", secs(keep))
 	}
 
 	args = append(args, "-map", "0:v:0", "-vf", rep.VideoFilter)
-	if opts.NoAudio {
-		args = append(args, "-map", "1:a:0", "-shortest")
-	} else {
-		args = append(args, "-map", "0:a:0", "-af", rep.AudioFilter)
-	}
-	if withCaptions && opts.KeepCaptions {
+	args = append(args, "-map", fmt.Sprintf("%d:a:%d", entradaAudio, opts.audioTrackIndex()), "-af", rep.AudioFilter)
+	switch {
+	case entradaSub >= 0:
+		args = append(args, "-map", fmt.Sprintf("%d:s:0", entradaSub), "-c:s", subtitleCodec(dst))
+	case withCaptions && opts.KeepCaptions:
 		args = append(args, "-map", "0:s?", "-c:s", subtitleCodec(dst))
-	} else {
+	default:
 		args = append(args, "-sn")
 	}
 	args = append(args, "-dn", "-map_metadata", "0", "-map_chapters", "-1")
@@ -238,6 +273,15 @@ func normalizeArgs(src, dst string, f engine.Format, opts NormalizeOptions, rep 
 	}
 	args = append(args, opts.ExtraOutputArgs...)
 	return append(args, dst)
+}
+
+// audioTrackIndex es la pista que se mapea: la elegida cuando el sonido sale
+// del propio archivo, y la única que hay cuando sale del archivo de al lado.
+func (o NormalizeOptions) audioTrackIndex() int {
+	if o.AudioSidecar != "" || o.AudioTrack < 0 {
+		return 0
+	}
+	return o.AudioTrack
 }
 
 // videoConform es el conformado de geometría y cuadros: cabe siempre,
@@ -293,9 +337,12 @@ type loudness struct {
 
 // measureLoudness es la pasada de medición: no escribe nada, solo pregunta
 // cuánto suena el archivo.
-func measureLoudness(ctx context.Context, ffmpeg, path string, targetLUFS, truePeak float64) (loudness, error) {
+func measureLoudness(ctx context.Context, ffmpeg, path string, track int, targetLUFS, truePeak float64) (loudness, error) {
 	var out loudness
-	args := []string{"-nostdin", "-hide_banner", "-i", path, "-map", "0:a:0",
+	if track < 0 {
+		track = 0
+	}
+	args := []string{"-nostdin", "-hide_banner", "-i", path, "-map", fmt.Sprintf("0:a:%d", track),
 		"-af", fmt.Sprintf("loudnorm=I=%s:TP=%s:LRA=11:print_format=json", num(targetLUFS), num(truePeak)),
 		"-f", "null", "-"}
 	cmd := exec.CommandContext(ctx, ffmpeg, args...)

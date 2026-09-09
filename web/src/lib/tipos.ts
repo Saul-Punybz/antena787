@@ -210,7 +210,32 @@ export interface Guia {
 
 export type EstadoMaterial = 'listo' | 'aún no listo para aire' | 'cuarentena'
 
-export interface TituloDeBiblioteca {
+/** Una pista de sonido de un archivo (F1-60). El índice es el que manda el servidor. */
+export interface PistaDeAudio {
+  indice: number
+  /** Código del idioma tal como viene del archivo: "es", "spa", "en", "eng", "und"… */
+  idioma: string
+  canales: number
+  titulo: string
+}
+
+/**
+ * El sonido de un archivo: la lista de pistas, cuál sale al aire y de dónde
+ * salieron el audio y los subtítulos si vinieron en un archivo de al lado
+ * (F1-58 a F1-62). Todo opcional: una respuesta vieja sigue pintando igual.
+ */
+export interface AudioDelMaterial {
+  /** El archivo en sí, para PUT /material/{id}. */
+  material_id?: number
+  pistas_audio?: PistaDeAudio[]
+  pista_audio_aire?: number
+  /** Ruta del archivo de audio de al lado; vacío cuando no hubo. */
+  audio_sidecar?: string
+  /** Ruta del archivo de subtítulos de al lado; vacío cuando no hubo. */
+  subtitulos_sidecar?: string
+}
+
+export interface TituloDeBiblioteca extends AudioDelMaterial {
   id: number
   nombre: string
   tipo: string
@@ -226,13 +251,27 @@ export interface TituloDeBiblioteca {
   regla_hasta?: DiaEmision | null
 }
 
-export interface EpisodioDeBiblioteca {
+export interface EpisodioDeBiblioteca extends AudioDelMaterial {
   id: number
   temporada: number
   numero: number
   nombre: string
   duracion_ms: number
   estado_material: EstadoMaterial
+}
+
+/** Cuerpo de PUT /material/{id}: por ahora, cambiar la pista que sale al aire. */
+export interface CambioDeMaterial {
+  pista_audio_aire?: number
+}
+
+/**
+ * Lo que contesta PUT /material/{id}. Solo se leen estos campos: el resto de
+ * las medidas del archivo no las usa ninguna pantalla todavía.
+ */
+export interface MaterialDeAudio extends AudioDelMaterial {
+  id?: number
+  estado_material?: EstadoMaterial
 }
 
 export interface FichaDeTitulo extends TituloDeBiblioteca {
@@ -245,6 +284,12 @@ export interface EnCuarentena {
   titulo: string
   motivo_en_cristiano: string
   creado: Instante
+  /**
+   * Por qué quedó parado, en clave: "sin_audio" y los demás. "sin_audio" no
+   * tiene salida por la vía de dejarlo pasar (F1-59): se arregla poniendo el
+   * audio al lado.
+   */
+  motivo_codigo?: string
 }
 
 // ── importar desde la hoja ────────────────────────────────────────────

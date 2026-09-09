@@ -609,9 +609,12 @@ func TestF1_10_ErrorDeLecturaVaACuarentena(t *testing.T) {
 
 // TestF1_10_SinAudioVaACuarentena es la otra mitad: un archivo con imagen y
 // sin pista de sonido no se da por listo solo. Queda en cuarentena con su
-// motivo en cristiano, y si una persona lo deja pasar bajo su
-// responsabilidad, la normalización le pone el silencio de casa
-// (NormalizeOptions.NoAudio).
+// motivo en cristiano.
+//
+// Desde la decisión del 9 de septiembre de 2026 (F1-58 y F1-59) la cuarentena
+// es además definitiva mientras no aparezca el sonido: no hay «dejarlo pasar»
+// que valga, porque todo lo que sale al aire lleva audio. Lo que sí lo saca
+// de ahí es poner un archivo de sonido con el mismo nombre al lado.
 func TestF1_10_SinAudioVaACuarentena(t *testing.T) {
 	ffmpeg, ffprobe := tools(t)
 	dir := t.TempDir()

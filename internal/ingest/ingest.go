@@ -28,11 +28,20 @@ import (
 	"time"
 )
 
+// Los códigos de motivo. El motivo en cristiano es para la persona; el
+// código es para el programa, que a veces tiene que hacer algo distinto
+// según por qué se paró un archivo. Hoy hay uno solo: el material sin
+// sonido, que no tiene botón de «dejarlo pasar» porque todo lo que sale al
+// aire lleva audio (F1-59).
+const MotivoSinAudio = "sin_audio"
+
 // PlainError es un error con su motivo escrito para una persona que no es
 // técnica. Reason es lo que se muestra en pantalla y lo que se guarda en
-// motivo_en_cristiano; Err es el detalle para el registro.
+// motivo_en_cristiano; Code es el código de motivo —vacío en casi todos— y
+// Err es el detalle para el registro.
 type PlainError struct {
 	Reason string
+	Code   string
 	Err    error
 }
 
@@ -48,6 +57,36 @@ func (e *PlainError) Unwrap() error { return e.Err }
 // Plainf arma un PlainError con el motivo ya formateado.
 func Plainf(cause error, format string, args ...any) *PlainError {
 	return &PlainError{Reason: fmt.Sprintf(format, args...), Err: cause}
+}
+
+// Plainc arma un PlainError con su código de motivo puesto.
+func Plainc(cause error, code, format string, args ...any) *PlainError {
+	return &PlainError{Reason: fmt.Sprintf(format, args...), Code: code, Err: cause}
+}
+
+// Motivo devuelve el código de motivo de un error, o cadena vacía si no
+// lleva ninguno.
+func Motivo(err error) string {
+	if err == nil {
+		return ""
+	}
+	var p *PlainError
+	if errors.As(err, &p) {
+		return p.Code
+	}
+	return ""
+}
+
+// EsSinAudio dice si el archivo se paró por no traer sonido. Es lo que mira
+// quien pinta el botón de «dejarlo pasar bajo mi responsabilidad»: en este
+// caso no se pinta, porque no hay forma de sacar al aire algo mudo (F1-59).
+func EsSinAudio(err error) bool { return Motivo(err) == MotivoSinAudio }
+
+// TextoSinAudio reconoce el motivo de «no trae sonido» ya guardado en
+// motivo_en_cristiano. Hace falta porque después de reiniciar solo queda el
+// texto: el código del error no se guarda en ninguna columna.
+func TextoSinAudio(reason string) bool {
+	return strings.Contains(reason, "no trae sonido") && strings.Contains(reason, "pon a su lado")
 }
 
 // Plain devuelve el motivo en cristiano de un error, o su texto si el error

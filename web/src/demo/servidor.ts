@@ -10,6 +10,7 @@ import type {
   Ajustes,
   Alarma,
   ElementoDelPlan,
+  EpisodioDeBiblioteca,
   Estado,
   FilaDelPlan,
   FranjaSemana,
@@ -18,6 +19,7 @@ import type {
   Regla,
   ResumenDeImportacion,
   SemanaDelPlan,
+  TituloDeBiblioteca,
 } from '../lib/tipos'
 import {
   AHORA_BASE,
@@ -39,6 +41,13 @@ let reglas: Regla[] = reglasDemo.map((r) => ({ ...r }))
 let ajustes: Ajustes = { ...ajustesDemo }
 const dejadosPasar = new Set<number>()
 let siguienteId = 1000
+
+/**
+ * La pista de sonido que alguien eligió para un archivo (F1-61). El servidor
+ * de verdad lo guarda en el media_asset y lo manda a rehacer; aquí basta con
+ * acordarse y contestar «aún no listo para aire» de ahí en adelante.
+ */
+const pistaElegida = new Map<number, number>()
 
 /**
  * Lo que alguien movió a mano en la parrilla. El servidor de verdad lo guarda
@@ -452,6 +461,30 @@ function importarHoja(texto: string): ResumenDeImportacion {
   }
 }
 
+// ── el sonido de los archivos ─────────────────────────────────────────
+
+type ConAudio = TituloDeBiblioteca | EpisodioDeBiblioteca
+
+/** Aplica encima lo que alguien eligió a mano para ese archivo. */
+function conPistaElegida<T extends ConAudio>(m: T): T {
+  const id = m.material_id
+  if (id === undefined || !pistaElegida.has(id)) return m
+  return {
+    ...m,
+    pista_audio_aire: pistaElegida.get(id),
+    estado_material: 'aún no listo para aire',
+  }
+}
+
+/** Busca un archivo por su número, sea el del título o el de un episodio. */
+function materialPorId(id: number): ConAudio | null {
+  const titulo = titulos.find((t) => t.material_id === id)
+  if (titulo) return titulo
+  const dueno = titulos.find((t) => t.id === Math.floor(id / 1000))
+  if (!dueno) return null
+  return episodiosDe(dueno).find((e) => e.material_id === id) ?? null
+}
+
 // ── el ruteador ───────────────────────────────────────────────────────
 
 function json(cuerpo: unknown, estadoHttp = 200): Response {
@@ -570,12 +603,15 @@ export async function responder(ruta: string, init?: RequestInit): Promise<Respo
     return json(nuevo ? nuevo.item : bloque.item)
   }
   if (p === '/guia') return json(guia(url.searchParams.get('dia') ?? '2026-09-08'))
-  if (p === '/biblioteca') return json(titulos)
+  if (p === '/biblioteca') return json(titulos.map(conPistaElegida))
   const tituloId = p.match(/^\/biblioteca\/(\d+)$/)
   if (tituloId) {
     const t = titulos.find((x) => x.id === Number(tituloId[1]))
     if (!t) return json({ error: 'Ese título no está en la biblioteca.' }, 404)
-    return json({ ...t, lista_de_episodios: episodiosDe(t) })
+    return json({
+      ...conPistaElegida(t),
+      lista_de_episodios: episodiosDe(t).map(conPistaElegida),
+    })
   }
   if (p === '/cuarentena') return json(cuarentena.filter((c) => !dejadosPasar.has(c.id)))
   const pasar = p.match(/^\/cuarentena\/(\d+)\/dejar-pasar$/)
@@ -587,6 +623,26 @@ export async function responder(ruta: string, init?: RequestInit): Promise<Respo
     return json({ ok: true, dejado_pasar_por: quien })
   }
   if (p === '/material/subir') return json({ recibidos: 1, estado: 'ingiriendo' }, 202)
+  const materialId = p.match(/^\/material\/(\d+)$/)
+  if (materialId && metodo === 'PUT') {
+    const id = Number(materialId[1])
+    const m = materialPorId(id)
+    if (!m) return json({ error: 'Ese archivo ya no está en la biblioteca.' }, 404)
+    if (typeof cuerpo?.pista_audio_aire === 'number') {
+      const pista = Number(cuerpo.pista_audio_aire)
+      const pistas = m.pistas_audio ?? []
+      if (!pistas.some((x) => x.indice === pista))
+        return json(
+          {
+            error: 'Ese archivo no trae esa pista de sonido. Escoge una de las que tiene.',
+            campo: 'pista_audio_aire',
+          },
+          400,
+        )
+      pistaElegida.set(id, pista)
+    }
+    return json(conPistaElegida(materialPorId(id) as ConAudio))
+  }
   if (p === '/importar/hoja') return json(importarHoja(String(cuerpo?.texto ?? '')))
   if (p === '/importar/confirmar-relevos') return json({ ok: true })
   if (p === '/relleno')

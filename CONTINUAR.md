@@ -1,11 +1,11 @@
 # CONTINUAR — dónde quedamos y qué sigue
 
-_Última sesión: 9 de septiembre de 2026. Siguiente: la que venga._
+_Última sesión: 9 de septiembre de 2026 (dos tandas). Siguiente: la que venga._
 
 ## Dónde estamos
 
 - **F0 cerrada.** Reporte en `docs/f0/REPORTE-mac-m4-2026-09-08.md`.
-- **F1 construida y verificada.** Los 57 criterios de `docs/ACEPTACION.md`
+- **F1 construida y verificada.** Los 57 criterios (63 desde la segunda tanda) de `docs/ACEPTACION.md`
   recorridos uno por uno con pruebas (`f1verif_*_test.go` en cada paquete);
   informe completo en **`docs/f1/VERIFICACION-F1-2026-09-09.md`**. De 18
   defectos encontrados, 16 corregidos en la misma sesión y 2 diferidos con
@@ -43,19 +43,16 @@ go test ./... -count=1           # todo debe estar verde
 
 ## Lo próximo, en orden
 
-1. **Audio de todo el material (decisión de Saul, 9 sept): todo lo que sale
-   al aire lleva audio.** Construir, en este orden:
-   (a) **archivos sidecar** en la carpeta vigilada: `programa.mp4` +
-   `programa.wav`/`.m4a` (audio) y `programa.srt`/`.scc` (subtítulos) se
-   asocian por nombre y se muxean al normalizar — tamaño S;
-   (b) **selector de pista** en Biblioteca cuando el archivo trae varias
-   pistas de audio, con idioma cuando viene etiquetado y un default por canal
-   (primero `es`, luego la primera) — tamaño M;
-   (c) decidir si la salida «dejarlo pasar» de un archivo mudo se quita del
-   todo o se deja como excepción explícita.
-   **Reservar en el esquema** el sitio para una segunda pista al aire (SAP:
-   español/inglés) que el motor de F2 llevará al mux; no mezclar pistas ni
-   armar programas de varios clips (eso es edición, antes de la carpeta).
+1. ~~Audio de todo el material~~ **Hecho (9 sept, segunda tanda):** criterios
+   F1-58 a F1-63 en `ACEPTACION.md`, esquema **versión 3** (`pistas_audio`,
+   `pista_audio_aire`, `pista_audio_sap` reservado para F2, `audio_sidecar`,
+   `subtitulos_sidecar`). Archivos de al lado por nombre (audio `.wav/.m4a/
+   .aac/.mp3/.flac`, subtítulos `.srt/.vtt` muxeados, `.scc` guardado para
+   F2), reingesta sola cuando el audio llega tarde, selector de pista en
+   Biblioteca (default por `idioma_audio_preferido`, Ajustes → Audio), y un
+   archivo mudo **no se puede soltar**: todo lo que sale al aire lleva audio.
+   Pendiente menor: `GET /cuarentena` no manda `titulo` (la interfaz lo declara
+   obligatorio); arreglo sugerido en `docs/API.md`.
 2. **Asistente de instalación con lógica real en la interfaz** (issue #5): la
    API `POST /instalacion/paso/{n}` funciona para los 9 pasos; falta la
    pantalla paso a paso (la prueba de barras del paso 5 «llega en F2»).

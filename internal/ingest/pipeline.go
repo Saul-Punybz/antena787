@@ -31,6 +31,23 @@ type Deps struct {
 
 	ComputeHash bool // calcular el SHA-256 (lee el archivo entero)
 
+	// Preferencias son el idioma en el que el canal quiere el aire y la
+	// pista que haya elegido una persona. El valor cero pide español, que es
+	// lo que se emite aquí (F1-60).
+	Preferencias Preferencias
+
+	// SidecarStableFor es cuánto tiene que llevar quieto un archivo de al
+	// lado para darlo por copiado del todo. 0 = WatchStableFor, los mismos
+	// diez segundos de la carpeta vigilada (F1-01).
+	SidecarStableFor time.Duration
+
+	// Persist es opcional. Cuando está, el ingest guarda el archivo en
+	// cuanto termina de medirlo —SaveAsset le pone el ID— y anota ahí mismo
+	// las pistas de sonido que trae, cuál va al aire y de dónde salieron el
+	// sonido y los subtítulos de al lado (F1-58, F1-60, F1-62). Cuando no
+	// está, el ingest no toca la base y quien llama guarda como siempre.
+	Persist Persist
+
 	Retry RetryPolicy      // reintento de fallos de lectura pasajeros
 	Now   func() time.Time // reloj, para las pruebas
 }
@@ -82,10 +99,35 @@ func Ingest(ctx context.Context, d Deps, path string) (model.MediaAsset, model.T
 	}
 	var title model.Title
 
+	// Lo que el ingest averigua del sonido. Se anota en la base tanto si el
+	// archivo acaba listo como si acaba en cuarentena: en Biblioteca se ve
+	// igual, y quien mire el archivo mudo tiene que poder ver que sí trae
+	// tres pistas o que el audio de al lado estaba a medio copiar.
+	var (
+		medido       bool
+		pistas       []AudioTrack
+		pistaAire    int
+		audioSidecar string
+		subtSidecar  string
+	)
+	anota := func() {
+		if d.Persist == nil || !medido {
+			return
+		}
+		if err := d.Persist.SaveAsset(ctx, &asset); err != nil {
+			return
+		}
+		// Que la base falle al anotar esto no manda el material a
+		// cuarentena: el archivo está bien, lo que falta es el apunte.
+		_ = d.Persist.SetAudioTracks(ctx, asset.ID, pistas, pistaAire)
+		_ = d.Persist.SetSidecars(ctx, asset.ID, audioSidecar, subtSidecar)
+	}
+
 	fail := func(err error) (model.MediaAsset, model.Title, []model.Episode, error) {
 		asset.State = model.AssetQuarantine
 		asset.PlainReason = Plain(err)
 		asset.UpdatedAt = d.now()
+		anota()
 		return asset, title, nil, err
 	}
 
@@ -124,6 +166,9 @@ func Ingest(ctx context.Context, d Deps, path string) (model.MediaAsset, model.T
 	asset.DurationMs = m.DurationMs
 	asset.HasCaptions = m.HasCaptions
 	asset.CaptionFormat = m.CaptionFormat
+	medido = true
+	pistas = m.AudioTracks
+	pistaAire = PistaDeAire(pistas, d.Preferencias)
 
 	if !m.HasVideo && !m.HasAudio {
 		return fail(Plainf(nil, "el archivo %q no tiene ni imagen ni sonido: no hay nada que emitir", trimName(path)))
@@ -134,15 +179,31 @@ func Ingest(ctx context.Context, d Deps, path string) (model.MediaAsset, model.T
 	if err := retry.retry(ctx, func() error { return CheckDecodable(ctx, d.FFmpeg, path) }); err != nil {
 		return fail(err)
 	}
-	// Sin sonido detectable no se da por listo solo (F1-10). No es un
-	// archivo roto —puede ser material mudo a propósito— así que tampoco se
-	// descarta: queda en cuarentena con su motivo en cristiano y decide una
-	// persona con el botón de "dejarlo pasar bajo mi responsabilidad" (PRD
-	// §9 paso 1). Si lo deja pasar, la normalización le pone el silencio de
-	// casa (NormalizeOptions.NoAudio, que sale de NormalizeOptionsFor) y el
-	// archivo entra al formato de casa como cualquier otro.
+	// Sin sonido no se sale al aire (F1-59). Pero antes de parar el archivo
+	// se mira si el sonido vino al lado, en un archivo con el mismo nombre:
+	// eso es lo normal en el material que llega con la imagen y el audio
+	// por separado, y en ese caso se muxea y el archivo sigue su camino
+	// (F1-58).
 	if !m.HasAudio {
-		return fail(Plainf(nil, "%q no trae sonido: revisa el máster antes de programarlo", trimName(path)))
+		hallado, hay := FindAudioSidecar(path)
+		switch {
+		case !hay:
+			return fail(Plainc(nil, MotivoSinAudio,
+				"«%s» no trae sonido: pon a su lado un archivo de audio con el mismo nombre (.wav, .m4a, .aac, .mp3 o .flac) y lo vuelvo a procesar",
+				trimName(path)))
+		case !StableSidecar(hallado, d.SidecarStableFor, d.now()):
+			return fail(Plainc(nil, MotivoSinAudio,
+				"«%s» no trae sonido y «%s», que está a su lado, todavía se está copiando: en cuanto termine lo vuelvo a procesar",
+				trimName(path), trimName(hallado)))
+		}
+		sm, serr := Probe(ctx, d.FFprobe, hallado)
+		if serr != nil || !sm.HasAudio {
+			return fail(Plainc(serr, MotivoSinAudio,
+				"«%s» no trae sonido y «%s», el que está a su lado, tampoco se oye: ponle uno con sonido y lo vuelvo a procesar",
+				trimName(path), trimName(hallado)))
+		}
+		audioSidecar = hallado
+		asset.AudioChannels = sm.AudioChannels
 	}
 
 	if d.ComputeHash {
@@ -171,9 +232,11 @@ func Ingest(ctx context.Context, d Deps, path string) (model.MediaAsset, model.T
 
 	// 4 · subtítulos que vengan al lado. Un .srt roto no tumba el ingest: se
 	// avisa y el archivo entra sin él.
-	if sidecar, ok := FindSidecar(path); ok {
+	if sidecar, ok := FindSubtitleSidecar(path); ok {
 		if err := AttachCaptions(&asset, sidecar); err != nil {
 			asset.PlainReason = Plain(err)
+		} else {
+			subtSidecar = sidecar
 		}
 	}
 
@@ -188,7 +251,26 @@ func Ingest(ctx context.Context, d Deps, path string) (model.MediaAsset, model.T
 	asset.State = model.AssetReady
 	asset.NormalizeState = NormalizePending
 	asset.UpdatedAt = d.now()
+	anota()
 	return asset, title, episodes, nil
+}
+
+// ReingestSidecar vuelve a procesar el video al que acompaña un archivo de
+// al lado que acaba de aparecer. Es lo que hace falta cuando el sonido llega
+// después de que el video ya quedó en cuarentena por mudo: la carpeta
+// vigilada avisa del .wav con EventSidecar, y esto vuelve a correr el ingest
+// del video entero, que ahora sí encuentra el sonido y sale de cuarentena
+// (F1-58).
+//
+// El archivo de al lado nunca entra por su cuenta a la biblioteca: si no
+// acompaña a ningún video, esto lo dice y no hace nada.
+func ReingestSidecar(ctx context.Context, d Deps, sidecarPath string) (model.MediaAsset, model.Title, []model.Episode, error) {
+	video, ok := VideoForSidecar(sidecarPath)
+	if !ok {
+		return model.MediaAsset{}, model.Title{}, nil,
+			Plainf(nil, "«%s» no acompaña a ningún video de la carpeta", trimName(sidecarPath))
+	}
+	return Ingest(ctx, d, video)
 }
 
 // cardToModel pasa la ficha a los tipos del dominio. El media_asset_id lo
@@ -220,19 +302,53 @@ func cardToModel(c Card, channelID *int64) (model.Title, []model.Episode) {
 }
 
 // NormalizeOptionsFor arma las opciones de normalización de un asset ya
-// ingerido: lo que se recorta, si hay que desentrelazar y qué hacer con los
-// subtítulos. Es lo que le pasa la cola a Normalize.
+// ingerido: lo que se recorta, si hay que desentrelazar, qué pista de sonido
+// sale al aire y qué hacer con los subtítulos. Es lo que le pasa la cola a
+// Normalize.
 //
-// Un archivo sin sonido solo llega hasta aquí si una persona lo dejó pasar
-// bajo su responsabilidad (F1-10): en ese caso se marca NoAudio y la copia de
-// casa sale con el silencio sintetizado del perfil, en vez de sin pista.
-func NormalizeOptionsFor(a model.MediaAsset, m Measure) NormalizeOptions {
+// prefs es opcional a propósito —quien no tenga nada que decir la omite y
+// todo sigue igual— y es por donde entran el idioma preferido del canal, la
+// pista que eligió una persona y las rutas de los archivos de al lado que ya
+// estén guardadas en el media_asset (F1-58, F1-60, F1-62). Lo que no venga
+// en prefs se busca en la carpeta del archivo.
+func NormalizeOptionsFor(a model.MediaAsset, m Measure, prefs ...Preferencias) NormalizeOptions {
+	var p Preferencias
+	if len(prefs) > 0 {
+		p = prefs[0]
+	}
 	o := NormalizeOptions{
 		SourceDurationMs: a.DurationMs,
 		Deinterlace:      m.Interlaced,
 		KeepCaptions:     m.HasCaptions && m.CaptionStream >= 0,
 		EmbeddedCEA608:   m.CaptionFormat == "cea-608",
-		NoAudio:          !m.HasAudio,
+		AudioTrack:       PistaDeAire(m.AudioTracks, p),
+	}
+
+	// Sonido de al lado: solo hace falta cuando el archivo no trae pista
+	// propia. Si el media_asset ya sabe de dónde salió, manda eso.
+	if !m.HasAudio {
+		o.AudioSidecar = p.AudioSidecar
+		if o.AudioSidecar == "" {
+			if s, ok := FindAudioSidecar(a.Path); ok {
+				o.AudioSidecar = s
+			}
+		}
+	}
+
+	// Subtítulos de al lado: los .srt y los .vtt se meten en la copia de
+	// casa como pista de texto; los .scc se quedan guardados tal cual para
+	// que F2 los reinserte como CEA-608 (F1-62).
+	sub := p.SubtitulosSidecar
+	if sub == "" && a.ExternalCaptions != nil {
+		sub = *a.ExternalCaptions
+	}
+	if sub == "" {
+		if s, ok := FindSubtitleSidecar(a.Path); ok {
+			sub = s
+		}
+	}
+	if SubtituloMuxeable(sub) {
+		o.SubtitleSidecar = sub
 	}
 	// El material marcado como negro intencional no se recorta: abre en
 	// negro a propósito (PRD §9 paso 1).

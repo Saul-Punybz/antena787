@@ -140,7 +140,10 @@ func openDB(path string) (*sql.DB, error) {
 func (s *Store) wire() {
 	s.Channel = &ChannelRepo{db: s.db}
 	s.Output = &OutputRepo{db: s.db}
-	s.Media = &MediaAssetRepo{db: s.db}
+	s.Audit = &AuditRepo{db: s.db}
+	// La biblioteca anota en la bitácora lo que se cambia a mano (la pista de
+	// sonido que va al aire), así que necesita la cadena de auditoría.
+	s.Media = &MediaAssetRepo{db: s.db, audit: s.Audit}
 	s.Title = &TitleRepo{db: s.db}
 	s.Episode = &EpisodeRepo{db: s.db}
 	s.Filler = &FillerRepo{db: s.db}
@@ -148,7 +151,6 @@ func (s *Store) wire() {
 	s.Rule = &ScheduleRuleRepo{db: s.db}
 	s.Deck = &DeckRepo{db: s.db}
 	s.Incident = &IncidentRepo{db: s.db}
-	s.Audit = &AuditRepo{db: s.db}
 	// El plan anota en la bitácora lo que se toca a mano (fijar y soltar un
 	// ítem), así que necesita la cadena de auditoría.
 	s.Plan = &PlanRepo{db: s.db, audit: s.Audit}

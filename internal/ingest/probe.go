@@ -42,6 +42,12 @@ type Measure struct {
 	AudioChannels int
 	SampleRate    int
 
+	// AudioTracks son todas las pistas de sonido del archivo, en el orden en
+	// que vienen. La primera es la que describen AudioCodec, AudioChannels y
+	// SampleRate; las demás existen para que una persona pueda elegir cuál
+	// sale al aire (F1-60).
+	AudioTracks []AudioTrack
+
 	DurationMs int64 // duración real al milisegundo (video; si no hay, formato)
 	BitRate    int64
 
@@ -50,6 +56,20 @@ type Measure struct {
 	CaptionStream int    // índice del stream de subtítulos; -1 si van dentro del video
 
 	Tags Tags
+}
+
+// AudioTrack es una pista de sonido del archivo tal como la ve ffprobe.
+// Index es su posición entre las pistas de sonido —la N de «a:N»—, no el
+// número de stream del contenedor: es lo que hay que decirle a ffmpeg para
+// elegirla. Language viene de la etiqueta del archivo, ya en minúsculas y
+// con «spa» y «eng» pasados a «es» y «en»; vacío cuando el archivo no lo
+// dice. Title es el nombre que le puso quien lo armó ("comentario",
+// "descriptivo", …), vacío si no trae.
+type AudioTrack struct {
+	Index    int
+	Language string
+	Channels int
+	Title    string
 }
 
 // Tags son las etiquetas embebidas que sirven para armar la ficha sin red.
@@ -278,6 +298,12 @@ func fill(m *Measure, raw probeJSON) {
 				}
 			}
 		case "audio":
+			m.AudioTracks = append(m.AudioTracks, AudioTrack{
+				Index:    len(m.AudioTracks),
+				Language: NormalizeLanguage(s.Tags["language"]),
+				Channels: s.Channels,
+				Title:    strings.TrimSpace(s.Tags["title"]),
+			})
 			if !m.HasAudio {
 				m.HasAudio = true
 				m.AudioCodec = s.CodecName
@@ -308,6 +334,34 @@ func fill(m *Measure, raw probeJSON) {
 // attachedPic descarta la carátula embebida, que ffprobe reporta como un
 // stream de video de un solo cuadro. No es la película.
 func (s probeStream) attachedPic() bool { return s.Disposition.AttachedPic == 1 }
+
+// NormalizeLanguage deja el idioma de una pista como lo usa el resto del
+// sistema: dos letras y en minúsculas. Los archivos vienen etiquetados de
+// todas las maneras —«spa», «Spanish», «es-PR»—, y «und» quiere decir que
+// nadie lo etiquetó, así que sale vacío.
+func NormalizeLanguage(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	if i := strings.IndexAny(s, "-_"); i > 0 {
+		s = s[:i]
+	}
+	switch s {
+	case "", "und", "unknown", "zxx", "mul", "mis":
+		return ""
+	case "spa", "esl", "spanish", "castellano", "español", "espanol":
+		return "es"
+	case "eng", "english", "ingles", "inglés":
+		return "en"
+	case "por", "portuguese":
+		return "pt"
+	case "fra", "fre", "french":
+		return "fr"
+	case "deu", "ger", "german":
+		return "de"
+	case "ita", "italian":
+		return "it"
+	}
+	return s
+}
 
 // captionName traduce el nombre de ffmpeg al que usa el resto del sistema.
 func captionName(codec string) string {

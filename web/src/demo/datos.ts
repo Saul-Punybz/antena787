@@ -12,6 +12,7 @@ import type {
   Canal,
   EnCuarentena,
   EpisodioDeBiblioteca,
+  PistaDeAudio,
   Regla,
   Salida,
   TituloDeBiblioteca,
@@ -280,6 +281,36 @@ const nombresProgramados = Array.from(
   new Set(Object.values(SEMANA_CATV).flat().filter(Boolean)),
 )
 
+// ── el sonido de los archivos de ejemplo ──────────────────────────────
+// El número del archivo (material_id) sale del título: el título mismo lleva
+// id * 1000 y sus episodios id * 1000 + n, que es lo que reparte episodiosDe.
+
+export const materialDeTitulo = (idTitulo: number): number => idTitulo * 1000
+
+/** Gaming Longplays llega con dos pistas: primero la inglesa, después la nuestra. */
+const PISTAS_INGLES_ESPANOL: PistaDeAudio[] = [
+  { indice: 1, idioma: 'eng', canales: 2, titulo: '' },
+  { indice: 2, idioma: 'spa', canales: 2, titulo: 'Doblaje' },
+]
+
+/** Kojak T1 E1 llega con la pista de casa primero. */
+const PISTAS_ESPANOL_INGLES: PistaDeAudio[] = [
+  { indice: 1, idioma: 'spa', canales: 2, titulo: '' },
+  { indice: 2, idioma: 'eng', canales: 6, titulo: 'Original' },
+]
+
+/** Títulos que traen varias pistas o un archivo de al lado. */
+const AUDIO_POR_TITULO: Record<
+  string,
+  { pistas?: PistaDeAudio[]; aire?: number; audio?: string; subtitulos?: string }
+> = {
+  'Gaming Longplays': { pistas: PISTAS_INGLES_ESPANOL, aire: 2 },
+  Voyagesea: {
+    audio: 'D:\\Contenido\\Voyagesea\\voyagesea.wav',
+    subtitulos: 'D:\\Contenido\\Voyagesea\\voyagesea.srt',
+  },
+}
+
 export const titulos: TituloDeBiblioteca[] = [
   ...nombresProgramados,
   ...SIN_PROGRAMAR,
@@ -287,8 +318,14 @@ export const titulos: TituloDeBiblioteca[] = [
   const regla = reglas.find((r) => r.titulo === nombre)
   const enCuarentena = nombre === 'Space Cobra'
   const sinNormalizar = nombre === 'Cybersix'
+  const audio = AUDIO_POR_TITULO[nombre]
   return {
     id: i + 1,
+    material_id: materialDeTitulo(i + 1),
+    pistas_audio: audio?.pistas ?? [],
+    pista_audio_aire: audio?.aire ?? 1,
+    audio_sidecar: audio?.audio ?? '',
+    subtitulos_sidecar: audio?.subtitulos ?? '',
     nombre,
     tipo: nombre === 'RadioOnce Live!' ? 'programa' : 'serie',
     sinopsis:
@@ -314,14 +351,23 @@ export function episodiosDe(titulo: TituloDeBiblioteca): EpisodioDeBiblioteca[] 
   const out: EpisodioDeBiblioteca[] = []
   const cuantos = Math.min(titulo.episodios, 24)
   for (let i = 0; i < cuantos; i++) {
+    // Kojak es el ejemplo con sonido: el primer episodio trae dos pistas y el
+    // segundo llegó mudo, con el audio en un archivo de al lado.
+    const dosPistas = titulo.nombre === 'Kojak' && i === 0
+    const conAudioAlLado = titulo.nombre === 'Kojak' && i === 1
     out.push({
       id: titulo.id * 1000 + i + 1,
+      material_id: titulo.id * 1000 + i + 1,
       temporada: 1 + Math.floor(i / 12),
       numero: (i % 12) + 1,
       nombre: `Episodio ${i + 1}`,
       duracion_ms: titulo.duracion_ms,
       estado_material:
         i === 3 && titulo.nombre === 'Zorro 57' ? 'aún no listo para aire' : 'listo',
+      pistas_audio: dosPistas ? PISTAS_ESPANOL_INGLES : [],
+      pista_audio_aire: 1,
+      audio_sidecar: conAudioAlLado ? 'D:\\Contenido\\Kojak\\kojak-t1e02.m4a' : '',
+      subtitulos_sidecar: conAudioAlLado ? 'D:\\Contenido\\Kojak\\kojak-t1e02.srt' : '',
     })
   }
   return out
@@ -332,7 +378,8 @@ export const cuarentena: EnCuarentena[] = [
     id: 9001,
     ruta: 'D:\\Contenido\\Space Cobra\\space-cobra-e04.mp4',
     titulo: 'Space Cobra · episodio 4',
-    motivo_en_cristiano: 'Este video no tiene sonido.',
+    motivo_en_cristiano: 'Este video no trae sonido.',
+    motivo_codigo: 'sin_audio',
     creado: '2026-09-03T14:12:00Z',
   },
   {
@@ -341,6 +388,7 @@ export const cuarentena: EnCuarentena[] = [
     titulo: 'Promo de verano',
     motivo_en_cristiano:
       'El video se corta a los 12 segundos: el archivo llegó incompleto.',
+    motivo_codigo: 'incompleto',
     creado: '2026-09-02T19:40:00Z',
   },
   {
@@ -349,6 +397,7 @@ export const cuarentena: EnCuarentena[] = [
     titulo: 'Kojak · T2 E7',
     motivo_en_cristiano:
       'Falló dos veces al aire con más de cinco minutos de diferencia.',
+    motivo_codigo: 'fallo_al_aire',
     creado: '2026-08-30T02:05:00Z',
   },
 ]
@@ -398,4 +447,6 @@ export const ajustes: Ajustes = {
   clave_tmdb: '',
   // Guía: además del archivo, mandarla a una dirección.
   guia_destino_http: '',
+  // Audio: con qué idioma se queda cuando el archivo trae varias pistas.
+  idioma_audio_preferido: 'es',
 }

@@ -35,6 +35,20 @@ var (
 // puede no mandarlas.
 func propiedadesObligatorias(t *testing.T, nombre string) []string {
 	t.Helper()
+	return propiedadesDe(t, nombre, true)
+}
+
+// propiedadesTodas devuelve todas las propiedades de una interfaz, también
+// las opcionales. Sirve para lo que es opcional en el contrato pero tiene
+// que estar cuando hay algo que mandar: el sonido de un archivo que sí trae
+// pistas (F1-60).
+func propiedadesTodas(t *testing.T, nombre string) []string {
+	t.Helper()
+	return propiedadesDe(t, nombre, false)
+}
+
+func propiedadesDe(t *testing.T, nombre string, soloObligatorias bool) []string {
+	t.Helper()
 	raw, err := os.ReadFile(tiposTS)
 	if err != nil {
 		t.Fatalf("no pude leer el contrato de la interfaz: %v", err)
@@ -59,7 +73,7 @@ func propiedadesObligatorias(t *testing.T, nombre string) []string {
 				continue
 			}
 			if hondura == 0 {
-				if p := rePropiedad.FindStringSubmatch(linea); p != nil && p[2] != "?" {
+				if p := rePropiedad.FindStringSubmatch(linea); p != nil && (p[2] != "?" || !soloObligatorias) {
 					out = append(out, p[1])
 				}
 			}
@@ -101,6 +115,23 @@ func exige(t *testing.T, quien string, raw []byte, interfaz string, salvo ...str
 		}
 		t.Errorf("%s no manda %q, que %s declara obligatorio en web/src/lib/tipos.ts",
 			quien, prop, interfaz)
+	}
+}
+
+// exigeTodas comprueba que el objeto trae todas las propiedades de la
+// interfaz, opcionales incluidas, menos las que se perdonen aparte.
+func exigeTodas(t *testing.T, quien string, raw []byte, interfaz string, salvo ...string) {
+	t.Helper()
+	tiene := clavesDe(t, raw)
+	perdonadas := map[string]bool{}
+	for _, s := range salvo {
+		perdonadas[s] = true
+	}
+	for _, prop := range propiedadesTodas(t, interfaz) {
+		if perdonadas[prop] || tiene[prop] {
+			continue
+		}
+		t.Errorf("%s no manda %q, que %s declara en web/src/lib/tipos.ts", quien, prop, interfaz)
 	}
 }
 
@@ -287,5 +318,95 @@ func TestLaBibliotecaDiceElEstadoDelMaterial(t *testing.T) {
 	uno, _ := eps[0].(map[string]any)
 	if uno["estado_material"] != EstadoNoListo {
 		t.Fatalf("el episodio a medio normalizar sale como %v", uno["estado_material"])
+	}
+}
+
+// ── el sonido de cada archivo (F1-58 a F1-62) ─────────────────────────
+
+// TestElServidorMandaElSonidoDeCadaArchivo es la otra mitad del contrato de
+// audio: cuando el archivo trae pistas, Biblioteca las manda —en el título y
+// en cada episodio— con todo lo que `AudioDelMaterial` declara, para que se
+// pueda pintar el selector de pista.
+func TestElServidorMandaElSonidoDeCadaArchivo(t *testing.T) {
+	c := nuevo(t).conClave().entrar()
+	ctx := context.Background()
+
+	deLaSerie := c.conAudio("/medios/Kojak S01E01.mkv", 1)
+	delTitulo := c.conAudio("/medios/Kojak - presentación.mkv", 0)
+
+	title := model.Title{Name: "Kojak con dos idiomas", Kind: model.TitleSeries, MediaAssetID: &delTitulo.ID}
+	if err := c.a.Store.Title.Insert(ctx, &title); err != nil {
+		t.Fatalf("no pude guardar el título: %v", err)
+	}
+	ep := model.Episode{TitleID: title.ID, Season: 1, Number: 1, Name: "El principio", MediaAssetID: &deLaSerie.ID}
+	if err := c.a.Store.Episode.Insert(ctx, &ep); err != nil {
+		t.Fatalf("no pude guardar el episodio: %v", err)
+	}
+
+	// La lista.
+	w := c.do("GET", "/api/v1/biblioteca", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("/biblioteca dio %d: %s", w.Code, w.Body.String())
+	}
+	var lista []json.RawMessage
+	c.json(w, &lista)
+	var enLista []byte
+	for _, uno := range lista {
+		if strings.Contains(string(uno), "Kojak con dos idiomas") {
+			enLista = uno
+		}
+	}
+	if enLista == nil {
+		t.Fatalf("la biblioteca no trae el título: %s", w.Body.String())
+	}
+	exigeTodas(t, "GET /biblioteca (un título con sonido)", enLista, "AudioDelMaterial")
+	compruebaElSonido(t, "GET /biblioteca", enLista, delTitulo.ID, 0)
+
+	// La ficha, con el episodio dentro.
+	w = c.do("GET", "/api/v1/biblioteca/"+itoa(title.ID), nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("/biblioteca/{id} dio %d: %s", w.Code, w.Body.String())
+	}
+	exigeTodas(t, "GET /biblioteca/{id}", w.Body.Bytes(), "AudioDelMaterial")
+	compruebaElSonido(t, "GET /biblioteca/{id}", w.Body.Bytes(), delTitulo.ID, 0)
+
+	episodio := primero(t, campo(t, w.Body.Bytes(), "lista_de_episodios"))
+	exigeTodas(t, "GET /biblioteca/{id} (un episodio)", episodio, "AudioDelMaterial")
+	compruebaElSonido(t, "GET /biblioteca/{id} (un episodio)", episodio, deLaSerie.ID, 1)
+}
+
+// compruebaElSonido mira que los campos de sonido digan lo que dice la base.
+func compruebaElSonido(t *testing.T, quien string, raw []byte, materialID int64, pistaAire int) {
+	t.Helper()
+	var got struct {
+		MaterialID  int64 `json:"material_id"`
+		PistasAudio []struct {
+			Indice  int    `json:"indice"`
+			Idioma  string `json:"idioma"`
+			Canales int    `json:"canales"`
+			Titulo  string `json:"titulo"`
+		} `json:"pistas_audio"`
+		PistaAudioAire    int    `json:"pista_audio_aire"`
+		AudioSidecar      string `json:"audio_sidecar"`
+		SubtitulosSidecar string `json:"subtitulos_sidecar"`
+	}
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("%s: la respuesta no se entiende: %v", quien, err)
+	}
+	if got.MaterialID != materialID {
+		t.Errorf("%s manda material_id %d y el archivo es el %d", quien, got.MaterialID, materialID)
+	}
+	if len(got.PistasAudio) != 2 {
+		t.Fatalf("%s manda %d pistas y el archivo trae dos: %s", quien, len(got.PistasAudio), raw)
+	}
+	if got.PistasAudio[1].Idioma != "es" || got.PistasAudio[1].Indice != 1 ||
+		got.PistasAudio[1].Canales != 2 || got.PistasAudio[1].Titulo == "" {
+		t.Errorf("%s no manda la segunda pista entera: %s", quien, raw)
+	}
+	if got.PistaAudioAire != pistaAire {
+		t.Errorf("%s dice que sale la pista %d y es la %d", quien, got.PistaAudioAire, pistaAire)
+	}
+	if got.AudioSidecar == "" || got.SubtitulosSidecar == "" {
+		t.Errorf("%s no dice de dónde salieron el sonido y los subtítulos de al lado: %s", quien, raw)
 	}
 }
