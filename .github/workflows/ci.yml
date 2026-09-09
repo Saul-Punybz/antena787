@@ -1,0 +1,78 @@
+# CI de Antena787. Lo mismo que corre un humano antes de abrir un PR
+# (docs/DESARROLLO.md §3), más la compilación cruzada.
+#
+# Sin builds nocturnas y sin publicar nada: aquí solo se compila y se prueba.
+# Un canal al aire no corre código sin versionar.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.26"
+
+jobs:
+  verificar:
+    name: vet · build · test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: gofmt
+        run: |
+          sin_formato=$(gofmt -l .)
+          if [ -n "$sin_formato" ]; then
+            echo "Estos archivos no están formateados. Corre: gofmt -w ."
+            echo "$sin_formato"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go build
+        run: go build ./...
+
+      - name: go test
+        run: go test ./...
+
+  cruzada:
+    name: compilación cruzada
+    runs-on: ubuntu-latest
+    needs: verificar
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: windows
+            goarch: amd64
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      # Solo compila: que el binario exista para las tres plataformas desde
+      # una sola máquina es la razón por la que se escogió Go, y lo que se
+      # rompe el día que alguien mete CGo (ADR 0002).
+      - name: build ${{ matrix.goos }}/${{ matrix.goarch }}
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: go build ./...
