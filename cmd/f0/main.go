@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -103,6 +104,23 @@ func run(ffmpeg, ffprobe, media, out string, dur time.Duration, udp string, one 
 
 	fmt.Printf("Corriendo %s con %d salida(s) → %s\n", dur, len(outs), out)
 	t0 := time.Now()
+	// Vigilante: si la corrida no termina en su tiempo más el margen del
+	// encoder, deja las pilas de todas las goroutines en out/colgado.txt y
+	// se va. Es la única forma de saber dónde se cuelga en una plataforma
+	// que no tenemos a mano (Windows en el CI, 9 sept 2026).
+	go func() {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(dur + 2*time.Minute):
+		}
+		buf := make([]byte, 4<<20)
+		n := runtime.Stack(buf, true)
+		ruta := filepath.Join(out, "colgado.txt")
+		_ = os.WriteFile(ruta, buf[:n], 0o644)
+		fmt.Fprintln(os.Stderr, "f0: la corrida no terminó a tiempo; las pilas quedaron en", ruta)
+		os.Exit(3)
+	}()
 	runErr := srv.Run(ctx, dur)
 	if ctx.Err() != nil {
 		fmt.Println("Parada pedida (Ctrl-C): cerrando limpio…")

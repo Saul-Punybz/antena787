@@ -95,6 +95,31 @@ func (c catalog) name(it model.PlanItem) (title, episode string) {
 	return "", episode
 }
 
+// nombrar arma la fila de un solo elemento del plan —título, episodio,
+// duración y hora— con dos consultas, para /estado y el empujón del
+// WebSocket, que corren cada segundo y no pueden cargar el catálogo entero.
+func (s *Server) nombrar(ctx context.Context, loc *time.Location, it *model.PlanItem) *planRow {
+	if it == nil {
+		return nil
+	}
+	c := catalog{titles: map[int64]model.Title{}, episodes: map[int64]model.Episode{}, byAsset: map[int64]model.Title{}}
+	if it.EpisodeID != nil {
+		if e, err := s.App.Store.Episode.Get(ctx, *it.EpisodeID); err == nil {
+			c.episodes[e.ID] = e
+			if t, err := s.App.Store.Title.Get(ctx, e.TitleID); err == nil {
+				c.titles[t.ID] = t
+			}
+		}
+	}
+	if it.MediaAssetID != nil {
+		if t, err := s.App.Store.Title.ByAsset(ctx, *it.MediaAssetID); err == nil {
+			c.byAsset[*it.MediaAssetID] = t
+		}
+	}
+	r := s.row(c, loc, it)
+	return &r
+}
+
 func (s *Server) row(c catalog, loc *time.Location, it *model.PlanItem) planRow {
 	title, episode := c.name(*it)
 	return planRow{

@@ -13,19 +13,19 @@ import (
 
 // estadoBody es lo que contesta GET /estado (docs/API.md).
 type estadoBody struct {
-	Canal        model.Channel   `json:"canal"`
-	Modo         string          `json:"modo"`
-	Ahora        time.Time       `json:"ahora"`
-	DiaEmision   model.Day       `json:"dia_emision"`
-	AlAire       *model.PlanItem `json:"al_aire"`
-	Siguiente    *model.PlanItem `json:"siguiente"`
-	Alarmas      []app.Alarma    `json:"alarmas"`
-	Version      string          `json:"version"`
-	Instalacion  bool            `json:"necesita_instalacion,omitempty"`
-	Completa     bool            `json:"instalacion_completa"`
-	FFmpeg       bool            `json:"ffmpeg"`
-	GuiaGenerada *time.Time      `json:"guia_generada,omitempty"`
-	Entraste     bool            `json:"entraste"`
+	Canal        model.Channel `json:"canal"`
+	Modo         string        `json:"modo"`
+	Ahora        time.Time     `json:"ahora"`
+	DiaEmision   model.Day     `json:"dia_emision"`
+	AlAire       *planRow      `json:"al_aire"`
+	Siguiente    *planRow      `json:"siguiente"`
+	Alarmas      []app.Alarma  `json:"alarmas"`
+	Version      string        `json:"version"`
+	Instalacion  bool          `json:"necesita_instalacion,omitempty"`
+	Completa     bool          `json:"instalacion_completa"`
+	FFmpeg       bool          `json:"ffmpeg"`
+	GuiaGenerada *time.Time    `json:"guia_generada,omitempty"`
+	Entraste     bool          `json:"entraste"`
 	// HayAnunciantes enciende la sexta entrada del menú, Anuncios: sin un
 	// solo anunciante registrado el menú se queda en cinco (PRD §13, F1-57).
 	HayAnunciantes bool `json:"hay_anunciantes"`
@@ -75,9 +75,9 @@ func (s *Server) estado(w http.ResponseWriter, r *http.Request) {
 				it := items[i]
 				switch {
 				case !it.PlannedAt.After(now) && it.End().After(now):
-					body.AlAire = &items[i]
+					body.AlAire = s.nombrar(ctx, ch.Location(), &items[i])
 				case it.PlannedAt.After(now) && body.Siguiente == nil:
-					body.Siguiente = &items[i]
+					body.Siguiente = s.nombrar(ctx, ch.Location(), &items[i])
 				}
 			}
 		}

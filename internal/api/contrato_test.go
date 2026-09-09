@@ -187,6 +187,21 @@ func TestElServidorMandaLoQueLaInterfazPinta(t *testing.T) {
 		t.Fatalf("recalcular dio %d: %s", w.Code, w.Body.String())
 	}
 
+	// Reglas: `titulo` es el nombre en texto, que es lo que la pantalla
+	// ordena, busca y pinta en la carátula (con un objeto se caía Reglas
+	// entera, modo sombra del 9 sept 2026).
+	w = c.do("GET", "/api/v1/reglas", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("/reglas dio %d", w.Code)
+	}
+	var reglas []map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &reglas); err != nil || len(reglas) == 0 {
+		t.Fatalf("/reglas no devolvió la regla: %v %s", err, w.Body.String())
+	}
+	if nombre, ok := reglas[0]["titulo"].(string); !ok || nombre == "" {
+		t.Fatalf("Regla.titulo tiene que ser el nombre en texto, como en tipos.ts: %v", reglas[0]["titulo"])
+	}
+
 	// Estado. `salidas`, `retorno_de_aire` y `control_manual` son de F2: en
 	// F1 no hay motor y la interfaz los pinta vacíos.
 	w = c.do("GET", "/api/v1/estado", nil)

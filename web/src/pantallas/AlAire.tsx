@@ -180,7 +180,7 @@ export function AlAire() {
                 </div>
                 <div className="subtitulo">
                   {siguiente
-                    ? `${siguiente.episodio ? `Episodio ${siguiente.episodio} · ` : ''}${duracionLarga(siguiente.duracion_planeada_ms)}`
+                    ? `${siguiente.episodio ? `${typeof siguiente.episodio === 'number' ? 'Episodio ' : ''}${siguiente.episodio} · ` : ''}${duracionLarga(siguiente.duracion_planeada_ms)}`
                     : 'Después de esto, el relleno.'}
                 </div>
               </div>

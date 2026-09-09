@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"antena787/internal/model"
 )
@@ -20,6 +21,16 @@ type TitleRepo struct {
 const titleCols = `id, channel_id, nombre, tipo, sinopsis, anio, genero,
 	clasificacion_contenido, clasificacion_audiencia, caratula, fuente_ficha,
 	media_asset_id, pendiente_emparejar, candidatos`
+
+// titleColsDe es titleCols con cada columna precedida del alias de tabla,
+// para las consultas que juntan title con otra tabla.
+func titleColsDe(alias string) string {
+	cols := strings.Split(titleCols, ",")
+	for i := range cols {
+		cols[i] = alias + "." + strings.TrimSpace(cols[i])
+	}
+	return strings.Join(cols, ", ")
+}
 
 func scanTitle(sc interface{ Scan(...any) error }) (model.Title, error) {
 	var t model.Title
@@ -99,6 +110,25 @@ func (r *TitleRepo) Get(ctx context.Context, id int64) (model.Title, error) {
 	return t, nil
 }
 
+// ByAsset busca el título al que pertenece un archivo: el que lo tiene de
+// archivo propio (película, programa) o el de la serie de uno de cuyos
+// episodios sale. Es lo que Al aire necesita para poner nombre a lo que
+// está saliendo sin cargar el catálogo entero.
+func (r *TitleRepo) ByAsset(ctx context.Context, assetID int64) (model.Title, error) {
+	row := r.db.QueryRowContext(ctx, `SELECT `+titleCols+` FROM title WHERE media_asset_id = ?
+		UNION ALL
+		SELECT `+titleColsDe("t")+` FROM title t JOIN episode e ON e.title_id = t.id WHERE e.media_asset_id = ?
+		LIMIT 1`, assetID, assetID)
+	t, err := scanTitle(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return model.Title{}, fmt.Errorf("archivo %d sin título: %w", assetID, ErrNotFound)
+	}
+	if err != nil {
+		return model.Title{}, translate("leer el título del archivo", err)
+	}
+	return t, nil
+}
+
 // List devuelve todos los títulos, por nombre.
 func (r *TitleRepo) List(ctx context.Context) ([]model.Title, error) {
 	rows, err := r.db.QueryContext(ctx, `SELECT `+titleCols+` FROM title ORDER BY nombre`)
@@ -174,6 +204,19 @@ func (r *EpisodeRepo) Insert(ctx context.Context, e *model.Episode) error {
 	}
 	e.ID = id
 	return nil
+}
+
+// Get busca un episodio por id.
+func (r *EpisodeRepo) Get(ctx context.Context, id int64) (model.Episode, error) {
+	row := r.db.QueryRowContext(ctx, `SELECT `+episodeCols+` FROM episode WHERE id = ?`, id)
+	e, err := scanEpisode(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return model.Episode{}, fmt.Errorf("episodio %d: %w", id, ErrNotFound)
+	}
+	if err != nil {
+		return model.Episode{}, translate("leer el episodio", err)
+	}
+	return e, nil
 }
 
 // ListByTitle devuelve los episodios de una serie en orden de emisión.

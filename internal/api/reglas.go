@@ -15,7 +15,10 @@ import (
 // los días que le quedan, para no pedir dos cosas por cada fila.
 type ruleOut struct {
 	model.ScheduleRule
-	Title    *model.Title `json:"titulo,omitempty"`
+	// `titulo` es el nombre, como lo pinta la pantalla (contrato de
+	// tipos.ts: Regla.titulo es texto); la ficha entera va aparte.
+	Titulo   string       `json:"titulo"`
+	Ficha    *model.Title `json:"ficha,omitempty"`
 	DaysLeft int          `json:"dias_restantes"`
 	Pattern  string       `json:"patron_en_cristiano"`
 	Clock    string       `json:"hora_en_cristiano"`
@@ -30,7 +33,8 @@ func (s *Server) ruleOut(ctx context.Context, rule model.ScheduleRule, today mod
 	}
 	if rule.TitleID != nil {
 		if t, err := s.App.Store.Title.Get(ctx, *rule.TitleID); err == nil {
-			out.Title = &t
+			out.Ficha = &t
+			out.Titulo = t.Name
 		}
 	}
 	return out

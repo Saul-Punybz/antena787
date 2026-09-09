@@ -77,7 +77,9 @@ export function ProveedorDeEstado({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (necesitaInstalacion || sinSesion || cargando) return
     return suscribirseAlEstado((e) => {
-      setEstado(e)
+      // Lo que empuja el servidor se fusiona con lo que ya había: un
+      // empujón parcial nunca deja la pantalla sin canal ni sin salidas.
+      setEstado((antes) => (antes ? { ...antes, ...e } : e))
       setDemo(estaEnDemo())
     })
   }, [necesitaInstalacion, sinSesion, cargando])

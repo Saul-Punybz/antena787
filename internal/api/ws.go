@@ -117,7 +117,11 @@ func (s *Server) pushStatus(ws *wsConn, r *http.Request) error {
 	}
 	now := s.Now()
 	msg := map[string]any{
-		"tipo":        "estado",
+		"tipo": "estado",
+		// El mismo contrato que GET /estado: la interfaz sustituye su estado
+		// con cada empujón, y sin `canal` el menú se cae (modo sombra,
+		// 9 sept 2026).
+		"canal":       ch,
 		"ahora":       now,
 		"modo":        ch.Mode,
 		"dia_emision": ch.BroadcastDay(now),
@@ -132,10 +136,10 @@ func (s *Server) pushStatus(ws *wsConn, r *http.Request) error {
 		for i := range items {
 			it := items[i]
 			if !it.PlannedAt.After(now) && it.End().After(now) {
-				msg["al_aire"] = it
+				msg["al_aire"] = s.nombrar(ctx, ch.Location(), &items[i])
 			} else if it.PlannedAt.After(now) {
 				if _, hay := msg["siguiente"]; !hay {
-					msg["siguiente"] = it
+					msg["siguiente"] = s.nombrar(ctx, ch.Location(), &items[i])
 				}
 			}
 		}

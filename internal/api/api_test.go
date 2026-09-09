@@ -229,7 +229,7 @@ func TestCrearReglaValida(t *testing.T) {
 	}
 	var out ruleOut
 	c.json(w, &out)
-	if out.ID == 0 || out.Title == nil || out.Title.Name != "Los Simuladores" {
+	if out.ID == 0 || out.Ficha == nil || out.Ficha.Name != "Los Simuladores" {
 		t.Fatalf("la regla creada no trae su título: %+v", out)
 	}
 	if out.Pattern == "" {
@@ -961,6 +961,9 @@ func TestWebSocketEmpujaElEstado(t *testing.T) {
 	var msg map[string]any
 	if err := json.Unmarshal(payload, &msg); err != nil {
 		t.Fatalf("el marco no es JSON: %s", payload)
+	}
+	if msg["canal"] == nil {
+		t.Fatalf("el empujón de estado tiene que traer el canal, como GET /estado: %v", msg)
 	}
 	if msg["tipo"] != "estado" || msg["modo"] != "sombra" {
 		t.Fatalf("el primer marco no es el estado: %v", msg)

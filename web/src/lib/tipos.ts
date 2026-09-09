@@ -61,7 +61,8 @@ export interface ElementoDelPlan {
   // embebidos que el servidor añade para la interfaz
   titulo?: string
   temporada?: number | null
-  episodio?: number | null
+  /** «T4 E1 · Nombre» tal como lo escribe el servidor (o un número en la demo). */
+  episodio?: string | number | null
   en_vivo?: boolean
 }
 
