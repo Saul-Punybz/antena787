@@ -146,7 +146,14 @@ go test ./... -count=1           # todo debe estar verde
    `salto_de_reloj` menciona el sueño. Pendiente: **F2-112** (la máquina no
    se duerme con el canal encendido: la Mac durmió 19 min durante la prueba).
    Tiempos: 5 h 47 min de material en 1 h 35 min de cola (≈4× tiempo real,
-   libx264). Los tres criterios manuales siguen por firmar con Rolando
+   libx264). **Y en el navegador** (S-10 a S-14 del informe): estado sin
+   canal por WebSocket, elementos del plan sin nombre, `Regla.titulo` como
+   objeto, reglas nuevas apagadas por defecto, semana que solo pintaba 48 h
+   (ahora proyecta con el resolver) y «undefined s» en Ajustes; todo
+   corregido con prueba. **Windows (issue #14):** la F0 corta se colgaba en
+   `Decoder.Close` → `cmd.Wait`; `WaitDelay` + `Kill` explícito, pendiente
+   de ver verde en el CI (el job de Windows no bloquea mientras el issue
+   esté abierto). Los tres criterios manuales siguen por firmar con Rolando
    (F1-32 necesita su registro de una hora con VLC; F1-43 visto aquí; F1-53
    con su hoja). Para repetirlo: `bin/antena -datos ~/antena-sombra/datos
    -escucha 127.0.0.1:7871` (la base ya tiene la instalación hecha, clave 1234).
