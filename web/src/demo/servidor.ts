@@ -9,14 +9,19 @@
 import type {
   Ajustes,
   Alarma,
+  DetectadoEnLaMaquina,
   ElementoDelPlan,
   EpisodioDeBiblioteca,
   Estado,
   FilaDelPlan,
   FranjaSemana,
   Guia,
+  Instalacion,
   MesDelPlan,
+  Opcion,
+  OpcionesDelAsistente,
   Regla,
+  RespuestasDelAsistente,
   ResumenDeImportacion,
   SemanaDelPlan,
   TituloDeBiblioteca,
@@ -306,7 +311,8 @@ function estado(): Estado {
     control_manual: { activo: false },
     // En modo demostración siempre se está adentro: no hay clave que pedir.
     entraste: true,
-    instalacion_completa: true,
+    necesita_instalacion: !asistente.completa,
+    instalacion_completa: asistente.completa,
   }
 }
 
@@ -485,6 +491,427 @@ function materialPorId(id: number): ConAudio | null {
   return episodiosDe(dueno).find((e) => e.material_id === id) ?? null
 }
 
+// ── el asistente de instalación ───────────────────────────────────────
+
+/**
+ * El asistente de mentira. Guarda lo contestado en localStorage para que
+ * recargar la página caiga en el mismo paso, igual que con el servidor de
+ * verdad (que lo guarda en `settings`).
+ *
+ * Para verlo desde el paso 1 hay dos maneras: `VITE_DEMO_INSTALAR=1` al
+ * levantar Vite, o abrir la interfaz con `?instalar=1` en la dirección. Sin
+ * eso, el canal de ejemplo ya está instalado y el asistente se puede visitar
+ * con todo contestado.
+ */
+const LLAVE_ASISTENTE = 'antena787.demo.asistente'
+
+interface EstadoDelAsistente {
+  paso: number
+  completa: boolean
+  respuestas: RespuestasDelAsistente
+  tiempos: Record<string, string>
+  carpeta_contenido: string
+  relleno: number
+  reglas_creadas: number
+}
+
+function quiereInstalar(): boolean {
+  if (import.meta.env.VITE_DEMO_INSTALAR === '1') return true
+  try {
+    return new URLSearchParams(window.location.search).get('instalar') === '1'
+  } catch {
+    return false
+  }
+}
+
+function asistenteEnBlanco(): EstadoDelAsistente {
+  if (quiereInstalar()) {
+    return {
+      paso: 1,
+      completa: false,
+      respuestas: {},
+      tiempos: {},
+      carpeta_contenido: '',
+      relleno: 0,
+      reglas_creadas: 0,
+    }
+  }
+  // El canal de ejemplo ya está instalado: el asistente se ve contestado.
+  return {
+    paso: 9,
+    completa: true,
+    respuestas: {
+      '1': {
+        nombre: canal.nombre,
+        identificativo: canal.identificativo,
+        comunidad_licencia: canal.comunidad_licencia,
+        nombre_operador: 'Rolando',
+      },
+      '2': { modo: 'transmisor' },
+      '4': { destino: 'red', retorno_de_aire: 'receptor-tv' },
+      '5': { ve_barras: true },
+      '6': { pais: 'Puerto Rico', calidad: '1080i59.94' },
+      '7': { carpeta: '/srv/antena787/contenido' },
+      '8': { propuesta: 'automatica' },
+    },
+    tiempos: {},
+    carpeta_contenido: '/srv/antena787/contenido',
+    relleno: 1,
+    reglas_creadas: 6,
+  }
+}
+
+function leerAsistente(): EstadoDelAsistente {
+  // Sin la marca de instalar, el canal de ejemplo ya está montado: nunca se
+  // lee lo guardado, para que una prueba a medias no deje la demostración
+  // pidiendo instalación para siempre.
+  if (!quiereInstalar()) return asistenteEnBlanco()
+  try {
+    // `?instalar=1&reiniciar=1` empieza el asistente desde el paso 1 otra vez.
+    if (new URLSearchParams(window.location.search).get('reiniciar') === '1') {
+      window.localStorage.removeItem(LLAVE_ASISTENTE)
+      return asistenteEnBlanco()
+    }
+    const crudo = window.localStorage.getItem(LLAVE_ASISTENTE)
+    if (crudo) return { ...asistenteEnBlanco(), ...(JSON.parse(crudo) as EstadoDelAsistente) }
+  } catch {
+    // Sin localStorage (una ventana privada) el asistente sigue funcionando,
+    // solo que recargar lo devuelve al principio.
+  }
+  return asistenteEnBlanco()
+}
+
+let asistente: EstadoDelAsistente = leerAsistente()
+
+function guardarAsistente() {
+  try {
+    window.localStorage.setItem(LLAVE_ASISTENTE, JSON.stringify(asistente))
+  } catch {
+    // Da igual: lo que importa es la sesión que se está mirando.
+  }
+}
+
+function apuntarPaso(n: number) {
+  // Hora de reloj de pared, no la del canal de ejemplo: es cuándo se contestó.
+  asistente.tiempos[String(n)] = new Date().toISOString()
+  asistente.paso = Math.min(n + 1, 9)
+  guardarAsistente()
+}
+
+/**
+ * Lo que el asistente propone en cada pregunta. Categorías en cristiano: el
+ * valor es interno y nunca sale a pantalla (PRD §10). «Todavía no» está en la
+ * lista como una respuesta más, no como el renglón chiquito del final.
+ */
+const OPCIONES: OpcionesDelAsistente = {
+  modo: [
+    {
+      valor: 'internet',
+      texto: 'Salir por internet',
+      ayuda: 'El canal se ve en una página, una aplicación o una red social.',
+    },
+    {
+      valor: 'transmisor',
+      texto: 'Salir por transmisor',
+      ayuda: 'La señal va a la caja que junta los canales, o directo al transmisor.',
+    },
+    {
+      valor: 'no_se',
+      texto: 'Todavía no sé',
+      ayuda: 'Se sigue igual. Esto se cambia después sin volver a instalar.',
+    },
+  ],
+  destino: [
+    {
+      valor: 'red',
+      texto: 'A un equipo aquí en la estación',
+      ayuda: 'Por el cable de red, a la caja que junta los canales antes del transmisor.',
+    },
+    {
+      valor: 'internet',
+      texto: 'A internet',
+      ayuda: 'A un servicio de video en línea, para que se vea desde afuera.',
+    },
+    {
+      valor: 'archivo',
+      texto: 'A un archivo en esta máquina',
+      ayuda: 'Se graba lo que saldría al aire. Sirve para mirar sin emitir.',
+    },
+    {
+      valor: 'ninguna',
+      texto: 'Todavía no',
+      ayuda: 'No hay a dónde mandarla por ahora. Se puede seguir y decidirlo cuando toque.',
+    },
+  ],
+  retorno: [
+    {
+      valor: 'receptor-tv',
+      texto: 'Esta máquina sintoniza el canal',
+      ayuda: 'Tiene adentro una tarjeta que recibe la señal, como un televisor.',
+    },
+    {
+      valor: 'captura',
+      texto: 'Entra un cable de video a esta máquina',
+      ayuda: 'Viene del transmisor o de un receptor que está en la estación.',
+    },
+    {
+      valor: 'stream',
+      texto: 'Hay una dirección para mirar el canal',
+      ayuda: 'El transmisor o la red publican lo que sale y se puede ver por ahí.',
+    },
+    {
+      valor: 'ninguno',
+      texto: 'Todavía no',
+      ayuda: 'Se puede seguir. Sin verla de vuelta no se puede comparar lo que sale con lo que emites, y se dice.',
+    },
+  ],
+  calidad: [
+    {
+      valor: '1080i59.94',
+      texto: '1080i a 59.94',
+      ayuda: 'Lo que espera casi todo equipo en Estados Unidos y Puerto Rico.',
+    },
+    { valor: '720p59.94', texto: '720p a 59.94' },
+    { valor: '1080p29.97', texto: '1080p a 29.97' },
+    { valor: '1080p59.94', texto: '1080p a 59.94' },
+    {
+      valor: '480i59.94',
+      texto: '480i a 59.94',
+      ayuda: 'Televisión estándar, la de antes de la alta definición.',
+    },
+    { valor: '1080i50', texto: '1080i a 50', ayuda: 'Europa, América del Sur y buena parte del resto.' },
+    { valor: '720p50', texto: '720p a 50' },
+    { valor: '1080p25', texto: '1080p a 25' },
+    { valor: '576i50', texto: '576i a 50', ayuda: 'Televisión estándar fuera de América del Norte.' },
+  ],
+}
+
+const ACELERACION = 'se mide al arrancar el motor (F2); todavía no hay motor'
+
+function detectado(): DetectadoEnLaMaquina {
+  return {
+    ffmpeg: '/usr/local/bin/ffmpeg 7.1',
+    ffprobe: '/usr/local/bin/ffprobe 7.1',
+    carpeta_datos: '/var/lib/antena787',
+    carpeta_contenido: asistente.carpeta_contenido,
+    carpeta_respaldo: '/var/lib/antena787/respaldo',
+    relleno: asistente.relleno,
+    aceleracion: ACELERACION,
+    disco: 'El disco donde va el contenido tiene 890 GB libres.',
+    red: 'Hay una tarjeta de red conectada, con dirección fija.',
+  }
+}
+
+function instalacion(): Instalacion {
+  return {
+    paso: asistente.paso,
+    pasos: 9,
+    completa: asistente.completa,
+    necesita_instalacion: !asistente.completa,
+    canal,
+    detectado: detectado(),
+    opciones: OPCIONES,
+    respuestas: asistente.respuestas,
+    tiempos: asistente.tiempos,
+  }
+}
+
+/** El texto del formato, como lo arma `app.FormatOf` en el servidor de verdad. */
+function formatoDe(calidad: string): string {
+  const m = /^(\d+)([ip])([\d.]+)$/.exec(calidad)
+  if (!m) return calidad
+  const alto = Number(m[1])
+  const ancho = { 480: 720, 576: 720, 720: 1280, 1080: 1920 }[alto] ?? 1920
+  const campos = Number(m[3])
+  const cuadros = m[2] === 'i' ? campos / 2 : campos
+  const texto = Number.isInteger(cuadros) ? String(cuadros) : cuadros.toFixed(2)
+  return `${ancho}x${alto} a ${texto}`
+}
+
+function perfilDePais(pais: string): string {
+  const p = pais.trim().toLowerCase()
+  if (!p) return ''
+  if (['pr', 'puerto rico', 'us', 'usa', 'eeuu', 'estados unidos'].includes(p)) return 'us-fcc'
+  return 'abierto'
+}
+
+function tieneOpcion(lista: Opcion[], valor: string): boolean {
+  return lista.some((o) => o.valor === valor)
+}
+
+/**
+ * Los nueve pasos. Cada uno contesta {paso, siguiente} más lo suyo, y los
+ * errores traen la frase en cristiano y el campo, igual que el servidor Go.
+ */
+function pasoDelAsistente(n: number, cuerpo: Record<string, unknown> | undefined): Response {
+  const c = cuerpo ?? {}
+  // El paso 9 no tiene siguiente: se queda en 9, igual que el servidor Go.
+  const sigue = { paso: n, siguiente: Math.min(n + 1, 9) }
+  switch (n) {
+    case 1: {
+      const nombre = String(c.nombre ?? '').trim()
+      const clave = String(c.clave ?? '')
+      if (!nombre)
+        return json({ error: 'El canal necesita un nombre.', campo: 'nombre' }, 400)
+      const yaHabiaClave = Boolean(asistente.respuestas['1'])
+      if (!(clave === '' && yaHabiaClave) && !/^\d{4,6}$/.test(clave))
+        return json(
+          { error: 'la clave de la estación son de cuatro a seis dígitos', campo: 'clave' },
+          400,
+        )
+      const identificativo = String(c.identificativo ?? '').trim()
+      const comunidad = String(c.comunidad_licencia ?? '').trim()
+      const operador = String(c.nombre_operador ?? '').trim()
+      canal.nombre = nombre
+      canal.identificativo = identificativo
+      canal.comunidad_licencia = comunidad
+      asistente.respuestas['1'] = {
+        nombre,
+        identificativo,
+        comunidad_licencia: comunidad,
+        nombre_operador: operador,
+      }
+      apuntarPaso(1)
+      const cartel = [identificativo, comunidad].filter(Boolean).join(' · ') || nombre
+      return json({ ...sigue, canal, cartel })
+    }
+    case 2: {
+      const modo = String(c.modo ?? '')
+      if (modo && modo !== 'no sé' && !tieneOpcion(OPCIONES.modo, modo))
+        return json({ error: 'Escoge una de las tres.', campo: 'modo' }, 400)
+      asistente.respuestas['2'] = { modo }
+      apuntarPaso(2)
+      return json({
+        ...sigue,
+        modo_del_canal: 'sombra',
+        aviso:
+          'esto queda apuntado; el canal sigue en modo sombra hasta que exista el motor de emisión',
+      })
+    }
+    case 3: {
+      apuntarPaso(3)
+      const d = detectado()
+      return json({ ...sigue, ffmpeg: d.ffmpeg, ffprobe: d.ffprobe })
+    }
+    case 4: {
+      const destino = String(c.destino ?? '')
+      const retorno = String(c.retorno_de_aire ?? '')
+      if (destino && !tieneOpcion(OPCIONES.destino, destino))
+        return json({ error: 'Escoge a dónde va la señal.', campo: 'destino' }, 400)
+      if (retorno && !tieneOpcion(OPCIONES.retorno, retorno))
+        return json(
+          { error: 'Escoge cómo la puedes ver de vuelta.', campo: 'retorno_de_aire' },
+          400,
+        )
+      asistente.respuestas['4'] = { destino, retorno_de_aire: retorno }
+      apuntarPaso(4)
+      const sinRetorno = !retorno || retorno === 'ninguno'
+      return json({
+        ...sigue,
+        ...(sinRetorno
+          ? {
+              aviso:
+                'sin retorno de aire no podemos comparar lo que sale con lo que emites: se puede seguir, y se dice.',
+            }
+          : {}),
+      })
+    }
+    case 5: {
+      if (typeof c.ve_barras !== 'boolean')
+        return json({ error: 'Contesta sí o no.', campo: 've_barras' }, 400)
+      asistente.respuestas['5'] = { ve_barras: c.ve_barras }
+      apuntarPaso(5)
+      return json({
+        ...sigue,
+        aviso:
+          'la prueba de barras necesita el motor de emisión, que llega en F2. Tu respuesta queda apuntada.',
+      })
+    }
+    case 6: {
+      const pais = String(c.pais ?? '').trim()
+      const calidad = String(c.calidad ?? '')
+      if (!tieneOpcion(OPCIONES.calidad, calidad))
+        return json({ error: 'Escoge una calidad de la lista.', campo: 'calidad' }, 400)
+      canal.perfil_regulatorio = perfilDePais(pais)
+      canal.perfil_de_formato = calidad
+      asistente.respuestas['6'] = { pais, calidad }
+      apuntarPaso(6)
+      return json({ ...sigue, canal, formato: formatoDe(calidad) })
+    }
+    case 7: {
+      const carpeta = String(c.carpeta ?? '').trim()
+      if (!carpeta)
+        return json({ error: 'Señala la carpeta donde están los videos.', campo: 'carpeta' }, 400)
+      asistente.carpeta_contenido = carpeta
+      asistente.respuestas['7'] = { carpeta }
+      apuntarPaso(7)
+      return json({
+        ...sigue,
+        carpeta,
+        aviso_vigilancia:
+          'ya la estoy mirando: lo que dejes ahí entra solo en cuanto termine de copiarse',
+        ...(asistente.relleno === 0
+          ? {
+              aviso_relleno:
+                'la biblioteca de relleno está vacía: el primer hueco saldría en negro.',
+            }
+          : {}),
+      })
+    }
+    case 8: {
+      const propuesta = String(c.propuesta ?? '')
+      if (propuesta !== 'automatica' && propuesta !== 'ninguna')
+        return json({ error: 'Escoge una de las dos.', campo: 'propuesta' }, 400)
+      asistente.respuestas['8'] = { propuesta }
+      if (propuesta === 'automatica') asistente.reglas_creadas = 6
+      apuntarPaso(8)
+      if (propuesta === 'ninguna')
+        return json({
+          ...sigue,
+          reglas_creadas: 0,
+          bloques: 0,
+          avisos: [],
+          titulos_sin_material: 0,
+          aviso: 'queda para después: la parrilla se arma en la pantalla Parrilla cuando quieras.',
+        })
+      return json({
+        ...sigue,
+        reglas_creadas: 6,
+        bloques: 84,
+        avisos: [
+          {
+            tipo: 'hueco',
+            texto: 'Quedan 5 horas sin programar entre 1:00 y 6:00 AM los siete días.',
+          },
+          {
+            tipo: 'sin_relleno',
+            texto:
+              asistente.relleno === 0
+                ? 'Esos huecos saldrían en negro: todavía no hay relleno.'
+                : 'Esos huecos los cubre el relleno.',
+          },
+        ],
+        titulos_sin_material: 1,
+        aviso: 'esta es una propuesta, no una decisión: se mueve, se borra y se rehace.',
+      })
+    }
+    case 9: {
+      asistente.completa = true
+      asistente.paso = 9
+      apuntarPaso(9)
+      return json({
+        ...sigue,
+        completa: true,
+        modo_del_canal: 'sombra',
+        aviso:
+          'listo. El canal queda en modo sombra: resuelve el plan y publica la guía, pero todavía no emite — el motor es la fase siguiente.',
+      })
+    }
+    default:
+      return json({ error: 'Ese paso no existe: el asistente tiene nueve.' }, 400)
+  }
+}
+
 // ── el ruteador ───────────────────────────────────────────────────────
 
 function json(cuerpo: unknown, estadoHttp = 200): Response {
@@ -516,16 +943,27 @@ export async function responder(ruta: string, init?: RequestInit): Promise<Respo
     if (metodo === 'PUT') ajustes = { ...ajustes, ...cuerpo }
     return json(ajustes)
   }
-  if (p === '/instalacion')
-    return json({
-      paso: 1,
-      detectado: {
-        ffmpeg: 'encontrado',
-        aceleracion: 'NVIDIA',
-        disco: '890 GB libres',
-        red: 'una tarjeta de red conectada',
+  if (p === '/instalacion') return json(instalacion())
+  if (p === '/instalacion/relleno-por-defecto' && metodo === 'POST') {
+    if (asistente.relleno > 0)
+      return json(
+        { error: 'Ya hay un relleno por defecto en la biblioteca. No hace falta otro.' },
+        409,
+      )
+    asistente.relleno = 1
+    guardarAsistente()
+    return json(
+      {
+        archivo: 'relleno/cartel-de-la-estacion.mp4',
+        aviso:
+          'listo: el cartel de la estación con una cama musical ya está en la biblioteca de relleno. Se cambia cuando quieras; lo que no se puede es quedarse sin él.',
       },
-    })
+      202,
+    )
+  }
+  const pasoAsistente = p.match(/^\/instalacion\/paso\/(\d+)$/)
+  if (pasoAsistente && metodo === 'POST')
+    return pasoDelAsistente(Number(pasoAsistente[1]), cuerpo as Record<string, unknown> | undefined)
   if (p === '/reglas') {
     if (metodo === 'POST') {
       const nueva: Regla = { ...(cuerpo as Regla), id: siguienteId++, dias_restantes: 0 }

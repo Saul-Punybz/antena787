@@ -320,9 +320,169 @@ export type Ajustes = Record<string, string>
 
 // ── instalación ───────────────────────────────────────────────────────
 
+/**
+ * Una respuesta posible que propone el servidor. El valor es interno (nunca se
+ * enseña); `texto` es lo que lee la persona y `ayuda` la frase de abajo. El
+ * asistente no inventa listas: pinta lo que venga en `opciones` (PRD §10: «el
+ * usuario nunca ve la palabra driver»).
+ */
+export interface Opcion {
+  valor: string
+  texto: string
+  ayuda?: string
+}
+
+/** Lo que la máquina averiguó sola, ya en frases, no en claves. */
+export interface DetectadoEnLaMaquina {
+  ffmpeg: string
+  ffprobe: string
+  carpeta_datos: string
+  carpeta_contenido: string
+  carpeta_respaldo: string
+  /** Cuántas piezas de relleno hay. Cero significa que el primer hueco sale en negro. */
+  relleno: number
+  /** Una frase, nunca el nombre de una tarjeta: se mide al arrancar el motor. */
+  aceleracion: string
+  problema?: string
+  disco: string
+  red: string
+}
+
+export interface OpcionesDelAsistente {
+  modo: Opcion[]
+  destino: Opcion[]
+  retorno: Opcion[]
+  calidad: Opcion[]
+}
+
+/** Lo ya contestado, para volver a pintar el asistente igual tras recargar. */
+export interface RespuestasDelAsistente {
+  '1'?: {
+    nombre: string
+    identificativo: string
+    comunidad_licencia: string
+    nombre_operador: string
+  }
+  '2'?: { modo: string }
+  '4'?: { destino: string; retorno_de_aire: string }
+  '5'?: { ve_barras: boolean }
+  '6'?: { pais: string; calidad: string }
+  '7'?: { carpeta: string }
+  '8'?: { propuesta: string }
+}
+
 export interface Instalacion {
   paso: number
-  detectado: Record<string, string>
+  pasos: number
+  completa: boolean
+  necesita_instalacion: boolean
+  canal: Canal
+  detectado: DetectadoEnLaMaquina
+  opciones: OpcionesDelAsistente
+  respuestas: RespuestasDelAsistente
+  /** Cuándo se contestó cada paso, en RFC 3339. Sirve para saber dónde se abandona. */
+  tiempos: Record<string, Instante>
+}
+
+/** Un aviso del resolver (paso 8): siempre trae la frase en cristiano. */
+export interface AvisoDeParrilla {
+  tipo: string
+  texto: string
+  schedule_rule_id?: number
+  dia_emision?: DiaEmision
+  instante?: Instante
+  aviso?: string
+}
+
+// Lo que se manda en cada paso. El servidor contesta siempre
+// {paso, siguiente} más lo suyo, o {error, campo?} con 400.
+
+export interface CuerpoPaso1 {
+  nombre: string
+  identificativo: string
+  comunidad_licencia: string
+  /** Cuatro a seis dígitos. Una sola clave para la estación (PRD §13). */
+  clave: string
+  nombre_operador: string
+}
+
+export interface CuerposDePaso {
+  1: CuerpoPaso1
+  2: { modo: string }
+  3: Record<string, never>
+  4: { destino: string; retorno_de_aire: string; nota?: string }
+  5: { ve_barras: boolean }
+  6: { pais: string; calidad: string }
+  7: { carpeta: string }
+  8: { propuesta: 'automatica' | 'ninguna' }
+  9: Record<string, never>
+}
+
+interface PasoContestado {
+  paso: number
+  siguiente: number
+}
+
+export interface RespuestaPaso1 extends PasoContestado {
+  canal: Canal
+  /** El cartel de respaldo: "<identificativo> · <comunidad de licencia>". */
+  cartel: string
+}
+export interface RespuestaPaso2 extends PasoContestado {
+  modo_del_canal: ModoCanal
+  aviso: string
+}
+export interface RespuestaPaso3 extends PasoContestado {
+  ffmpeg: string
+  ffprobe: string
+  problema?: string
+}
+export interface RespuestaPaso4 extends PasoContestado {
+  aviso?: string
+}
+export interface RespuestaPaso5 extends PasoContestado {
+  aviso: string
+}
+export interface RespuestaPaso6 extends PasoContestado {
+  canal: Canal
+  formato: string
+}
+export interface RespuestaPaso7 extends PasoContestado {
+  carpeta: string
+  aviso_vigilancia: string
+  aviso_relleno?: string
+}
+export interface RespuestaPaso8 extends PasoContestado {
+  reglas_creadas: number
+  bloques: number
+  avisos: AvisoDeParrilla[]
+  titulos_sin_material: number
+  aviso: string
+}
+export interface RespuestaPaso9 extends PasoContestado {
+  completa: true
+  modo_del_canal: ModoCanal
+  aviso: string
+}
+
+export interface RespuestasDePaso {
+  1: RespuestaPaso1
+  2: RespuestaPaso2
+  3: RespuestaPaso3
+  4: RespuestaPaso4
+  5: RespuestaPaso5
+  6: RespuestaPaso6
+  7: RespuestaPaso7
+  8: RespuestaPaso8
+  9: RespuestaPaso9
+}
+
+export type NumeroDePaso = keyof RespuestasDePaso
+
+/** POST /instalacion/relleno-por-defecto: 202 con el archivo ya creado. */
+export interface RellenoPorDefecto {
+  archivo: string
+  aviso: string
 }
 
 // ── errores ───────────────────────────────────────────────────────────

@@ -410,3 +410,91 @@ func compruebaElSonido(t *testing.T, quien string, raw []byte, materialID int64,
 		t.Errorf("%s no dice de dónde salieron el sonido y los subtítulos de al lado: %s", quien, raw)
 	}
 }
+
+// ── el asistente de instalación ───────────────────────────────────────
+
+// TestElAsistenteMandaLoQueLaPantallaPinta es la misma prueba de contrato
+// para las respuestas del asistente: GET /instalacion, el paso 8 y el
+// relleno por defecto contra lo que declara web/src/lib/tipos.ts.
+func TestElAsistenteMandaLoQueLaPantallaPinta(t *testing.T) {
+	if !declaraLaInterfaz(t, "Instalacion", "Opcion", "OpcionesDelAsistente", "DetectadoEnLaMaquina") {
+		t.Skip("web/src/lib/tipos.ts todavía no declara los tipos del asistente")
+	}
+	c := nuevo(t)
+
+	w := c.do("GET", "/api/v1/instalacion", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /instalacion dio %d: %s", w.Code, w.Body.String())
+	}
+	exige(t, "GET /instalacion", w.Body.Bytes(), "Instalacion")
+	// `problema` solo sale cuando ffmpeg falta, así que se perdona.
+	exige(t, "GET /instalacion (detectado)", campo(t, w.Body.Bytes(), "detectado"), "DetectadoEnLaMaquina", "problema")
+	opciones := campo(t, w.Body.Bytes(), "opciones")
+	exige(t, "GET /instalacion (opciones)", opciones, "OpcionesDelAsistente")
+	for _, lista := range []string{"modo", "destino", "retorno", "calidad"} {
+		exige(t, "GET /instalacion (opciones."+lista+")", primero(t, campo(t, opciones, lista)), "Opcion", "ayuda")
+	}
+
+	// El paso 8, con material de verdad para que proponga algo.
+	if w := c.do("POST", "/api/v1/instalacion/paso/1", map[string]any{
+		"nombre": "Caribbean Advantage TV", "clave": clavePrueba,
+	}); w.Code != http.StatusOK {
+		t.Fatalf("el paso 1 dio %d: %s", w.Code, w.Body.String())
+	}
+	c.conMaterial("La Batalla")
+	w = c.do("POST", "/api/v1/instalacion/paso/8", map[string]string{"propuesta": "automatica"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("el paso 8 dio %d: %s", w.Code, w.Body.String())
+	}
+	if declaraLaInterfaz(t, "RespuestaPaso8") {
+		exige(t, "POST /instalacion/paso/8", w.Body.Bytes(), "RespuestaPaso8")
+	}
+
+	// Y lo que ya está contestado vuelve con la forma que la pantalla espera.
+	w = c.do("GET", "/api/v1/instalacion", nil)
+	respuestas := campo(t, w.Body.Bytes(), "respuestas")
+	if declaraLaInterfaz(t, "RespuestasDelAsistente") {
+		for _, paso := range []string{"1", "8"} {
+			if _, hay := clavesDe(t, respuestas)[paso]; !hay {
+				t.Errorf("el paso %s está contestado y no vuelve en `respuestas`: %s", paso, respuestas)
+			}
+		}
+	}
+
+	// El relleno por defecto: 202 con la forma declarada.
+	if !declaraLaInterfaz(t, "RellenoPorDefecto") {
+		return
+	}
+	if c.a.FFmpeg == "" {
+		t.Skip("hacen falta las herramientas de video para pedir el relleno por defecto")
+	}
+	if w := c.do("POST", "/api/v1/instalacion/paso/7", map[string]string{"carpeta": t.TempDir()}); w.Code != http.StatusOK {
+		t.Fatalf("el paso 7 dio %d: %s", w.Code, w.Body.String())
+	}
+	eventos, soltar := c.a.Subscribe()
+	defer soltar()
+	w = c.do("POST", "/api/v1/instalacion/relleno-por-defecto", nil)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("el relleno por defecto dio %d: %s", w.Code, w.Body.String())
+	}
+	exige(t, "POST /instalacion/relleno-por-defecto", w.Body.Bytes(), "RellenoPorDefecto")
+	// No se deja el trabajo colgando después de la prueba.
+	esperarEvento(t, eventos, "relleno", 2*time.Minute)
+}
+
+// declaraLaInterfaz dice si tipos.ts ya trae esas interfaces. La pantalla del
+// asistente y este servidor se están construyendo a la vez: mientras la
+// interfaz no las declare, esta prueba se salta en vez de fallar.
+func declaraLaInterfaz(t *testing.T, nombres ...string) bool {
+	t.Helper()
+	raw, err := os.ReadFile(tiposTS)
+	if err != nil {
+		t.Fatalf("no pude leer el contrato de la interfaz: %v", err)
+	}
+	for _, n := range nombres {
+		if !strings.Contains(string(raw), "export interface "+n+" {") {
+			return false
+		}
+	}
+	return true
+}

@@ -53,7 +53,7 @@ func (s *Server) estado(w http.ResponseWriter, r *http.Request) {
 		DiaEmision:  ch.BroadcastDay(now),
 		Alarmas:     s.App.Alarms(),
 		Version:     s.App.Version,
-		Instalacion: !hasPIN,
+		Instalacion: !hasPIN || s.setting(r, app.KeyInstallDone) != "si",
 		Completa:    s.setting(r, app.KeyInstallDone) == "si",
 		FFmpeg:      s.App.FFmpeg != "" && s.App.FFprobe != "",
 	}

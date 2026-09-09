@@ -107,10 +107,133 @@ sobre la misma ficha, sin que nadie tenga que apretar nada.
 
 ## Asistente de instalación (sin clave hasta terminar)
 
-| | |
+Nueve pasos (PRD §13); los pasos 3, 8 y 9 no preguntan nada, hacen o cuentan
+algo solos. Mientras no exista clave de estación, `/api/v1/instalacion/*` es
+la única puerta abierta: no hace falta cookie de sesión. El paso 1 es el que
+pone la clave, y en ese mismo momento deja la cookie puesta — el resto de los
+pasos sigue sin volver a pedirla. En cuanto ya hay una clave puesta —la ponga
+el paso 1 o viniera de una instalación anterior— el asistente vuelve a pedir
+la misma sesión que cualquier otra ruta.
+
+### `GET /instalacion`
+
+| Campo | Qué trae |
 |---|---|
-| `GET /instalacion` | Paso actual y lo detectado (ffmpeg, aceleración, discos, red). |
-| `POST /instalacion/paso/{n}` | Respuesta de cada paso (§13): 1 nombre/identificativo/comunidad/clave · 2 qué vas a hacer · 4 a dónde va la señal y retorno de aire · 5 prueba de barras (`{"ve_barras": true}`) · 6 país y calidad · 7 carpeta de contenido · 8 primera parrilla · 9 al aire. |
+| `paso` | En qué paso va, según `instalacion.paso` (1 si no hay nada guardado). |
+| `pasos` | Siempre 9. |
+| `completa` | `si` guardado en `instalacion_completa`, como booleano. |
+| `necesita_instalacion` | Aquí es solo «no hay clave de estación puesta»: a diferencia de `GET /estado` (que también mira si se llegó al paso 9), aquí no depende de si el asistente se terminó de contestar. |
+| `canal` | El canal completo (modelo `Channel`). |
+| `detectado` | Ver tabla de abajo. |
+| `opciones` | El catálogo de respuestas posibles: ver tabla de abajo. |
+| `respuestas` | Lo ya contestado, paso por paso. Ver tabla de abajo. |
+| `tiempos` | `{"1": "2026-…", "4": "2026-…", …}`: cuándo se contestó cada paso, en RFC 3339. Solo trae los pasos que ya se contestaron. |
+
+`detectado`:
+
+| Campo | Qué dice |
+|---|---|
+| `ffmpeg` · `ffprobe` | Dónde están las herramientas de video en esta máquina; vacío si no se encontraron. |
+| `problema` | Por qué no se encontraron, en cristiano. Solo sale cuando hay problema. |
+| `carpeta_datos` | La carpeta de datos de la aplicación. |
+| `carpeta_contenido` | La carpeta de contenido, si ya se puso (paso 7). |
+| `carpeta_respaldo` | A dónde van los respaldos. |
+| `relleno` | Cuántas piezas de relleno hay en la biblioteca ahora mismo (un número). Cero significa que el primer hueco sale al cartel. |
+| `aceleracion` | Nunca un nombre de tarjeta: siempre la frase «se mide al arrancar el motor (F2); todavía no hay motor». Listar `-hwaccels` no basta porque los controladores mienten. |
+| `disco` | Una frase en cristiano, p. ej. «890 GB libres de 2.0 TB en el disco de datos», o «no pude medir el disco» si no se pudo. |
+| `red` | «conectado (nombre_de_la_tarjeta, dirección)» o «sin red: se puede seguir, la guía y el aire no la necesitan». |
+
+`opciones` (el `valor` es lo que se manda de vuelta; nunca se enseña un
+nombre técnico — PRD §4, principio 1):
+
+| Lista | Valores | Nota |
+|---|---|---|
+| `modo` (paso 2) | `internet` · `transmisor` · `no_se` | «Todavía no sé» es una respuesta válida y no bloquea nada. |
+| `destino` (paso 4) | `red` · `internet` · `route-dash` · `archivo` · `ninguna` | `route-dash` es la próxima generación de transmisión por antena: queda apuntado, todavía no está construido. `ninguna` es «todavía no lo sé». |
+| `retorno` (paso 4) | `receptor-tv` · `captura` · `stream` · `ninguno` | `ninguno` («todavía no») es válida: sin retorno de aire se sigue igual, y se avisa. |
+| `calidad` (paso 6) | `480i59.94` · `576i50` · `720p50` · `720p59.94` · `1080i50` · `1080i59.94` · `1080p25` · `1080p29.97` · `1080p59.94` | El formato de casa del canal. |
+
+`respuestas` (la clave de estación **nunca** sale por aquí, ni cifrada ni en
+claro; un paso solo aparece si ya quedó contestado):
+
+| Paso | Forma |
+|---|---|
+| `1` | `{"nombre","identificativo","comunidad_licencia","nombre_operador"}`. Se da por contestado en cuanto hay clave de estación puesta, aunque venga de antes de que existiera este apunte. |
+| `2` | `{"modo"}` |
+| `4` | `{"destino","retorno_de_aire","nota"}` |
+| `5` | `{"ve_barras": true\|false}` |
+| `6` | `{"pais","calidad"}` |
+| `7` | `{"carpeta"}` |
+| `8` | `{"propuesta"}` |
+
+Los pasos 3 y 9 no guardan respuesta propia y no aparecen en `respuestas`
+(sí pueden aparecer en `tiempos` una vez contestados).
+
+### `POST /instalacion/paso/{n}`
+
+Cada paso contesta `{"paso": n, "siguiente": n+1, …lo suyo}` (200); el
+paso 9 se queda apuntando a sí mismo como `siguiente`. Un error de
+validación contesta `400` con `{"error","campo"}`. `n` fuera de 1–9 contesta
+`400` con `campo: "n"`. Contestar un paso siempre deja dos cosas guardadas:
+`instalacion.paso` (el paso siguiente) e `instalacion.paso_N_en` (el instante
+en RFC 3339 en que se contestó ese paso n) — es la única forma de saber en
+qué paso se abandona una instalación sin poner telemetría en la máquina de
+nadie (F2-108).
+
+| Paso | Cuerpo | Además en la respuesta | Errores propios (400) | Qué queda guardado |
+|---|---|---|---|---|
+| **1** | `{nombre, identificativo?, comunidad_licencia?, clave, nombre_operador?}` | `canal` (el canal completo) · `cartel` (`"<identificativo> · <comunidad_licencia>"`) | `campo: "nombre"` si viene vacío · `campo: "clave"` si no son 4 a 6 dígitos | Nombre/identificativo/comunidad en el canal · la clave de estación (`SetPIN`) · `nombre_operador` · **la cookie de sesión** (el único paso que la pone). Dejar `clave` en blanco cuando ya había una puesta **conserva la que hay**: no se obliga a escribirla otra vez. |
+| **2** | `{modo}` | `modo_del_canal: "sombra"` (siempre, en F1 no hay motor) · `aviso` explicándolo | `campo: "modo"` si no es una de las opciones | `modo_previsto` |
+| **3** | ninguno | `ffmpeg`, `ffprobe`, `problema?` | — | nada; no pregunta, cuenta lo que la máquina encontró sola |
+| **4** | `{destino?, retorno_de_aire?, nota?}` | `aviso` cuando el retorno queda vacío o es `"ninguno"`: sin retorno de aire no se puede comparar lo que sale con lo que emites, y se dice — se puede seguir igual | `campo: "destino"` o `campo: "retorno_de_aire"` si no están en el catálogo (el mensaje lista las opciones) | `salida.destino`, `salida.retorno_de_aire`, `salida.nota` |
+| **5** | `{ve_barras: bool}` | `aviso` fijo: la prueba de barras necesita el motor de emisión (F2), que todavía no existe; la respuesta queda apuntada igual | — | `instalacion.ve_barras` (`si`/`no`). Este paso **solo apunta la respuesta**: la prueba de barras de verdad sobre lo que sale al aire llega con el motor, en F2. |
+| **6** | `{pais?, calidad?}` | `canal` (actualizado) · `formato` (`"AxB a FPS"`) | `campo: "calidad"` si no es una de las nueve opciones (el mensaje las lista) | `pais` y el perfil regulatorio del canal (`pr`/`puerto rico`/`us`/`usa`/`eeuu`/`estados unidos` → `us-fcc`; vacío no cambia nada; cualquier otro texto → `abierto`, el perfil que no exige nada) · `calidad` y el perfil de formato del canal |
+| **7** | `{carpeta}` | `carpeta` (ruta absoluta) · `aviso_vigilancia` (fijo) · `aviso_relleno?` (solo si la biblioteca de relleno está vacía: avisa que el primer hueco sale al cartel) | `campo: "carpeta"` si viene vacía, o si la carpeta no se puede crear/usar | Se crea la carpeta si hace falta, se guarda como `carpeta_contenido` y queda vigilada desde ese instante |
+| **8** | `{propuesta: "automatica"\|"ninguna"}` (vacío cuenta como `"ninguna"`) | `reglas_creadas`, `bloques`, `avisos[]`, `titulos_sin_material`, `aviso` | `campo: "propuesta"` si no es una de las dos | `instalacion.propuesta`. Ver abajo qué hace cada valor. |
+| **9** | ninguno | `completa: true` · `modo_del_canal: "sombra"` · `aviso` | — | `instalacion_completa = si` |
+
+**Paso 8, qué hace cada `propuesta`:**
+
+- `"ninguna"` — no crea ninguna regla: arma el plan con las reglas que ya
+  hubiera (`reglas_creadas: 0`). Es lo que pasaba antes de que la propuesta
+  existiera; se deja la parrilla para hacerla después en Reglas, o para pegar
+  una hoja de programación.
+- `"automatica"` — si el canal **ya tenía reglas puestas** (a mano o por una
+  hoja pegada), no toca nada: solo arma el plan con esas reglas
+  (`reglas_creadas: 0`, aviso «ya tenías la parrilla puesta…»). Si no había
+  ninguna, arma una regla por cada título programable que tenga material
+  listo (series, películas y programas — las cortinillas, identificativos,
+  promos y anuncios no cuentan): las **series** se colocan una detrás de
+  otra desde que empieza el día de emisión del canal; las **películas y lo
+  que va una sola vez** se colocan desde las **19:00** (o más tarde si el
+  día de emisión empieza después de esa hora); cada espacio dura lo que dura
+  el material, redondeado hacia arriba a la media hora; se proponen los
+  siete días de la semana y valen **30 días** desde hoy. Lo que no cabe antes
+  de las 19:00 se intenta después; lo que no cabe en ningún sitio se queda
+  en Biblioteca sin regla, y se avisa. Si no hay material listo con qué
+  armar nada, `reglas_creadas` queda en 0 y el aviso lo dice.
+
+### `POST /instalacion/relleno-por-defecto`
+
+Sin cuerpo. De un clic prepara el **cartel de la estación**: el nombre del
+canal, y debajo el identificativo y la comunidad de licencia que dejó el
+paso 1 — con una cama musical suave por debajo (tres tonos graves con una
+ondulación lenta, a volumen bajo), un minuto de duración. **Nunca son las
+barras y el tono**: eso es solo de la prueba del paso 5; el respaldo del aire
+siempre termina en el cartel (F2-69). El texto se dibuja aparte, no con un
+filtro sobre el video.
+
+| Respuesta | Cuándo |
+|---|---|
+| `400` `{error, campo: ""}` | No hay herramientas de video en esta máquina. |
+| `400` `{error, campo: "carpeta"}` | Todavía no se sabe la carpeta de contenido (falta el paso 7). |
+| `409` `{error, archivo}` | El cartel ya está hecho, o ya se está haciendo: un segundo clic no lo repite. |
+| `202` `{archivo, aviso}` | Arrancó. El trabajo de verdad tarda y se hace aparte: la petición no espera a que termine, y se avisa por `WS /ws` cuando está listo. |
+
+Queda en `carpeta_contenido/relleno/cartel-de-la-estacion.mkv` (la ruta
+también se guarda en el ajuste `relleno.por_defecto`). En cuanto termina
+entra solo a la biblioteca, por el mismo camino de vigilancia de carpeta que
+cualquier otro archivo, y queda marcado como relleno.
 
 ## Ajustes que reconoce el servidor
 
@@ -127,6 +250,14 @@ Todos viven en `settings` y se leen y escriben por `GET`/`PUT /ajustes`.
 | `avisos_canal` | `ninguno` / `telegram` / `correo`. Por dónde sale el aviso de vencimiento de los 7 días (F1-46). |
 | `avisos_telegram_token` · `avisos_telegram_chat` | La clave del bot y el chat al que se escribe. La clave es secreta. |
 | `avisos_correo_para` · `avisos_smtp_servidor` · `avisos_smtp_usuario` · `avisos_smtp_clave` | A quién se le escribe y por qué servidor (`servidor:puerto`, con cifrado en cuanto el servidor lo ofrezca). La contraseña es secreta. |
+| `modo_previsto` | Lo que se contestó en el paso 2 del asistente: `internet` / `transmisor` / `no_se`. En F1 no cambia nada del aire: el canal se queda en modo sombra igual. |
+| `salida.destino` · `salida.retorno_de_aire` · `salida.nota` | Lo que se contestó en el paso 4: a dónde va la señal, si hay manera de verla de vuelta, y una nota libre. Siempre uno de los valores del catálogo del asistente, nunca un nombre técnico. |
+| `instalacion.ve_barras` | `si` / `no`: lo que se contestó en el paso 5. La prueba de verdad se hace con el motor de emisión, que llega en F2; aquí solo queda apuntada la respuesta. |
+| `instalacion.propuesta` | `automatica` / `ninguna`: lo que se contestó en el paso 8. |
+| `instalacion.paso` | En qué paso va el asistente; de ahí arranca `GET /instalacion` la próxima vez que se abra. |
+| `instalacion.paso_1_en` … `instalacion.paso_9_en` | Cuándo se contestó cada paso del asistente, en RFC 3339. Sirve para saber en qué paso se abandona una instalación sin poner telemetría en la máquina de nadie (F2-108). |
+| `relleno.por_defecto` | La ruta del cartel de la estación que generó `POST /instalacion/relleno-por-defecto`, una vez que ya está hecho o en camino. |
+| `instalacion_completa` | `si` cuando se contestaron los nueve pasos del asistente (lo pone el paso 9). Junto con la clave de estación, decide `necesita_instalacion` en `GET /estado`. |
 
 Todo lo que cambia datos escribe en `audit_log` con `origen: humano` y el
 autor de la sesión. El MCP (F6) usará exactamente estas rutas con `origen: mcp`.

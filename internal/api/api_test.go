@@ -784,11 +784,11 @@ func TestAsistenteDePrincipioAFin(t *testing.T) {
 		body any
 	}{
 		{3, nil},
-		{4, map[string]string{"destino": "udp://239.0.0.1:1234", "retorno_de_aire": "receptor de TV"}},
+		{4, map[string]string{"destino": "red", "retorno_de_aire": "receptor-tv", "nota": "el cable va al armario del pasillo"}},
 		{5, map[string]bool{"ve_barras": true}},
 		{6, map[string]string{"pais": "PR", "calidad": "720p59.94"}},
 		{7, map[string]string{"carpeta": t.TempDir()}},
-		{8, nil},
+		{8, map[string]string{"propuesta": "automatica"}},
 		{9, nil},
 	} {
 		w := c.do("POST", "/api/v1/instalacion/paso/"+itoa(int64(paso.n)), paso.body)

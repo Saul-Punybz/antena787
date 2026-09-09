@@ -58,11 +58,22 @@ const (
 	// KeyOutputTarget y KeyAirReturn son las respuestas del paso 4.
 	KeyOutputTarget = "salida.destino"
 	KeyAirReturn    = "salida.retorno_de_aire"
+	// KeyOutputNote es la nota en texto libre que alguien puede dejar en el
+	// paso 4: "el cable va al armario del pasillo". No la lee la máquina;
+	// existe para que quien venga después sepa de qué se hablaba.
+	KeyOutputNote = "salida.nota"
 	// KeyBarsSeen es la respuesta del paso 5 (el motor de barras es F2).
 	KeyBarsSeen = "instalacion.ve_barras"
 	// KeyCountry y KeyQuality son las del paso 6.
 	KeyCountry = "pais"
 	KeyQuality = "calidad"
+	// KeyProposal es lo que se contestó en el paso 8: "automatica" si el
+	// asistente armó la primera parrilla, "ninguna" si se dejó para después.
+	KeyProposal = "instalacion.propuesta"
+	// KeyDefaultFiller es la ruta del cartel de la estación que el asistente
+	// genera cuando la biblioteca de relleno está vacía (F2-106). Vacío =
+	// todavía no se ha hecho ninguno.
+	KeyDefaultFiller = "relleno.por_defecto"
 
 	// KeyGuideHTTP es un destino opcional al que se le manda la guía por la
 	// red cada vez que se publica. Vacío = no se manda a ningún sitio

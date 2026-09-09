@@ -133,6 +133,7 @@ func (s *Server) routes() {
 	// El asistente: abierto mientras no haya clave puesta (guard lo sabe).
 	s.mux.Handle("GET /api/v1/instalacion", s.guard(s.instalacionGet))
 	s.mux.Handle("POST /api/v1/instalacion/paso/{n}", s.guard(s.instalacionPaso))
+	s.mux.Handle("POST /api/v1/instalacion/relleno-por-defecto", s.guard(s.rellenoPorDefecto))
 
 	// El estado en vivo
 	s.mux.Handle("/api/v1/ws", s.guard(s.websocket))

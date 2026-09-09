@@ -624,6 +624,216 @@ button.dias__dia {
   padding: 14px 12px !important;
 }
 
+/* ── el asistente de instalación ────────────────────────────────── */
+
+.asistente {
+  max-width: 1020px;
+  margin: 0 auto;
+  padding: 44px 24px 72px;
+}
+.asistente__marca {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 24px;
+  font: 600 19px var(--sans);
+  letter-spacing: -0.3px;
+}
+.asistente__cuerpo {
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr);
+  gap: 30px;
+  align-items: start;
+  margin-top: 26px;
+}
+@media (max-width: 900px) {
+  .asistente__cuerpo {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+  }
+  .riel {
+    position: static;
+  }
+}
+
+/* El riel: los nueve nombres, siempre a la vista. Los contestados se pueden
+   volver a abrir; los que faltan, no. */
+.riel {
+  position: sticky;
+  top: 22px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1px;
+}
+.riel__paso {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--texto-3);
+  font: 400 13.5px var(--sans);
+  cursor: default;
+}
+.riel__paso--hecho {
+  color: var(--texto-2);
+  cursor: pointer;
+}
+.riel__paso--hecho:hover {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--texto);
+}
+.riel__paso--actual {
+  background: var(--superficie);
+  color: var(--texto);
+  font-weight: 600;
+}
+.riel__num {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font: 600 11.5px var(--mono);
+  background: var(--superficie-2);
+  color: var(--texto-4);
+}
+.riel__paso--hecho .riel__num {
+  background: rgba(63, 185, 80, 0.15);
+  color: var(--verde);
+}
+.riel__paso--actual .riel__num {
+  background: var(--aqua);
+  color: #06141a;
+}
+.riel__cuando {
+  display: block;
+  font: 400 11.5px var(--sans);
+  color: var(--texto-4);
+  margin-top: 2px;
+}
+
+/* La tarjeta del paso que se está contestando. */
+.paso {
+  padding: 26px 28px 22px;
+}
+.paso__pregunta {
+  font: 700 21px var(--sans);
+  letter-spacing: -0.35px;
+  margin: 0;
+}
+.paso__pie {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--borde);
+}
+.paso__rejilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.opciones {
+  display: grid;
+  gap: 10px;
+}
+.opcion {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  background: var(--superficie-2);
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  padding: 14px 16px;
+  color: var(--texto);
+  cursor: pointer;
+}
+.opcion:hover {
+  border-color: var(--texto-3);
+}
+.opcion--elegida {
+  border-color: var(--aqua);
+  background: rgba(34, 211, 238, 0.07);
+}
+.opcion__marca {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid var(--texto-4);
+  flex-shrink: 0;
+  margin-top: 1px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.opcion--elegida .opcion__marca {
+  border-color: var(--aqua);
+}
+.opcion--elegida .opcion__marca::after {
+  content: '';
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--aqua);
+}
+.opcion__texto {
+  font: 500 14.5px var(--sans);
+}
+.opcion__ayuda {
+  font: 400 12.5px var(--sans);
+  color: var(--texto-3);
+  margin: 3px 0 0;
+}
+.opciones--grandes .opcion {
+  padding: 20px 18px;
+}
+.opciones--grandes .opcion__texto {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* Las barras de la prueba del paso 5. */
+.barras {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  border: 1px solid var(--borde);
+}
+
+/* Una frase tranquila: ni error ni felicitación. */
+.nota {
+  border-radius: 8px;
+  padding: 11px 14px;
+  font: 400 13px var(--sans);
+  background: var(--superficie-2);
+  border: 1px solid var(--borde);
+  color: var(--texto-2);
+}
+.nota--bien {
+  background: rgba(63, 185, 80, 0.09);
+  border-color: rgba(63, 185, 80, 0.3);
+  color: #a5e0ae;
+}
+.nota--aviso {
+  background: rgba(210, 153, 34, 0.11);
+  border-color: rgba(210, 153, 34, 0.35);
+  color: #f0c674;
+}
+
 /* ── utilidades ─────────────────────────────────────────────────── */
 
 .fila {

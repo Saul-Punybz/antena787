@@ -1,13 +1,16 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"antena787/internal/app"
+	"antena787/internal/model"
 )
 
 // PasoFinal es el último paso del asistente (PRD §13: nueve pasos, seis
@@ -50,6 +53,10 @@ func (s *Server) instalacionGet(w http.ResponseWriter, r *http.Request) {
 	// La aceleración por hardware se mide de verdad en F2 (PRD §14.1):
 	// listar -hwaccels no basta porque los drivers mienten. Aquí se dice.
 	detectado["aceleracion"] = "se mide al arrancar el motor (F2); todavía no hay motor"
+	// El disco y la red se miden de verdad y se cuentan en una frase, no en
+	// un número que haya que interpretar (docs/API.md).
+	detectado["disco"] = s.App.DiscoEnCristiano()
+	detectado["red"] = app.RedEnCristiano()
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"paso":                 paso,
@@ -58,7 +65,74 @@ func (s *Server) instalacionGet(w http.ResponseWriter, r *http.Request) {
 		"necesita_instalacion": !hasPIN,
 		"canal":                ch,
 		"detectado":            detectado,
+		"opciones":             app.OpcionesDelAsistente(),
+		"respuestas":           s.respuestasDelAsistente(r, ch, hasPIN),
+		"tiempos":              s.tiemposDelAsistente(r),
 	})
+}
+
+// respuestasDelAsistente devuelve lo contestado hasta ahora, paso por paso,
+// para que la pantalla pueda volver atrás y enseñarlo. La clave de estación
+// no sale nunca de aquí: no está, ni cifrada ni en claro.
+func (s *Server) respuestasDelAsistente(r *http.Request, ch model.Channel, hayClave bool) map[string]any {
+	out := map[string]any{}
+	// Un paso se enseña cuando quedó apuntado que se contestó, o cuando lo
+	// que contestó está guardado. Lo segundo es por las instalaciones que
+	// vienen de antes de que se apuntaran los instantes.
+	guarda := func(n int, contestado bool, valores map[string]any) {
+		if !contestado && s.setting(r, app.KeyInstallStepAt(n)) == "" {
+			return
+		}
+		out[strconv.Itoa(n)] = valores
+	}
+
+	// El paso 1 se da por contestado cuando hay clave de estación: es lo que
+	// ese paso pone, y el nombre del canal viene de fábrica.
+	guarda(1, hayClave, map[string]any{
+		"nombre":             ch.Name,
+		"identificativo":     ch.CallSign,
+		"comunidad_licencia": ch.LicenseCity,
+		"nombre_operador":    s.setting(r, app.KeyOperator),
+	})
+
+	modo := s.setting(r, app.KeyPlannedMode)
+	guarda(2, modo != "", map[string]any{"modo": modo})
+
+	destino := s.setting(r, app.KeyOutputTarget)
+	retorno := s.setting(r, app.KeyAirReturn)
+	nota := s.setting(r, app.KeyOutputNote)
+	guarda(4, destino != "" || retorno != "" || nota != "", map[string]any{
+		"destino":         destino,
+		"retorno_de_aire": retorno,
+		"nota":            nota,
+	})
+
+	barras := s.setting(r, app.KeyBarsSeen)
+	guarda(5, barras != "", map[string]any{"ve_barras": barras == "si"})
+
+	pais, calidad := s.setting(r, app.KeyCountry), s.setting(r, app.KeyQuality)
+	guarda(6, pais != "" || calidad != "", map[string]any{"pais": pais, "calidad": calidad})
+
+	carpeta := s.setting(r, app.KeyContentFolder)
+	guarda(7, carpeta != "", map[string]any{"carpeta": carpeta})
+
+	propuesta := s.setting(r, app.KeyProposal)
+	guarda(8, propuesta != "", map[string]any{"propuesta": propuesta})
+
+	return out
+}
+
+// tiemposDelAsistente dice cuándo se contestó cada paso. Es la única forma
+// de saber en qué paso se abandona una instalación sin poner telemetría en
+// la máquina de nadie (F2-108, PRD §23).
+func (s *Server) tiemposDelAsistente(r *http.Request) map[string]string {
+	out := map[string]string{}
+	for n := 1; n <= PasoFinal; n++ {
+		if v := s.setting(r, app.KeyInstallStepAt(n)); v != "" {
+			out[strconv.Itoa(n)] = v
+		}
+	}
+	return out
 }
 
 // pasoBody son todas las respuestas posibles del asistente. Cada paso usa
@@ -75,6 +149,7 @@ type pasoBody struct {
 	// Paso 4
 	Destino string `json:"destino"`
 	Retorno string `json:"retorno_de_aire"`
+	Nota    string `json:"nota"`
 	// Paso 5
 	VeBarras *bool `json:"ve_barras"`
 	// Paso 6
@@ -82,6 +157,8 @@ type pasoBody struct {
 	Calidad string `json:"calidad"`
 	// Paso 7
 	Carpeta string `json:"carpeta"`
+	// Paso 8
+	Propuesta string `json:"propuesta"`
 }
 
 // instalacionPaso guarda la respuesta de un paso y adelanta el asistente.
@@ -94,7 +171,6 @@ func (s *Server) instalacionPaso(w http.ResponseWriter, r *http.Request) {
 	var body pasoBody
 	_ = decodeOptional(r, &body)
 
-	ctx := r.Context()
 	out := map[string]any{"paso": n}
 
 	switch n {
@@ -124,10 +200,8 @@ func (s *Server) instalacionPaso(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case 4:
-		s.set(r, app.KeyOutputTarget, body.Destino)
-		s.set(r, app.KeyAirReturn, body.Retorno)
-		if strings.TrimSpace(body.Retorno) == "" {
-			out["aviso"] = "sin retorno de aire no podemos comparar lo que sale con lo que emites: se puede seguir, y se dice."
+		if !s.paso4(w, r, body, out) {
+			return
 		}
 
 	case 5:
@@ -148,13 +222,9 @@ func (s *Server) instalacionPaso(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case 8:
-		res, err := s.App.Resolve(ctx)
-		if err != nil {
-			failStore(w, err, "armar la primera parrilla")
+		if !s.paso8(w, r, body, out) {
 			return
 		}
-		out["bloques"] = len(res.Items)
-		out["avisos"] = res.Warnings
 
 	case PasoFinal:
 		s.set(r, app.KeyInstallDone, "si")
@@ -168,6 +238,9 @@ func (s *Server) instalacionPaso(w http.ResponseWriter, r *http.Request) {
 		siguiente = PasoFinal
 	}
 	s.set(r, app.KeyInstallStep, strconv.Itoa(siguiente))
+	// Cuándo se contestó este paso. Sirve para acompañar una instalación por
+	// teléfono y para saber dónde se abandona (F2-108).
+	s.set(r, app.KeyInstallStepAt(n), s.App.Now().Format(time.RFC3339))
 	out["siguiente"] = siguiente
 	writeJSON(w, http.StatusOK, out)
 }
@@ -180,7 +253,15 @@ func (s *Server) paso1(w http.ResponseWriter, r *http.Request, body pasoBody, ou
 		return false
 	}
 	clave := strings.TrimSpace(body.Clave)
-	if len(clave) < 4 || len(clave) > 6 || !soloDigitos(clave) {
+	yaHabia, err := s.App.Store.Settings.HasPIN(ctx)
+	if err != nil {
+		fail(w, http.StatusInternalServerError, "no se pudo leer la clave de la estación: "+err.Error(), "")
+		return false
+	}
+	// Al volver al paso 1 con la clave ya puesta, dejarla en blanco es
+	// «conservar la que hay»; no se obliga a escribirla otra vez.
+	conservarClave := clave == "" && yaHabia
+	if !conservarClave && (len(clave) < 4 || len(clave) > 6 || !soloDigitos(clave)) {
 		fail(w, http.StatusBadRequest, "la clave de la estación son de cuatro a seis dígitos", "clave")
 		return false
 	}
@@ -202,15 +283,19 @@ func (s *Server) paso1(w http.ResponseWriter, r *http.Request, body pasoBody, ou
 		failStore(w, err, "guardar el canal")
 		return false
 	}
-	if err := s.App.Store.Settings.SetPIN(ctx, clave); err != nil {
-		failf(w, http.StatusBadRequest, "clave", "%s", err)
-		return false
+	if !conservarClave {
+		if err := s.App.Store.Settings.SetPIN(ctx, clave); err != nil {
+			failf(w, http.StatusBadRequest, "clave", "%s", err)
+			return false
+		}
 	}
 	if v := strings.TrimSpace(body.Operador); v != "" {
 		s.set(r, app.KeyOperator, v)
 	}
 	s.auditDiff(r, "channel", &ch.ID, old, ch)
-	s.audit(r, "settings", nil, "clave_estacion", "", "puesta")
+	if !conservarClave {
+		s.audit(r, "settings", nil, "clave_estacion", "", "puesta")
+	}
 
 	// La clave acaba de nacer: se deja la sesión abierta para que el
 	// asistente pueda seguir sin volver a pedirla.
@@ -223,6 +308,133 @@ func (s *Server) paso1(w http.ResponseWriter, r *http.Request, body pasoBody, ou
 	return true
 }
 
+// paso4: a dónde va la señal y si se puede ver de vuelta.
+//
+// Nunca se pide elegir por nombre técnico (PRD §4, principio 1; F2-105): lo
+// que llega es uno de los valores del catálogo que el propio asistente
+// entregó en GET /instalacion, y «todavía no» es uno de ellos.
+func (s *Server) paso4(w http.ResponseWriter, r *http.Request, body pasoBody, out map[string]any) bool {
+	destino := strings.TrimSpace(body.Destino)
+	if destino != "" && !app.OpcionValida(app.OpcionesDeDestino, destino) {
+		failf(w, http.StatusBadRequest, "destino",
+			"esa no es una de las respuestas: %s", app.TextosDeOpciones(app.OpcionesDeDestino))
+		return false
+	}
+	retorno := strings.TrimSpace(body.Retorno)
+	if retorno != "" && !app.OpcionValida(app.OpcionesDeRetorno, retorno) {
+		failf(w, http.StatusBadRequest, "retorno_de_aire",
+			"esa no es una de las respuestas: %s", app.TextosDeOpciones(app.OpcionesDeRetorno))
+		return false
+	}
+
+	s.set(r, app.KeyOutputTarget, strings.ToLower(destino))
+	s.set(r, app.KeyAirReturn, strings.ToLower(retorno))
+	s.set(r, app.KeyOutputNote, strings.TrimSpace(body.Nota))
+
+	// Sin retorno de aire se puede seguir. Se dice, no se esconde (PRD §13).
+	if retorno == "" || strings.EqualFold(retorno, "ninguno") {
+		out["aviso"] = "sin retorno de aire no podemos comparar lo que sale con lo que emites: se puede seguir, y se dice."
+	}
+	return true
+}
+
+// paso8: la primera parrilla. Con «automatica» el asistente propone una con
+// lo que haya en la biblioteca; con «ninguna» solo arma el plan con lo que ya
+// exista, que es lo que hacía antes de que la propuesta existiera.
+func (s *Server) paso8(w http.ResponseWriter, r *http.Request, body pasoBody, out map[string]any) bool {
+	ctx := r.Context()
+	quiere := strings.ToLower(strings.TrimSpace(body.Propuesta))
+	switch quiere {
+	case "":
+		quiere = "ninguna"
+	case "automatica", "ninguna":
+	default:
+		fail(w, http.StatusBadRequest,
+			"las respuestas son: que te la proponga yo, o dejarla para después", "propuesta")
+		return false
+	}
+	s.set(r, app.KeyProposal, quiere)
+
+	if quiere == "ninguna" {
+		res, err := s.App.Resolve(ctx)
+		if err != nil {
+			failStore(w, err, "armar la primera parrilla")
+			return false
+		}
+		out["reglas_creadas"] = 0
+		out["bloques"] = len(res.Items)
+		out["avisos"] = res.Warnings
+		out["titulos_sin_material"] = 0
+		out["aviso"] = "queda para después: en Reglas puedes armar la parrilla cuando quieras, o pegar tu hoja de programación."
+		return true
+	}
+
+	p, err := s.App.ProponerParrilla(ctx)
+	if err != nil {
+		failStore(w, err, "armar la primera parrilla")
+		return false
+	}
+	out["reglas_creadas"] = p.ReglasCreadas
+	out["bloques"] = p.Bloques
+	out["avisos"] = p.Avisos
+	out["titulos_sin_material"] = p.SinMaterial
+	switch {
+	case p.YaHabiaReglas:
+		out["aviso"] = "ya tenías la parrilla puesta, así que no toqué nada: armé el plan con tus reglas."
+	case p.ReglasCreadas == 0:
+		out["aviso"] = "todavía no hay material listo con qué armarla: deja tus archivos en la carpeta de contenido, o pega tu hoja de programación en Reglas."
+	default:
+		out["aviso"] = "esto es una propuesta: en Reglas puedes mover cada programa de hora, quitarlo, o pegar tu hoja y quedarte con la tuya."
+	}
+	return true
+}
+
+// rellenoPorDefecto genera el cartel de la estación con una cama musical
+// cuando la biblioteca de relleno está vacía (PRD §13, F2-106): un hueco sin
+// relleno sale al cartel, y eso no se descubre a las tres de la mañana.
+//
+// Nunca son barras y tono: las barras son de la prueba del paso 5 y no del
+// respaldo del aire (F2-69).
+func (s *Server) rellenoPorDefecto(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if s.App.FFmpeg == "" {
+		motivo := "no encuentro las herramientas de video en esta máquina"
+		if s.App.FFmpegErr != nil {
+			motivo = s.App.FFmpegErr.Error()
+		}
+		fail(w, http.StatusBadRequest, "no puedo preparar el cartel: "+motivo, "")
+		return
+	}
+
+	ruta, err := s.App.ReservarRellenoPorDefecto(ctx)
+	switch {
+	case errors.Is(err, app.ErrSinCarpetaDeContenido):
+		fail(w, http.StatusBadRequest, "primero dime en qué carpeta está tu contenido y ahí mismo dejo el cartel", "carpeta")
+		return
+	case errors.Is(err, os.ErrExist):
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"error":   "el cartel de la estación ya está hecho: lo tienes en Biblioteca, dentro del relleno",
+			"archivo": ruta,
+		})
+		return
+	case err != nil:
+		failStore(w, err, "preparar el cartel de la estación")
+		return
+	}
+	s.audit(r, "settings", nil, app.KeyDefaultFiller, "", ruta)
+
+	// El trabajo de verdad tarda: se hace aparte y se avisa por el bus
+	// cuando termina. La petición no se queda esperando a ffmpeg.
+	go func() {
+		_, _ = s.App.CrearRellenoPorDefecto(s.App.Context())
+	}()
+
+	writeJSON(w, http.StatusAccepted, map[string]any{
+		"archivo": ruta,
+		"aviso":   app.AvisoDelRelleno,
+	})
+}
+
 // paso6: país y calidad. El país enciende el perfil regulatorio; la calidad
 // fija el formato de casa.
 func (s *Server) paso6(w http.ResponseWriter, r *http.Request, body pasoBody, out map[string]any) bool {
@@ -232,14 +444,20 @@ func (s *Server) paso6(w http.ResponseWriter, r *http.Request, body pasoBody, ou
 		failStore(w, err, "el canal")
 		return false
 	}
+	calidad := strings.TrimSpace(body.Calidad)
+	if calidad != "" && !app.OpcionValida(app.OpcionesDeCalidad, calidad) {
+		failf(w, http.StatusBadRequest, "calidad",
+			"esa calidad no está en la lista; las que hay son: %s", app.TextosDeOpciones(app.OpcionesDeCalidad))
+		return false
+	}
 	old := ch
 	if v := strings.TrimSpace(body.Pais); v != "" {
 		s.set(r, app.KeyCountry, v)
 		ch.RegProfile = perfilDePais(v)
 	}
-	if v := strings.TrimSpace(body.Calidad); v != "" {
-		s.set(r, app.KeyQuality, v)
-		ch.FormatProfile = v
+	if calidad != "" {
+		s.set(r, app.KeyQuality, calidad)
+		ch.FormatProfile = calidad
 	}
 	if err := s.App.Store.Channel.Update(ctx, ch); err != nil {
 		failStore(w, err, "guardar el canal")

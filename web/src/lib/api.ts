@@ -13,6 +13,7 @@ import type {
   CambioDeMaterial,
   CambioDePlan,
   Canal,
+  CuerposDePaso,
   ElementoDelPlan,
   EnCuarentena,
   Estado,
@@ -24,6 +25,8 @@ import type {
   MesDelPlan,
   Regla,
   ReglaNueva,
+  RellenoPorDefecto,
+  RespuestasDePaso,
   ResumenDeImportacion,
   SemanaDelPlan,
   TituloDeBiblioteca,
@@ -116,8 +119,19 @@ export const api = {
   guardarAjustes: (a: Ajustes) => pedir<Ajustes>('/ajustes', conCuerpo('PUT', a)),
 
   instalacion: () => pedir<Instalacion>('/instalacion'),
-  responderPaso: (n: number, respuesta: unknown) =>
-    pedir<Instalacion>(`/instalacion/paso/${n}`, conCuerpo('POST', respuesta)),
+  /**
+   * Contesta un paso del asistente. Cada paso tiene su cuerpo y su respuesta;
+   * todas traen {paso, siguiente} y lo suyo. Volver atrás y contestar otra vez
+   * es válido: el servidor pisa lo que había.
+   */
+  responderPaso: <N extends keyof RespuestasDePaso>(n: N, respuesta: CuerposDePaso[N]) =>
+    pedir<RespuestasDePaso[N]>(`/instalacion/paso/${n}`, conCuerpo('POST', respuesta)),
+  /**
+   * Crea el relleno por defecto —el cartel de la estación con una cama
+   * musical— de un clic (PRD §13). 202 cuando lo creó; 409 si ya existía.
+   */
+  rellenoPorDefecto: () =>
+    pedir<RellenoPorDefecto>('/instalacion/relleno-por-defecto', conCuerpo('POST')),
 
   reglas: () => pedir<Regla[]>('/reglas'),
   crearRegla: (r: ReglaNueva) => pedir<Regla>('/reglas', conCuerpo('POST', r)),

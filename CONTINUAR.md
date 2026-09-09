@@ -1,6 +1,6 @@
 # CONTINUAR — dónde quedamos y qué sigue
 
-_Última sesión: 9 de septiembre de 2026 (dos tandas). Siguiente: la que venga._
+_Última sesión: 9 de septiembre de 2026 (tres tandas). Siguiente: la que venga._
 
 ## Dónde estamos
 
@@ -53,9 +53,27 @@ go test ./... -count=1           # todo debe estar verde
    archivo mudo **no se puede soltar**: todo lo que sale al aire lleva audio.
    Pendiente menor: `GET /cuarentena` no manda `titulo` (la interfaz lo declara
    obligatorio); arreglo sugerido en `docs/API.md`.
-2. **Asistente de instalación con lógica real en la interfaz** (issue #5): la
-   API `POST /instalacion/paso/{n}` funciona para los 9 pasos; falta la
-   pantalla paso a paso (la prueba de barras del paso 5 «llega en F2»).
+2. ~~Asistente de instalación~~ **Hecho (9 sept, tercera tanda; cierra el issue
+   #5):** los nueve pasos con lógica real en `web/src/pantallas/Asistente.tsx`
+   (riel de progreso, reanudar desde `paso`, respuestas precargadas, barras
+   SMPTE dibujadas en el navegador con las dos respuestas activas y una línea
+   honesta de que la prueba en la salida llega con el motor). El servidor
+   detecta disco y red, entrega las listas de opciones de los pasos 2/4/6
+   (nunca se pide un nombre de driver), guarda respuestas y tiempos por paso
+   (para saber dónde se abandona, F2-108), valida `calidad`, y en el paso 8
+   **arma una propuesta** con lo que haya en la biblioteca (`App.ProponerParrilla`:
+   series a diario desde el inicio del día de emisión, películas a las 19:00,
+   30 días; no toca nada si ya hay reglas). Nuevo
+   `POST /instalacion/relleno-por-defecto`: cartel de la estación (dibujado en
+   Go, fuentes Go embebidas) con cama de tonos suaves, 60 s, nunca barras
+   (F2-69). `necesita_instalacion` se mantiene hasta el paso 9. Volver al paso 1
+   con la clave en blanco conserva la que hay. Modo demo completo
+   (`?instalar=1`, `&reiniciar=1` para empezar de cero). Humo de punta a punta
+   con el binario real: verde.
+   Pendiente menor: `schedule_rule` no tiene campo de nota, así que la
+   procedencia «propuesta del asistente» queda en el incidente y en
+   `instalacion.propuesta`, no en cada regla (columna `nota` + migración es el
+   arreglo). La opción `custom` de formato no se ofrece en el asistente.
 3. **Pantalla de emparejar títulos** (issue #13): lo que el importador deja en
    `Unmatched` (`Samurai X` ↔ `Rurouni Kenshin`, `SaberMarionette` J/R).
 4. **Modo sombra con archivos de verdad** (y firma de los tres criterios
