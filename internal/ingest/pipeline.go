@@ -99,6 +99,15 @@ func Ingest(ctx context.Context, d Deps, path string) (model.MediaAsset, model.T
 	}
 	var title model.Title
 
+	// La fila existe desde el primer segundo, en «ingiriendo»: quien deja un
+	// archivo en la carpeta lo ve entrar en Biblioteca mientras se mide, no
+	// minutos después cuando termina. Una película de dos horas se mide en
+	// varios minutos y, sin esto, parecía que no había pasado nada
+	// (hallazgo del modo sombra, F1-73).
+	if d.Persist != nil {
+		_ = d.Persist.SaveAsset(ctx, &asset)
+	}
+
 	// Lo que el ingest averigua del sonido. Se anota en la base tanto si el
 	// archivo acaba listo como si acaba en cuarentena: en Biblioteca se ve
 	// igual, y quien mire el archivo mudo tiene que poder ver que sí trae
@@ -111,10 +120,20 @@ func Ingest(ctx context.Context, d Deps, path string) (model.MediaAsset, model.T
 		subtSidecar  string
 	)
 	anota := func() {
-		if d.Persist == nil || !medido {
+		if d.Persist == nil {
 			return
 		}
+		// Los archivos de al lado van en la misma escritura que el estado:
+		// no hay un instante en que la fila diga «listo» sin decir de dónde
+		// salió su sonido.
+		asset.AudioSidecar, asset.SubtitulosSidecar = audioSidecar, subtSidecar
 		if err := d.Persist.SaveAsset(ctx, &asset); err != nil {
+			return
+		}
+		if !medido {
+			// Se cayó antes de medir: la fila queda en cuarentena con su
+			// motivo, nunca a medias en «ingiriendo». Pistas y archivos de
+			// al lado no hay nada que anotar.
 			return
 		}
 		// Que la base falle al anotar esto no manda el material a

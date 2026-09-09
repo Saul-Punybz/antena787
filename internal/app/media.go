@@ -206,6 +206,9 @@ func (a *App) ReingestSidecar(ctx context.Context, sidecar string) {
 // medir, o una base que falló en ese momento—, y SaveAsset se encarga de que
 // nunca haya dos fichas del mismo archivo.
 func guardarFicha(ctx context.Context, a *App, asset *model.MediaAsset) error {
+	// Con persistencia, el ingest ya guardó la fila él mismo (desde el
+	// primer segundo en «ingiriendo», y al final con su estado); volver a
+	// guardarla aquí pisaría lo que anotó aparte, como el sonido de al lado.
 	if asset.ID != 0 {
 		return nil
 	}

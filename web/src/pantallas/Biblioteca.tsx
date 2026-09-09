@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Caratula } from '../componentes/Caratula'
 import { Panel } from '../componentes/Panel'
 import { IconoBuscar } from '../componentes/Iconos'
-import { api } from '../lib/api'
+import { api, suscribirseAEventos } from '../lib/api'
 import { nombreDeArchivo, nombreDePista } from '../lib/audio'
 import { duracionLarga, fechaDeRegla, minutosAHora12, hhMmAMinutos } from '../lib/fechas'
 import { useEstado } from '../lib/estado'
@@ -14,6 +14,7 @@ import type {
   FichaDeTitulo,
   MaterialDeAudio,
   TituloDeBiblioteca,
+  ArchivoEntrando,
 } from '../lib/tipos'
 
 export function Biblioteca() {
@@ -21,6 +22,7 @@ export function Biblioteca() {
   const anio = Number((estado?.dia_emision ?? '2026-01-01').slice(0, 4))
   const [titulos, setTitulos] = useState<TituloDeBiblioteca[] | null>(null)
   const [cuarentena, setCuarentena] = useState<EnCuarentena[]>([])
+  const [entrando, setEntrando] = useState<ArchivoEntrando[]>([])
   const [busqueda, setBusqueda] = useState('')
   const [ficha, setFicha] = useState<FichaDeTitulo | null>(null)
   const [dejarPasar, setDejarPasar] = useState<EnCuarentena | null>(null)
@@ -31,8 +33,16 @@ export function Biblioteca() {
   function cargar() {
     api.biblioteca().then(setTitulos).catch(() => setTitulos([]))
     api.cuarentena().then(setCuarentena).catch(() => setCuarentena([]))
+    api.entrando().then(setEntrando).catch(() => setEntrando([]))
   }
-  useEffect(cargar, [])
+  useEffect(() => {
+    cargar()
+    // Cada archivo que entra o termina de medirse avisa por el WebSocket:
+    // la pantalla se refresca sola, sin que nadie recargue.
+    return suscribirseAEventos((e) => {
+      if (e.clase === 'ingest' || e.clase === 'material') cargar()
+    })
+  }, [])
 
   const filtrados = useMemo(
     () =>
@@ -190,6 +200,31 @@ export function Biblioteca() {
           onChange={(e) => void subir(e.target.files)}
         />
       </div>
+
+      {/* Entrando: se ve desde el primer segundo, mientras se mide */}
+      {entrando.length > 0 && (
+        <section className="tarjeta" style={{ padding: '18px 20px' }}>
+          <div className="entre">
+            <div>
+              <div className="rotulo">ENTRANDO</div>
+              <p className="subtitulo" style={{ marginTop: 5 }}>
+                Se están midiendo. Pasan a la biblioteca en cuanto terminan; una
+                película tarda unos minutos.
+              </p>
+            </div>
+            <span className="ambar" style={{ fontSize: 13 }}>
+              {entrando.length === 1 ? '1 archivo' : `${entrando.length} archivos`}
+            </span>
+          </div>
+          <ul style={{ listStyle: 'none', margin: '12px 0 0', padding: 0, display: 'grid', gap: 6 }}>
+            {entrando.map((a) => (
+              <li key={a.id} style={{ font: '400 13.5px var(--sans)' }}>
+                {nombreDeArchivo(a.ruta)}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* Cuarentena */}
       <section className="tarjeta" style={{ padding: '18px 20px' }}>

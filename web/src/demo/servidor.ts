@@ -1306,6 +1306,12 @@ export async function responder(ruta: string, init?: RequestInit): Promise<Respo
     })
   }
   if (p === '/cuarentena') return json(cuarentena.filter((c) => !dejadosPasar.has(c.id)))
+  if (p === '/material')
+    return json(
+      url.searchParams.get('estado') === 'ingiriendo'
+        ? [{ id: 901, ruta: 'C:\\Contenido\\Kojak.S01E04.1080p.mkv', creado: '2026-09-08T14:02:00Z' }]
+        : [],
+    )
   const pasar = p.match(/^\/cuarentena\/(\d+)\/dejar-pasar$/)
   if (pasar) {
     const quien = String(cuerpo?.quien ?? '').trim()

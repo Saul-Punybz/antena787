@@ -78,9 +78,15 @@ var ArtworkNames = []string{"poster.jpg", "poster.png", "folder.jpg", "folder.pn
 func Metadata(ctx context.Context, path string, m Measure, deps MetadataDeps) (Card, error) {
 	var card Card
 
-	// 1 · etiquetas embebidas (sin red)
-	if tagCard := FromTags(m); !tagCard.Empty() {
+	// 1 · etiquetas embebidas (sin red), corregidas con lo que dice el
+	// nombre del archivo: muchas llevan de título el propio nombre con
+	// puntos, y eso se lee como nombre, no como título (nombre.go).
+	fileCard := FichaDesdeNombre(path)
+	if tagCard := conNombreLegible(FromTags(m), fileCard); !tagCard.Empty() {
 		card.mergeFrom(tagCard)
+		for _, s := range tagCard.Sources {
+			card.addSource(s) // la ficha dice de dónde salió cada cosa
+		}
 	}
 
 	// 2 · .nfo de Kodi al lado (sin red)
@@ -106,7 +112,9 @@ func Metadata(ctx context.Context, path string, m Measure, deps MetadataDeps) (C
 	}
 
 	// El nombre del archivo es el último recurso local, y casi siempre el
-	// mejor dato que hay en una estación pequeña.
+	// mejor dato que hay en una estación pequeña: rellena la serie, la
+	// temporada, el episodio y el año que nadie más dijo.
+	card.mergeFrom(fileCard)
 	if card.Name == "" {
 		card.Name = NameFromFile(path)
 		card.addSource("nombre-de-archivo")

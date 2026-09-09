@@ -231,6 +231,13 @@ export interface PistaDeAudio {
  * salieron el audio y los subtítulos si vinieron en un archivo de al lado
  * (F1-58 a F1-62). Todo opcional: una respuesta vieja sigue pintando igual.
  */
+/** Un archivo que está entrando ahora mismo (GET /material?estado=ingiriendo). */
+export interface ArchivoEntrando {
+  id: number
+  ruta: string
+  creado: string
+}
+
 export interface AudioDelMaterial {
   /** El archivo en sí, para PUT /material/{id}. */
   material_id?: number

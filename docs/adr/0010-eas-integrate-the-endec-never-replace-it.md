@@ -65,6 +65,28 @@ the whole event into the as-run log, which is what the FCC asks to see.
    it appears, and it is the layer a radio or online-only channel with no
    Part 11 obligation can use on its own.
 
+## What CAtv does today when the Sage fires (Saul, 9 September 2026)
+
+The station's actual practice, which fixes the air handoff rule for the
+motor (F2): **the alert stops everything while the message plays; the
+commercial continues; and the lost time is taken out of the programme** (a
+piece of the series, the film or the radio programme is dropped). So when
+the ENDEC releases the air:
+
+1. the commercial deck resumes and finishes the break in full — the spot the
+   alert cut restarts from its head, it is never shortened and never replaced
+   by black;
+2. the programme absorbs the loss: it rejoins in progress or is trimmed at
+   its end, so the clock and the next break stay where they were;
+3. a spot that then went out in full counts as *aired* and needs no make-good;
+   only a spot that could not be replayed inside its break (the break ran
+   out of room) becomes `preempted` and goes to the make-good proposal of
+   PRD §9 step 10.
+
+This is the opposite of WideOrbit's "protect the revenue over the alert"
+widget: the alert is never delayed for a commercial. What is protected is
+what comes *after* it.
+
 ## Consequences
 
 - No EAS encoder, no SAME generator, and no tone synthesis ever ship in

@@ -131,15 +131,18 @@ func TestF1_58_ElSonidoQueLlegaDespuesSacaDeLaParada(t *testing.T) {
 	// 2 · llega el sonido con el mismo nombre.
 	audio := audioSuelto(t, ffmpeg, filepath.Join(dir, "promo.wav"), 3)
 
-	var listo model.MediaAsset
+	// Se espera al aviso de «entró», que es lo último que hace el ingest:
+	// para entonces la ficha está guardada, en la cola y con su sonido.
 	esperar(t, 120*time.Second, func() bool {
-		asset, err := a.Store.Media.GetByPath(fondo, video)
-		if err != nil {
-			return false
-		}
-		listo = asset
-		return asset.State == model.AssetReady
+		return vistos.hay("ingest", "material", "entró promo.mp4")
 	}, "el video no salió de la parada cuando llegó su sonido")
+	listo, err := a.Store.Media.GetByPath(fondo, video)
+	if err != nil {
+		t.Fatalf("no pude leer el video: %v", err)
+	}
+	if listo.State != model.AssetReady {
+		t.Fatalf("el video quedó en %q y tenía que estar listo", listo.State)
+	}
 
 	// 3 · es el mismo archivo de siempre, no uno nuevo.
 	if listo.ID != parado.ID {

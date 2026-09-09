@@ -35,6 +35,7 @@ import type {
   TituloDeBiblioteca,
   TituloDelCatalogo,
   TituloSinEmparejar,
+  ArchivoEntrando,
 } from './tipos'
 import { ErrorDeApi } from './tipos'
 
@@ -176,6 +177,8 @@ export const api = {
   biblioteca: () => pedir<TituloDeBiblioteca[]>('/biblioteca'),
   titulo: (id: number) => pedir<FichaDeTitulo>(`/biblioteca/${id}`),
   cuarentena: () => pedir<EnCuarentena[]>('/cuarentena'),
+  /** Los archivos que se están midiendo ahora mismo: se ven desde el primer segundo. */
+  entrando: () => pedir<ArchivoEntrando[]>('/material?estado=ingiriendo'),
   dejarPasar: (id: number, quien: string) =>
     pedir<{ ok: true }>(`/cuarentena/${id}/dejar-pasar`, conCuerpo('POST', { quien })),
 

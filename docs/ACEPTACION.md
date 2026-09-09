@@ -500,6 +500,29 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   `motivo_codigo` = `normalizacion_fallida`, Al aire lo cuenta en el aviso,
   queda el incidente, y dejarlo pasar lo saca al aire tal cual.
 
+### Lo aprendido del modo sombra con archivos reales (`docs/f1/SOMBRA-2026-09-09.md`; §9 paso 1, §10)
+
+- **F1-72** [AUTO] — Dado archivos con el nombre con el que llegan de verdad
+  (`Serie.S04E01.Título.1080p.x265-Grupo[web].mkv`, `Serie - 4x01 - Título`,
+  `Serie T1E4`, `Película.2026.1080p.WEBRip.mp4`, `[Sub] Serie - 04 [1080p]`)
+  y sin `.nfo` ni etiquetas útiles · Cuando el ingest los ficha · Entonces la
+  serie, la temporada, el episodio y el nombre del episodio salen del nombre
+  (`ingest.FichaDesdeNombre`), la película sale con su año, la cola técnica y
+  la firma del grupo no aparecen en ningún título, y los episodios de la
+  misma serie caen en **un solo** título. Una etiqueta de título que es el
+  propio nombre del archivo con puntos («For.All.Mankind.S05E09») o la firma
+  de quien lo subió («by ToonsHub») no es un título: se lee como nombre de
+  archivo. Un etiquetado de verdad (serie/temporada/episodio en las etiquetas
+  o en el `.nfo`) manda sobre el nombre. `fuente_ficha` dice todo lo que
+  aportó algo.
+- **F1-73** [AUTO] — Dado un archivo que acaba de terminar de copiarse ·
+  Cuando el ingest empieza a medirlo · Entonces su fila existe desde el
+  primer segundo en estado `ingiriendo`, `GET /material?estado=ingiriendo` lo
+  devuelve y Biblioteca lo enseña en una franja «Entrando» que se refresca
+  sola con los eventos del servidor; al terminar pasa a `listo` o a
+  `cuarentena` en una sola escritura que ya lleva sus archivos de al lado, y
+  un archivo que ni se puede medir nunca se queda en `ingiriendo`.
+
 ---
 
 ## F2 · Playout (motor, decks, fuentes en vivo, manual, diferido, grabación, salidas)
@@ -959,6 +982,17 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
 - **F2-85** [AUTO] — Dado un `alert_event` de hace 18 meses · Cuando corre
   cualquier rutina de purga o de retención · Entonces **no se borra**: la
   retención mínima de `alert_event` es de **24 meses** y nada lo purga antes.
+- **F2-111** [AUTO] — Dado un corte comercial en curso que una alerta real del
+  ENDEC interrumpe a la mitad de un spot · Cuando el equipo de alertas suelta el
+  aire · Entonces el deck comercial **retoma el corte y lo termina entero** —el
+  spot interrumpido vuelve a salir desde su cabeza, nunca recortado ni sustituido
+  por negro—, el programa **absorbe el tiempo perdido** (se reincorpora en
+  curso o se recorta por la cola) sin mover el reloj ni el corte siguiente, el
+  spot que salió entero después cuenta como `aired` sin make-good, y solo el
+  que ya no cupo en su corte queda `preempted` y va a la propuesta de
+  reposición (§9 paso 10). Es lo que CAtv hace hoy a mano (ADR 0010,
+  9 sept 2026): la alerta nunca se retrasa por un comercial; lo que se protege
+  es lo que viene después.
 
 ### Que un fallo interno no tumbe el aire (§14.1)
 
