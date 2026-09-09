@@ -177,3 +177,17 @@ func TestF1_73_ElArchivoSeVeMientrasSeMide(t *testing.T) {
 		t.Fatalf("estados del roto: %v", g2.estados)
 	}
 }
+
+func TestSinopsisLegibleTiraLaFirmaDelEncoder(t *testing.T) {
+	for entrada, quiere := range map[string]string{
+		"ELiTE-Fri-22-May-2026,03:44:23,1080p,21,fast,Y,10041788,1920,960,2": "",
+		"x265 10bit":          "",
+		"Encoded by ToonsHub": "Encoded by ToonsHub",
+		"Un detective calvo resuelve casos en Nueva York.": "Un detective calvo resuelve casos en Nueva York.",
+		"": "",
+	} {
+		if got := sinopsisLegible(entrada); got != quiere {
+			t.Errorf("%q: %q, se esperaba %q", entrada, got, quiere)
+		}
+	}
+}

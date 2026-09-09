@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // Measure es todo lo que ffprobe sabe decir de un archivo. Es la materia
@@ -453,7 +454,7 @@ func readTags(raw map[string]string) Tags {
 	t.Episode = atoi(get("episode_sort", "episode_number", "tves"))
 	t.Date = get("date", "creation_time", "year", "originalyear")
 	t.Year = yearOf(t.Date)
-	t.Synopsis = get("synopsis", "description", "comment", "ldes", "desc")
+	t.Synopsis = sinopsisLegible(get("synopsis", "description", "comment", "ldes", "desc"))
 	t.Artist = get("artist", "album_artist", "©art")
 	t.Album = get("album", "©alb")
 	t.Genre = get("genre", "©gen")
@@ -487,4 +488,32 @@ func trimName(path string) string {
 		return path[i+1:]
 	}
 	return path
+}
+
+// sinopsisLegible tira la «sinopsis» que en realidad es la firma del
+// programa que hizo el archivo («ELiTE-Fri-22-May-2026,03:44:23,1080p,21,
+// fast,Y,10041788,1920,960,2»): sin espacios, o casi todo números y comas.
+// Una sinopsis de verdad son frases. Lo que no lo parece no llega a la guía.
+func sinopsisLegible(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	palabras := strings.Fields(s)
+	if len(palabras) < 3 {
+		return ""
+	}
+	letras, otros := 0, 0
+	for _, r := range s {
+		switch {
+		case unicode.IsLetter(r) || unicode.IsSpace(r):
+			letras++
+		default:
+			otros++
+		}
+	}
+	if otros*2 > letras {
+		return ""
+	}
+	return s
 }

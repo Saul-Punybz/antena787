@@ -149,7 +149,7 @@ func (a *App) clockLoop(ctx context.Context) error {
 			wall := now.Round(0).Sub(base.Round(0)) // de pared: sí salta
 			if d := wall - mono; d > ClockJump || d < -ClockJump {
 				a.Incident("salto_de_reloj", fmt.Sprintf(
-					"el reloj del sistema saltó %s; nada de lo que ya salió se vuelve a emitir y el plan se recalcula desde ahora",
+					"el reloj del sistema saltó %s (o la máquina estuvo dormida ese tiempo); nada de lo que ya salió se vuelve a emitir y el plan se recalcula desde ahora",
 					humanSigned(d)))
 				a.Recalc()
 			}

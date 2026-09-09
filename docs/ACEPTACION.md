@@ -993,6 +993,16 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   reposición (§9 paso 10). Es lo que CAtv hace hoy a mano (ADR 0010,
   9 sept 2026): la alerta nunca se retrasa por un comercial; lo que se protege
   es lo que viene después.
+- **F2-112** [AUTO] — Dado un canal encendido (en sombra o al aire) en una
+  máquina con suspensión por inactividad · Cuando pasa el tiempo de inactividad
+  del sistema · Entonces la máquina **no se duerme**: el proceso sostiene la
+  aserción de «no dormir» de cada sistema (macOS `IOPMAssertion`/`caffeinate`,
+  Windows `SetThreadExecutionState`, Linux `systemd-inhibit`) mientras el canal
+  esté encendido, la suelta al apagarse, y Al aire dice si no pudo sostenerla.
+  Si aun así el reloj monotónico se queda atrás del de pared, el incidente
+  `salto_de_reloj` lo dice como posible sueño de la máquina y recalcula. Viene
+  del modo sombra del 9 sept 2026: la Mac durmió 19 min en dos ratos y nada lo
+  impidió (`docs/f1/SOMBRA-2026-09-09.md`, S-8).
 
 ### Que un fallo interno no tumbe el aire (§14.1)
 

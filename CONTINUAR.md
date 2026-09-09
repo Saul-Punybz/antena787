@@ -1,6 +1,6 @@
 # CONTINUAR — dónde quedamos y qué sigue
 
-_Última sesión: 9 de septiembre de 2026 (seis tandas). Siguiente: la que venga._
+_Última sesión: 9 de septiembre de 2026 (siete tandas). Siguiente: la que venga._
 
 ## Dónde estamos
 
@@ -131,10 +131,40 @@ go test ./... -count=1           # todo debe estar verde
    no añadir un QC manual sin regla ni auditoría. Dos recomendaciones del
    agente ya estaban hechas (decode real además de ffprobe; negro en cabeza y
    cola).
-5. **Modo sombra con archivos de verdad** (y firma de los tres criterios
-   manuales F1-32, F1-43, F1-53 con Rolando): videos reales en la carpeta
-   vigilada, ver que el ingest mide, normaliza y el resolver programa.
-6. Después, **F2 · Playout** (PRD §22.3), donde además se cierran F1-04
+5. ~~Modo sombra con archivos de verdad~~ **Hecho (9 sept, séptima tanda):**
+   informe **`docs/f1/SOMBRA-2026-09-09.md`**. Seis videos reales (enlaces
+   duros en `~/antena-sombra/contenido`, datos en `~/antena-sombra/datos`,
+   servidor en `:7871`), asistente por la API, ingest, normalización,
+   propuesta, plan y guía de punta a punta. Nueve hallazgos, siete
+   corregidos el mismo día: **F1-72** ficha desde el nombre del archivo
+   (`internal/ingest/nombre.go`: `S04E01`, `4x01`, `T1E4`, `Cap 07`,
+   película con año, cola técnica y firma de grupo fuera; etiquetas que son
+   el nombre con puntos o la firma del grupo no mandan), **F1-73** el archivo
+   se ve desde el primer segundo (fila en `ingiriendo`, franja «Entrando» en
+   Biblioteca, estado final y sidecars en una sola escritura), sinopsis con
+   basura de encoder fuera, subtítulo vacío si el episodio no tiene nombre,
+   `salto_de_reloj` menciona el sueño. Pendiente: **F2-112** (la máquina no
+   se duerme con el canal encendido: la Mac durmió 19 min durante la prueba).
+   Tiempos: 5 h 47 min de material en 1 h 35 min de cola (≈4× tiempo real,
+   libx264). Los tres criterios manuales siguen por firmar con Rolando
+   (F1-32 necesita su registro de una hora con VLC; F1-43 visto aquí; F1-53
+   con su hoja). Para repetirlo: `bin/antena -datos ~/antena-sombra/datos
+   -escucha 127.0.0.1:7871` (la base ya tiene la instalación hecha, clave 1234).
+   También hoy: `docs/investigacion/COMPETENCIA-COMERCIAL-2026-09-09.md`
+   (Dinesat, VirtualPowerVideo y 15 más) y
+   `docs/investigacion/SUBTITULOS-Y-METADATA-2026-09-09.md` (79.1, 608/708,
+   SAP, PSIP, **E/I para Class A: no existe en el PRD**, licencias de fichas)
+   con criterios propuestos y preguntas para Rolando; **ADR 0010 + F2-111**
+   con la regla de CAtv tras una alerta (el corte se termina entero, el
+   programa absorbe el tiempo). CI: ffmpeg en el job de pruebas, bloqueo
+   real de archivo en Windows (`bloqueo_windows_test.go`); issues #8 y #9
+   cerrados.
+6. **Antes de F2, decidir con Saul lo que dejaron los dos informes de hoy:**
+   marcar programación infantil (E/I) en la ficha (Class A: 156 h/año, hoy no
+   existe), el umbral de $3M en el texto de la exención de subtítulos, el
+   aviso de licencia de TMDB, y las preguntas para el ingeniero de CAtv (¿el
+   TP1000 genera PSIP?, modelo del Sage, ¿emiten con subtítulos?).
+7. Después, **F2 · Playout** (PRD §22.3), donde además se cierran F1-04
    (CEA-608 con detección propia, ffprobe ≥ 9 ya no emite `closed_captions`),
    el fundido de 1 s del clip recortado (`fundido_salida_ms` ya viene en el
    plan) y los ítems `dentro_de` de un vivo.
@@ -148,8 +178,12 @@ go test ./... -count=1           # todo debe estar verde
 - `horas_vacias` de Parrilla · Semana cuenta sobre el día natural (la cuadrícula
   arranca a medianoche, como asume la interfaz); si se quiere por día de
   emisión, es un cambio pequeño en `internal/api/plan.go`.
-- Cuándo hacer público el repo: cuando el asistente y el modo sombra con
-  archivos reales funcionen de punta a punta.
+- Cuándo hacer público el repo: el asistente y el modo sombra con archivos
+  reales ya funcionan de punta a punta en el Mac (9 sept); falta verlo en la
+  PC de Rolando con Windows.
+- La propuesta del asistente a 30 días dispara cuatro avisos de vencimiento
+  en el acto (S-9 del informe sombra); si a Rolando le hace ruido, la
+  propuesta puede salir sin fecha de fin.
 - Los incidentes se pintan con la frase del servidor; si un servidor viejo no
   manda `texto`, la interfaz enseña el tipo legible (`textoDe` en
   `Bitacora.tsx`).

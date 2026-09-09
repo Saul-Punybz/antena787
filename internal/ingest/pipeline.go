@@ -327,7 +327,9 @@ func cardToModel(c Card, channelID *int64) (model.Title, []model.Episode) {
 	return t, []model.Episode{{
 		Season: c.Season,
 		Number: c.Episode,
-		Name:   firstNonEmpty(c.EpisodeName, c.Name),
+		// Sin nombre propio se queda vacío: en la guía y en la parrilla se
+		// enseña «T5E9», no el nombre de la serie repetido como subtítulo.
+		Name: c.EpisodeName,
 	}}
 }
 
