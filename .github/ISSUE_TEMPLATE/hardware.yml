@@ -1,0 +1,88 @@
+name: Reporte de compatibilidad de hardware
+description: Corriste la F0 en tu máquina — cuenta qué midió
+title: "[hardware] "
+labels: ["hardware"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **La matriz de compatibilidad decide la adopción**, y hoy las cifras de
+        hardware del PRD son *estimadas*. Cada corrida de F0 en una máquina real
+        convierte una en medida. Esto es lo más útil que puedes aportar hoy.
+
+        Cómo correrla: [`f0/README.md`](https://github.com/Saul-Punybz/antena787/blob/main/f0/README.md).
+        Un reporte de una corrida corta también sirve — dilo y ya.
+
+  - type: input
+    id: maquina
+    attributes:
+      label: Máquina
+      description: Procesador, memoria, disco y sistema operativo con su versión.
+      placeholder: "Intel N100, 16 GB DDR4, SSD NVMe 512 GB, Windows 10 22H2"
+    validations:
+      required: true
+
+  - type: input
+    id: video
+    attributes:
+      label: Tarjeta o video integrado
+      description: Qué hace el video, y qué aceleración por hardware ofrece (QuickSync, NVENC, VAAPI) con la versión del driver.
+      placeholder: "Intel UHD (Alder Lake-N), QuickSync, driver 31.0.101.5186"
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Versión probada
+      description: Commit o etiqueta, versión de Go, y versión de ffmpeg.
+      placeholder: "a1b2c3d · go1.26.0 · ffmpeg n9.0 BtbN win64-gpl"
+    validations:
+      required: true
+
+  - type: input
+    id: corrida
+    attributes:
+      label: La corrida
+      description: Cuántas horas, con una salida o con dos (`-one`), y si mandaste UDP a un multiplexor de verdad.
+      placeholder: "8 horas, dos salidas, sin UDP"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: resultado
+    attributes:
+      label: Resultado
+      options:
+        - Pasó todo
+        - Pasó con reparos (alguna medida al límite)
+        - Falló
+        - No llegó a terminar
+    validations:
+      required: true
+
+  - type: textarea
+    id: reporte
+    attributes:
+      label: El reporte
+      description: |
+        Pega aquí `f0/out/REPORTE.md` completo. Si falló, adjunta también `f0/out/events.jsonl` y `f0/out/stats.csv`.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: cpu
+    attributes:
+      label: CPU y RAM
+      description: |
+        Lo que midió `stats.csv`: pico y promedio, con una salida y con dos. Es lo que reemplaza las cifras estimadas del PRD §18.
+      placeholder: |
+        Dos salidas: CPU 38% promedio, 61% pico. RAM 1.2 GB.
+        Una salida (-one): CPU 22% promedio, 35% pico.
+
+  - type: textarea
+    id: notas
+    attributes:
+      label: Notas
+      description: Cualquier cosa rara. Si la máquina estaba haciendo otra cosa a la vez, dilo — cambia los números.

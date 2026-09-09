@@ -1,0 +1,90 @@
+name: Fallo
+description: Algo no hace lo que dice que hace
+title: "[fallo] "
+labels: ["fallo"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **El proyecto está en la Fase 0 y todavía no emite nada.** Lo único que
+        corre hoy es el experimento del motor (`bin/f0`). Si el fallo es que no
+        encuentra ffmpeg, mira primero `docs/DESARROLLO.md` §1.
+
+        Si lo que encontraste es una vulnerabilidad, **no la reportes aquí**:
+        ver [SECURITY.md](https://github.com/Saul-Punybz/antena787/blob/main/SECURITY.md).
+
+  - type: textarea
+    id: que-paso
+    attributes:
+      label: Qué pasó
+      description: Lo que viste, tal como pasó. Pega el mensaje de error completo si hubo uno.
+      placeholder: |
+        Corrí `bin/f0 run -hours 8` y a las tres horas se detuvo con...
+    validations:
+      required: true
+
+  - type: textarea
+    id: que-esperabas
+    attributes:
+      label: Qué esperabas
+      description: Qué creías que iba a pasar en su lugar.
+    validations:
+      required: true
+
+  - type: textarea
+    id: como-repetirlo
+    attributes:
+      label: Cómo repetirlo
+      description: Los comandos exactos, en orden. Si depende de un archivo en particular, dilo.
+      placeholder: |
+        1. `go build -o bin/f0 ./cmd/f0`
+        2. `bin/f0 media`
+        3. `bin/f0 run -hours 0.1`
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Versión
+      description: El commit (`git rev-parse --short HEAD`) o la etiqueta del release. Y la versión de Go (`go version`).
+      placeholder: "a1b2c3d · go1.26.0"
+    validations:
+      required: true
+
+  - type: input
+    id: sistema
+    attributes:
+      label: Sistema
+      description: Sistema operativo y versión, y la versión de ffmpeg (`ffmpeg -version`, la primera línea).
+      placeholder: "Windows 10 22H2 · ffmpeg n9.0 (BtbN, win64-gpl)"
+    validations:
+      required: true
+
+  - type: input
+    id: maquina
+    attributes:
+      label: Equipo
+      description: Procesador, memoria, y si el video es acelerado por hardware o por software. Si hay equipo de broadcast metido (encoder, multiplexor, transmisor), di marca y modelo.
+      placeholder: "Intel N100, 16 GB, QuickSync · sale por UDP a un multiplexor Thomson"
+    validations:
+      required: true
+
+  - type: textarea
+    id: registros
+    attributes:
+      label: Registros
+      description: |
+        Si el fallo es de una corrida de F0, adjunta `f0/out/events.jsonl` y, si existe, `f0/out/REPORTE.md`.
+        Pega la salida de la consola aquí; los archivos, arrástralos al campo de abajo del formulario.
+      render: text
+
+  - type: checkboxes
+    id: conducta
+    attributes:
+      label: Antes de enviar
+      options:
+        - label: Busqué si ya hay un issue por esto.
+          required: true
+        - label: Esto no es una vulnerabilidad de seguridad (esas van por Security Advisories).
+          required: true

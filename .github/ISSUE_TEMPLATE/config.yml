@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Pregunta, idea o conversación
+    url: https://github.com/Saul-Punybz/antena787/discussions
+    about: Para preguntar cómo funciona algo, proponer una idea o discutir una decisión de diseño. Los issues son para fallos y para propuestas concretas de driver, perfil de país o hardware.
+  - name: Reportar una vulnerabilidad de seguridad
+    url: https://github.com/Saul-Punybz/antena787/security/advisories/new
+    about: En privado, nunca en un issue público. Ver SECURITY.md.

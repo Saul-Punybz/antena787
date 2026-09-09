@@ -1,0 +1,83 @@
+name: Perfil de cumplimiento de un país
+description: Aportar las reglas de radiodifusión de un país
+title: "[perfil] "
+labels: ["perfil-pais"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Un perfil de cumplimiento son las reglas del país donde transmite el canal.
+        **Se escoge, nunca se asume, y nunca regaña**: deja los registros listos
+        por si alguien los pide.
+
+        Lo que hace falta de verdad es **la referencia normativa**, no la
+        opinión: qué documento lo dice y en qué artículo. Ver
+        [`docs/profiles/`](https://github.com/Saul-Punybz/antena787/blob/main/docs/profiles) y `COMPLIANCE.md`.
+
+  - type: input
+    id: pais
+    attributes:
+      label: País
+      description: Y el organismo que regula la radiodifusión ahí.
+      placeholder: "México — Instituto Federal de Telecomunicaciones (IFT)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: volumen
+    attributes:
+      label: Norma de volumen
+      description: |
+        Objetivo de sonoridad, tolerancia, rango, y la norma que lo manda (ITU-R BS.1770, ATSC A/85, EBU R128, ARIB TR-B32...). Con su referencia.
+      placeholder: |
+        −24 LKFS ±2, ITU-R BS.1770-4, exigido por [documento, artículo].
+        Para la salida por internet no aplica; ahí se usa −16 LUFS.
+    validations:
+      required: true
+
+  - type: textarea
+    id: subtitulos
+    attributes:
+      label: Subtítulos
+      description: Formato (CEA-608/708, DVB, ARIB), si son obligatorios, en qué contenido y desde cuándo. Con su referencia.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alertas
+    attributes:
+      label: Alertas de emergencia
+      description: |
+        Cómo funciona el sistema de alertas del país, qué equipo se usa, si es obligatorio, y qué tiene que quedar registrado de cada interrupción.
+      placeholder: "Sistema, equipo certificado típico, y qué bitácora se guarda y por cuánto tiempo."
+    validations:
+      required: true
+
+  - type: textarea
+    id: registros
+    attributes:
+      label: Registros y retención
+      description: |
+        Qué bitácoras hay que guardar, con qué campos, por cuánto tiempo, y quién puede pedirlas. Con su referencia.
+      placeholder: |
+        Bitácora de operación: X campos, Y años.
+        Grabación de la salida: Z días.
+    validations:
+      required: true
+
+  - type: textarea
+    id: otras
+    attributes:
+      label: Otras obligaciones
+      description: Identificación de la estación, límites de publicidad por hora, contenido nacional, clasificación por edades, horario protegido. Lo que aplique, con su referencia.
+
+  - type: dropdown
+    id: relacion
+    attributes:
+      label: Tu relación con esto
+      options:
+        - Opero una estación en ese país
+        - Trabajo en el sector ahí (ingeniería, consultoría, legal)
+        - Leí la norma pero no opero ahí
+    validations:
+      required: true

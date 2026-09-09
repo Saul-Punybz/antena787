@@ -1,0 +1,79 @@
+name: Driver para un equipo
+description: Proponer soporte para una marca y modelo
+title: "[driver] "
+labels: ["driver"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        *"¿Sirve con mi equipo?"* es la primera pregunta de todo el que llega, así
+        que esta es la contribución más valiosa que hay. **Ninguna marca se asume
+        y ninguna se privilegia**: el equipo del despliegue de referencia es un
+        ejemplo de una familia, no el molde.
+
+        Abre esto **antes** de escribir código. Ver
+        [`docs/drivers/`](https://github.com/Saul-Punybz/antena787/blob/main/docs/drivers) y `CONTRIBUTING.md` §4.
+
+  - type: input
+    id: equipo
+    attributes:
+      label: Marca y modelo
+      description: Exactos, como están en la etiqueta. Y la versión de firmware si la sabes.
+      placeholder: "Sage Digital ENDEC 3644, firmware 89-15"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: familia
+    attributes:
+      label: Familia
+      description: Qué hace este equipo dentro del sistema.
+      options:
+        - Salida — a dónde va la señal del canal
+        - Entrada — de dónde llega una señal en vivo
+        - Alertas — cómo se sabe que el equipo de emergencia interrumpió
+        - Cortes — cómo se le avisa al encoder que empieza un corte
+        - Transmisor — el transmisor y su monitoreo
+        - Retorno de aire — la señal transmitida, capturada de vuelta
+        - Cobro — cómo se le cobra al anunciante
+        - No estoy seguro
+    validations:
+      required: true
+
+  - type: input
+    id: protocolo
+    attributes:
+      label: Protocolo
+      description: Cómo se habla con él. Si son varios, el que te interesa.
+      placeholder: "SNMP v2c · contacto seco por GPIO · API HTTP con token · SCTE-104 sobre TCP"
+    validations:
+      required: true
+
+  - type: textarea
+    id: documentacion
+    attributes:
+      label: Documentación del fabricante
+      description: |
+        Enlaces al manual, a la guía de integración o a la especificación del protocolo. Si es un PDF que no está público, adjúntalo (si su licencia lo permite).
+
+        **Sin documentación, un driver es adivinanza.** Si no existe, dilo y explica de dónde saldría la información.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: probarlo
+    attributes:
+      label: ¿Puedes probarlo contra el equipo de verdad?
+      description: Un driver que nadie puede probar se acepta, pero queda marcado **no verificado** en la matriz de compatibilidad, y así se dice.
+      options:
+        - Sí, tengo el equipo delante y puedo probar
+        - Sí, pero solo en ventanas fuera del aire
+        - No, solo tengo la documentación
+    validations:
+      required: true
+
+  - type: textarea
+    id: contexto
+    attributes:
+      label: Dónde está en uso
+      description: País, tipo de estación, y qué tan común es ese modelo. Ayuda a priorizar.
