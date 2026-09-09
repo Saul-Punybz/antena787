@@ -393,6 +393,26 @@ button.dias__dia {
   cursor: pointer;
 }
 
+/* La chincheta del bloque que alguien movió a mano en la parrilla. */
+.chincheta {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+}
+.chincheta:hover {
+  background: rgba(0, 0, 0, 0.6);
+}
+
 .etiqueta {
   display: inline-block;
   border-radius: 5px;
@@ -508,6 +528,8 @@ button.dias__dia {
 .campo input[type='date'],
 .campo input[type='number'],
 .campo input[type='password'],
+.campo input[type='url'],
+.campo input[type='email'],
 .campo select,
 .campo textarea {
   background: var(--superficie);

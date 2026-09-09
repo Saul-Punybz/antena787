@@ -97,6 +97,7 @@ func (s *Server) routes() {
 	api("PUT /api/v1/reglas/{id}", s.reglasPut)
 	api("DELETE /api/v1/reglas/{id}", s.reglasDelete)
 	api("GET /api/v1/plan", s.planDia)
+	api("PUT /api/v1/plan/{id}", s.planPut)
 	api("GET /api/v1/plan/semana", s.planSemana)
 	api("GET /api/v1/plan/mes", s.planMes)
 	api("POST /api/v1/plan/recalcular", s.planRecalcular)

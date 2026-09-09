@@ -1,17 +1,20 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PestanasDeParrilla } from './Parrilla'
 import { Panel } from '../componentes/Panel'
+import { IconoChincheta } from '../componentes/Iconos'
 import { api } from '../lib/api'
 import { useEstado } from '../lib/estado'
 import {
   diaCorto,
   diaYMes,
   horasBonitas,
+  instanteEnZona,
+  minutosAHhMm,
   minutosAHora12,
   partes,
   sumarDias,
 } from '../lib/fechas'
-import type { SemanaDelPlan } from '../lib/tipos'
+import { ErrorDeApi, esHueco, type FranjaSemana, type SemanaDelPlan } from '../lib/tipos'
 
 const DESDE_MIN = 6 * 60 // la tira va de las 6:00 AM
 const HASTA_MIN = 24 * 60 // a medianoche
@@ -22,15 +25,20 @@ interface Bloque {
   desde: number
   hasta: number
   enVivo: boolean
+  /** El plan_item que ocupa la franja, cuando el servidor lo manda. */
+  planId: number | null
+  /** Alguien lo movió a mano: el recálculo no lo pisa. */
+  fijado: boolean
 }
 
-function bloquesDelDia(franjas: { titulo: string | null; en_vivo: boolean }[]): Bloque[] {
+function bloquesDelDia(franjas: FranjaSemana[]): Bloque[] {
   const out: Bloque[] = []
   for (let k = DESDE_MIN / 30; k < HASTA_MIN / 30; k++) {
     const f = franjas[k]
     const titulo = f?.titulo ?? null
+    const planId = f?.plan_id ?? null
     const ultimo = out[out.length - 1]
-    if (ultimo && ultimo.titulo === titulo) {
+    if (ultimo && ultimo.titulo === titulo && ultimo.planId === planId) {
       ultimo.hasta = (k + 1) * 30
     } else {
       out.push({
@@ -38,6 +46,8 @@ function bloquesDelDia(franjas: { titulo: string | null; en_vivo: boolean }[]): 
         desde: k * 30,
         hasta: (k + 1) * 30,
         enVivo: Boolean(f?.en_vivo),
+        planId,
+        fijado: Boolean(f?.fijado),
       })
     }
   }
@@ -49,18 +59,31 @@ function colorDe(titulo: string): string {
   return `hsl(${semilla} 19% 17%)`
 }
 
+interface Arrastre {
+  titulo: string
+  dia: string
+  de: number
+  a: number
+  planId: number | null
+}
+
+interface Fijado {
+  titulo: string
+  dia: string
+  desde: number
+  planId: number | null
+}
+
 export function ParrillaSemana() {
   const { estado } = useEstado()
   const zona = estado?.canal.zona_horaria ?? 'UTC'
   const hoy = estado?.dia_emision ?? '2026-09-04'
   const [desde, setDesde] = useState<string | null>(null)
   const [semana, setSemana] = useState<SemanaDelPlan | null>(null)
-  const [arrastre, setArrastre] = useState<{
-    titulo: string
-    dia: string
-    de: number
-    a: number
-  } | null>(null)
+  const [arrastre, setArrastre] = useState<Arrastre | null>(null)
+  const [soltando, setSoltando] = useState<Fijado | null>(null)
+  const [guardando, setGuardando] = useState(false)
+  const [problema, setProblema] = useState<string | null>(null)
 
   // La semana que empieza el domingo de la semana en curso.
   const inicio = useMemo(() => {
@@ -69,9 +92,111 @@ export function ParrillaSemana() {
     return sumarDias(hoy, -d.getUTCDay() + 7) // la semana que viene, la del 6 de septiembre
   }, [desde, hoy])
 
+  const recargar = useCallback(async () => {
+    const nueva = await api.planSemana(inicio).catch(() => null)
+    if (nueva) setSemana(nueva)
+  }, [inicio])
+
   useEffect(() => {
     api.planSemana(inicio).then(setSemana).catch(() => setSemana(null))
   }, [inicio])
+
+  /**
+   * El número del bloque. La semana lo trae en `plan_id`; si el servidor
+   * todavía no lo manda, se busca en el plan del día por la hora en que
+   * empieza.
+   */
+  async function idDelBloque(dia: string, minuto: number, planId: number | null) {
+    if (planId) return planId
+    const filas = await api.plan(dia).catch(() => [])
+    for (const f of filas) {
+      if (!esHueco(f) && f.hora_local === minutosAHhMm(minuto)) return f.id
+    }
+    return null
+  }
+
+  function decirElProblema(e: unknown, porDefecto: string) {
+    setProblema(e instanceof ErrorDeApi ? e.message : porDefecto)
+  }
+
+  /** Solo hoy: se clava este bloque en su hora nueva y la regla queda igual. */
+  async function moverSoloHoy() {
+    if (!arrastre) return
+    setGuardando(true)
+    setProblema(null)
+    try {
+      const id = await idDelBloque(arrastre.dia, arrastre.de, arrastre.planId)
+      if (!id) throw new ErrorDeApi('Ese bloque ya no está en la parrilla.', 404)
+      await api.cambiarPlan(id, {
+        instante_planeado: instanteEnZona(arrastre.dia, arrastre.a, zona),
+      })
+      setArrastre(null)
+      await recargar()
+    } catch (e) {
+      decirElProblema(e, 'No se pudo mover el bloque.')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  /** Siempre: cambia la hora de la regla y se vuelve a armar la parrilla. */
+  async function moverSiempre() {
+    if (!arrastre) return
+    setGuardando(true)
+    setProblema(null)
+    try {
+      const reglas = await api.reglas()
+      const regla =
+        reglas.find((r) => r.titulo === arrastre.titulo && r.hora === arrastre.de) ??
+        reglas.find((r) => r.titulo === arrastre.titulo)
+      if (!regla)
+        throw new ErrorDeApi(
+          `No hay ninguna regla de ${arrastre.titulo}: este bloque no sale de una regla, así que solo se puede mover por hoy.`,
+          404,
+        )
+      await api.editarRegla(regla.id, {
+        tipo: regla.tipo,
+        title_id: regla.title_id,
+        live_source_id: regla.live_source_id,
+        titulo: regla.titulo,
+        patron_de_dias: regla.patron_de_dias,
+        hora: arrastre.a,
+        duracion_slot_ms: regla.duracion_slot_ms,
+        fecha_inicio: regla.fecha_inicio,
+        fecha_fin: regla.fecha_fin,
+        episodios_por_corrida: regla.episodios_por_corrida,
+        releva_a: regla.releva_a,
+        repite_a: regla.repite_a,
+        activa: regla.activa,
+      })
+      await api.recalcular()
+      setArrastre(null)
+      await recargar()
+    } catch (e) {
+      decirElProblema(e, 'No se pudo cambiar la hora de la regla.')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  /** Soltar: el bloque vuelve a obedecer a su regla. */
+  async function soltar() {
+    if (!soltando) return
+    setGuardando(true)
+    setProblema(null)
+    try {
+      const id = await idDelBloque(soltando.dia, soltando.desde, soltando.planId)
+      if (!id) throw new ErrorDeApi('Ese bloque ya no está en la parrilla.', 404)
+      await api.cambiarPlan(id, { fijado: false })
+      await api.recalcular().catch(() => {})
+      setSoltando(null)
+      await recargar()
+    } catch (e) {
+      decirElProblema(e, 'No se pudo soltar el bloque.')
+    } finally {
+      setGuardando(false)
+    }
+  }
 
   const ahora = estado ? partes(estado.ahora, zona) : null
   const marcaAhora =
@@ -229,9 +354,20 @@ export function ParrillaSemana() {
                       const x = (e.clientX - caja.left) / caja.width
                       const min =
                         Math.round((DESDE_MIN + x * ANCHO) / 30) * 30
-                      const b = JSON.parse(dato) as { titulo: string; desde: number }
+                      const b = JSON.parse(dato) as {
+                        titulo: string
+                        desde: number
+                        planId: number | null
+                      }
                       if (min === b.desde && d.dia === arrastre?.dia) return
-                      setArrastre({ titulo: b.titulo, dia: d.dia, de: b.desde, a: min })
+                      setProblema(null)
+                      setArrastre({
+                        titulo: b.titulo,
+                        dia: d.dia,
+                        de: b.desde,
+                        a: min,
+                        planId: b.planId ?? null,
+                      })
                     }}
                   >
                     {bloquesDelDia(d.franjas).map((b) => {
@@ -260,10 +396,17 @@ export function ParrillaSemana() {
                           onDragStart={(e) => {
                             e.dataTransfer.setData(
                               'text/antena-bloque',
-                              JSON.stringify({ titulo: b.titulo, desde: b.desde }),
+                              JSON.stringify({
+                                titulo: b.titulo,
+                                desde: b.desde,
+                                planId: b.planId,
+                              }),
                             )
                           }}
-                          title={`${b.titulo} · ${minutosAHora12(b.desde)}`}
+                          title={
+                            `${b.titulo} · ${minutosAHora12(b.desde)}` +
+                            (b.fijado ? ' · puesto a mano' : '')
+                          }
                           style={{
                             position: 'absolute',
                             left: `${izq}%`,
@@ -276,7 +419,11 @@ export function ParrillaSemana() {
                             alignItems: 'center',
                             cursor: 'grab',
                             background: b.enVivo ? 'rgba(34,211,238,.08)' : colorDe(b.titulo),
-                            border: b.enVivo ? '1.5px solid var(--aqua)' : undefined,
+                            border: b.enVivo
+                              ? '1.5px solid var(--aqua)'
+                              : b.fijado
+                                ? '1.5px solid var(--ambar)'
+                                : undefined,
                           }}
                         >
                           {ancho > 6 && (
@@ -291,6 +438,25 @@ export function ParrillaSemana() {
                             >
                               {b.titulo}
                             </span>
+                          )}
+                          {b.fijado && (
+                            <button
+                              className="chincheta"
+                              aria-label={`${b.titulo} está puesto a mano a las ${minutosAHora12(b.desde)}. Soltarlo.`}
+                              title="Puesto a mano · soltar"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setProblema(null)
+                                setSoltando({
+                                  titulo: b.titulo ?? '',
+                                  dia: d.dia,
+                                  desde: b.desde,
+                                  planId: b.planId,
+                                })
+                              }}
+                            >
+                              <IconoChincheta tamano={11} color="var(--ambar)" grosor={2} />
+                            </button>
                           )}
                         </div>
                       )
@@ -331,6 +497,17 @@ export function ParrillaSemana() {
                   }}
                 />
                 en vivo
+              </span>
+              <span className="fila" style={{ gap: 8 }}>
+                <i
+                  style={{
+                    width: 26,
+                    height: 11,
+                    borderRadius: 3,
+                    border: '1.5px solid var(--ambar)',
+                  }}
+                />
+                puesto a mano
               </span>
             </div>
             {semana.nota && (
@@ -392,27 +569,34 @@ export function ParrillaSemana() {
         <Panel
           titulo="¿Solo hoy, o siempre?"
           descripcion={`${arrastre.titulo} pasa de las ${minutosAHora12(arrastre.de)} a las ${minutosAHora12(arrastre.a)}`}
-          alCerrar={() => setArrastre(null)}
+          alCerrar={() => {
+            setArrastre(null)
+            setProblema(null)
+          }}
         >
           <p className="subtitulo">
             {diaCorto(arrastre.dia)} {diaYMes(arrastre.dia)}
           </p>
+          {problema && <div className="error-en-cristiano">{problema}</div>}
           <button
             className="boton"
+            disabled={guardando}
             style={{ justifyContent: 'flex-start', textAlign: 'left', padding: '14px 16px' }}
-            onClick={() => setArrastre(null)}
+            onClick={moverSoloHoy}
           >
             <div>
               <div style={{ font: '600 14.5px var(--sans)' }}>Solo hoy</div>
               <div className="subtitulo">
-                Se crea una excepción para este día. La regla queda como está.
+                Este bloque queda puesto a mano a esa hora. La regla no cambia y el
+                recálculo no lo vuelve a mover.
               </div>
             </div>
           </button>
           <button
             className="boton"
+            disabled={guardando}
             style={{ justifyContent: 'flex-start', textAlign: 'left', padding: '14px 16px' }}
-            onClick={() => setArrastre(null)}
+            onClick={moverSiempre}
           >
             <div>
               <div style={{ font: '600 14.5px var(--sans)' }}>Siempre</div>
@@ -422,6 +606,44 @@ export function ParrillaSemana() {
               </div>
             </div>
           </button>
+          {guardando && <p className="cargando">Guardando el cambio…</p>}
+        </Panel>
+      )}
+
+      {/* Soltar un bloque puesto a mano */}
+      {soltando && (
+        <Panel
+          titulo="Puesto a mano"
+          descripcion={`${soltando.titulo} está clavado a las ${minutosAHora12(soltando.desde)}`}
+          alCerrar={() => {
+            setSoltando(null)
+            setProblema(null)
+          }}
+          pie={
+            <>
+              <button
+                className="boton"
+                onClick={() => {
+                  setSoltando(null)
+                  setProblema(null)
+                }}
+              >
+                Dejarlo así
+              </button>
+              <button className="boton boton--primario" onClick={soltar} disabled={guardando}>
+                {guardando ? 'Soltando…' : 'Soltar'}
+              </button>
+            </>
+          }
+        >
+          <p className="subtitulo">
+            {diaCorto(soltando.dia)} {diaYMes(soltando.dia)}
+          </p>
+          {problema && <div className="error-en-cristiano">{problema}</div>}
+          <p className="subtitulo">
+            Alguien lo movió a mano, así que la parrilla lo deja donde está. Al soltarlo
+            vuelve a la hora que le da su regla.
+          </p>
         </Panel>
       )}
     </>

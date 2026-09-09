@@ -128,3 +128,13 @@ export function IconoAlerta(p: Props) {
     </svg>
   )
 }
+
+/** Una chincheta: el bloque que alguien movió a mano y quedó clavado. */
+export function IconoChincheta(p: Props) {
+  return (
+    <svg {...base(p)}>
+      <path d="M12 17v4" />
+      <path d="M9 3h6l-1 5 3 3v2H7v-2l3-3-1-5Z" />
+    </svg>
+  )
+}

@@ -33,6 +33,9 @@
 //     ventana sin programa no produce nada y esa hora cae a relleno.
 //   - Material listo (auditoría B7): solo entra al plan lo que está en
 //     estado listo y con la normalización terminada.
+//   - Lo tocado a mano (F1-26): un plan_item fijado por una persona ocupa su
+//     hora como si estuviera ya al aire —nada se le pone encima, el relleno
+//     lo rodea— y no genera aviso ninguno.
 package resolver
 
 import (
@@ -104,7 +107,9 @@ type Input struct {
 	Episodes map[int64][]model.Episode  // por title, ordenados temporada/número
 	Assets   map[int64]model.MediaAsset // por id; solo entra al plan lo listo
 	Fillers  []model.FillerAsset
-	Existing []model.PlanItem // lo ya cued/aired en la ventana: no se toca
+	// Existing es lo que ya está guardado en la ventana: lo cued/aired y lo
+	// que una persona fijó a mano. Nada de eso se toca.
+	Existing []model.PlanItem
 	Decks    map[model.DeckKind]int64
 	Now      time.Time
 	Horizon  time.Duration // 48 h por defecto
@@ -119,6 +124,13 @@ type Output struct {
 	// episodio emitido si el plan sale tal cual. El store lo guarda en
 	// schedule_rule.ultimo_episodio_emitido cuando el ítem sale al aire.
 	EpisodeAdvance map[int64]int64
+	// CounterOwner dice, para cada regla que puso algo, qué regla es la dueña
+	// del contador de episodios: la propia regla, o su primaria si es una
+	// repetición (repite_a). Un plan_item lleva su schedule_rule_id, así que
+	// con este mapa se sabe siempre en qué regla se escribe
+	// ultimo_episodio_emitido cuando ese ítem sale al aire: nunca en la de
+	// repetición, que no tiene contador propio (auditoría B5).
+	CounterOwner map[int64]int64
 }
 
 type interval struct {
@@ -147,6 +159,7 @@ type run struct {
 	items      []model.PlanItem
 	warns      []Warning
 	advance    map[int64]int64
+	owner      map[int64]int64            // regla → regla dueña de su contador
 	cursor     map[int64]*int64           // contador por regla dueña de la serie
 	airedToday map[int64][]model.Episode  // lo que puso hoy cada regla
 	assets     map[int64]model.MediaAsset // los mismos, para leer sin miedo
@@ -207,7 +220,7 @@ func Resolve(in Input) Output {
 		}
 		return a.Text < b.Text
 	})
-	return Output{Items: r.items, Warnings: r.warns, EpisodeAdvance: r.advance}
+	return Output{Items: r.items, Warnings: r.warns, EpisodeAdvance: r.advance, CounterOwner: r.owner}
 }
 
 func newRun(in Input) *run {
@@ -228,6 +241,7 @@ func newRun(in Input) *run {
 		byID:    map[int64]model.ScheduleRule{},
 		relieve: map[int64]bool{},
 		advance: map[int64]int64{},
+		owner:   map[int64]int64{},
 		cursor:  map[int64]*int64{},
 		assets:  in.Assets,
 	}
@@ -240,7 +254,7 @@ func newRun(in Input) *run {
 		r.cursor[rule.ID] = last
 	}
 	for _, it := range in.Existing {
-		if it.State == model.Cued || it.State == model.Aired {
+		if ocupaElAire(it) {
 			r.reserved = append(r.reserved, interval{it.PlannedAt, it.End()})
 		}
 	}
@@ -324,7 +338,7 @@ func (r *run) instances() []instance {
 		}
 		return out[i].rule.ID < out[j].rule.ID
 	})
-	return r.resolveClashes(out)
+	return r.dropInsideBlocks(r.resolveClashes(out))
 }
 
 // ruleProblem devuelve el motivo, en cristiano, por el que una regla no se
@@ -409,6 +423,16 @@ func (r *run) resolveClashes(in []instance) []instance {
 	return out
 }
 
+// blockEnd devuelve el fin declarado de una corrida que trae duración de slot
+// —un bloque en vivo o un bloque arrendado— y si lo trae. Ese fin es suyo: no
+// se lo recorta nadie.
+func (it instance) blockEnd() (time.Time, bool) {
+	if it.rule.SlotMs <= 0 {
+		return time.Time{}, false
+	}
+	return it.start.Add(time.Duration(it.rule.SlotMs) * time.Millisecond), true
+}
+
 // resolveHardEnds fija el fin duro de cada corrida: su duración de slot, o el
 // arranque de la siguiente regla si llega antes.
 func (r *run) resolveHardEnds(insts []instance) {
@@ -417,15 +441,30 @@ func (r *run) resolveHardEnds(insts []instance) {
 		// la siguiente: por eso un programa de tres horas desde las 5:00 AM
 		// cruza el inicio del día de emisión sin que nadie lo corte.
 		end := r.end
-		if insts[i].rule.SlotMs > 0 {
-			end = insts[i].start.Add(time.Duration(insts[i].rule.SlotMs) * time.Millisecond)
-		}
-		if i+1 < len(insts) {
+		bloque, esBloque := insts[i].blockEnd()
+		if esBloque {
+			// Un bloque con hora de fin declarada dura lo que dice. Que otra
+			// regla arranque dentro no lo recorta: eso es un conflicto, y se
+			// avisa aparte (F1-39).
+			end = bloque
+		} else if i+1 < len(insts) {
 			if next := insts[i+1].start; next.After(insts[i].start) && next.Before(end) {
 				end = next
 			}
 		}
-		// Lo que ya está cued o aired también es un inicio duro.
+		// El fin de un bloque en vivo es tan duro por dentro como por fuera:
+		// lo que arranque dentro de su ventana tiene que terminar antes.
+		for j := range insts {
+			otro, ok := insts[j].blockEnd()
+			if !ok || j == i {
+				continue
+			}
+			if insts[i].start.After(insts[j].start) && insts[i].start.Before(otro) && otro.Before(end) {
+				end = otro
+			}
+		}
+		// Lo que ya está cargado, ya salió o lo fijó una persona también es
+		// un inicio duro.
 		for _, iv := range r.reserved {
 			if !iv.from.Before(insts[i].start) && iv.from.Before(end) {
 				end = iv.from
@@ -433,6 +472,45 @@ func (r *run) resolveHardEnds(insts []instance) {
 		}
 		insts[i].hardEnd = end
 	}
+}
+
+// dropInsideBlocks quita las corridas que arrancan dentro de un bloque con
+// hora de fin declarada (en vivo o arrendado). El bloque manda y sale entero:
+// meterle otra regla encima sería dos cosas al aire a la vez. Se avisa en
+// cristiano para que quien programa mueva la regla (F1-39).
+func (r *run) dropInsideBlocks(in []instance) []instance {
+	var out []instance
+	for i := range in {
+		dentroDe := -1
+		for j := range in {
+			fin, ok := in[j].blockEnd()
+			if !ok || j == i {
+				continue
+			}
+			if in[i].start.After(in[j].start) && in[i].start.Before(fin) {
+				dentroDe = j
+				break
+			}
+		}
+		if dentroDe < 0 {
+			out = append(out, in[i])
+			continue
+		}
+		if in[i].start.Before(r.start) || !in[i].start.Before(r.end) {
+			continue // fuera de la ventana que se materializa: no se avisa dos veces
+		}
+		bloque := in[dentroDe]
+		fin, _ := bloque.blockEnd()
+		id := in[i].rule.ID
+		r.warns = append(r.warns, Warning{
+			Kind: WarnBadRule,
+			Text: fmt.Sprintf("%s empieza a las %s del %s, cuando todavía está al aire %s (de %s a %s): manda el bloque, que sale entero, y esa regla no se programa",
+				r.titleName(in[i].rule), in[i].start.In(r.loc).Format("15:04"), in[i].day,
+				r.titleName(bloque.rule), bloque.start.In(r.loc).Format("15:04"), fin.In(r.loc).Format("15:04")),
+			RuleID: &id, Day: in[i].day, At: in[i].start,
+		})
+	}
+	return out
 }
 
 func (r *run) titleName(rule model.ScheduleRule) string {
@@ -470,6 +548,17 @@ func (r *run) place(it instance) {
 	default:
 		r.placeProgram(it)
 	}
+}
+
+// ocupaElAire dice si un ítem que ya está guardado le quita el sitio al
+// resolver: lo que está cargado o ya salió, y lo que una persona fijó a mano
+// (F1-26). Lo fijado es tan duro como un bloque en vivo: el resolver lo deja
+// donde está, no avisa de ello y rellena a su alrededor.
+func ocupaElAire(p model.PlanItem) bool {
+	if p.State == model.Skipped || p.State == model.Failed {
+		return false
+	}
+	return p.State == model.Cued || p.State == model.Aired || p.Fijado
 }
 
 func (r *run) busy(t time.Time) bool {
@@ -582,6 +671,9 @@ func (r *run) placeProgram(it instance) {
 	if placed == 0 {
 		return
 	}
+	// Quede claro en qué regla se escribe el contador cuando esto salga al
+	// aire: en la primaria si esto es una repetición (auditoría B5).
+	r.owner[rule.ID] = owner
 	if !repeat && last != nil && last.ID != 0 {
 		r.cursor[owner] = &last.ID
 		r.advance[owner] = last.ID
@@ -699,7 +791,7 @@ func (r *run) placeTimeShift(it instance) {
 	collect(r.items)
 	var existing []model.PlanItem
 	for _, p := range r.in.Existing {
-		if p.State == model.Cued || p.State == model.Aired {
+		if ocupaElAire(p) {
 			existing = append(existing, p)
 		}
 	}
@@ -797,8 +889,13 @@ func (r *run) fill(g interval) {
 	cursor := g.from
 	for i, clip := range plan.clips {
 		ms := clip.DurationMs
+		fundido := int64(0)
 		if i == len(plan.clips)-1 && plan.trim > 0 {
-			ms -= plan.trim // se recorta el último clip, con fundido de 1 s
+			ms -= plan.trim
+			// Solo el clip recortado sale con fundido de 1 s (PRD §14.1): el
+			// resto del relleno sale entero, y el plan lo dice para que el
+			// motor no tenga que adivinarlo.
+			fundido = FillerFadeMs
 		}
 		if ms <= 0 {
 			continue
@@ -810,6 +907,7 @@ func (r *run) fill(g interval) {
 			PlannedMs:    ms,
 			Origin:       "relleno",
 			MediaAssetID: &assetID,
+			FadeOutMs:    fundido,
 		})
 		cursor = cursor.Add(time.Duration(ms) * time.Millisecond)
 	}

@@ -10,7 +10,9 @@
 import { responder, suscribirDemo } from '../demo/servidor'
 import type {
   Ajustes,
+  CambioDePlan,
   Canal,
+  ElementoDelPlan,
   EnCuarentena,
   Estado,
   FichaDeTitulo,
@@ -122,6 +124,13 @@ export const api = {
   borrarRegla: (id: number) => pedir<{ ok: true }>(`/reglas/${id}`, conCuerpo('DELETE')),
 
   plan: (dia: string) => pedir<FilaDelPlan[]>(`/plan?dia=${dia}`),
+  /**
+   * Mueve un bloque del plan a mano, o lo suelta. El servidor devuelve el
+   * elemento ya cambiado, con `fijado: true` cuando quedó clavado; si choca
+   * con otro bloque contesta 409 con la frase en cristiano.
+   */
+  cambiarPlan: (id: number, cambio: CambioDePlan) =>
+    pedir<ElementoDelPlan>(`/plan/${id}`, conCuerpo('PUT', cambio)),
   planSemana: (desde: string) => pedir<SemanaDelPlan>(`/plan/semana?desde=${desde}`),
   planMes: (mes: string) => pedir<MesDelPlan>(`/plan/mes?mes=${mes}`),
   recalcular: () =>

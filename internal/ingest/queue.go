@@ -33,6 +33,35 @@ type Persist interface {
 	SetNormalizeState(ctx context.Context, assetID int64, state, normalizedPath, plainReason string) error
 }
 
+// PersistLoudness es Persist más la parte del volumen: lo implementa quien,
+// además de mover el estado, sepa guardar cómo quedó medido el archivo. Es
+// una interfaz aparte a propósito —la cola funciona igual con una
+// persistencia que no la implemente— para que el LoudnessReport que devuelve
+// Normalize no se muera en memoria: F1-03 pide que quede constancia de que
+// las dos pasadas se hicieron de verdad.
+type PersistLoudness interface {
+	Persist
+	// SetLoudness anota cómo quedó el archivo normalizado: lufs y truePeak
+	// son los del resultado ya medido (LoudnessReport.OutputLUFS y
+	// OutputTruePeak), pasadas es LoudnessReport.Passes —2 cuando se midió y
+	// se corrigió, 0 cuando el archivo no traía sonido— y nota es el texto
+	// en cristiano que acompaña al registro (hoy
+	// LoudnessReport.CaptionsNote), vacío si no hay nada que contar.
+	SetLoudness(ctx context.Context, assetID int64, lufs, truePeak float64, pasadas int, nota string) error
+}
+
+// SaveLoudness guarda el reporte de volumen si la persistencia sabe hacerlo.
+// Devuelve false —sin error— cuando no sabe: el archivo se normalizó igual y
+// no se pierde nada más que el registro. Lo llama quien tiene el reporte en
+// la mano, que es quien normaliza.
+func SaveLoudness(ctx context.Context, p Persist, assetID int64, rep LoudnessReport) (bool, error) {
+	pl, ok := p.(PersistLoudness)
+	if !ok {
+		return false, nil
+	}
+	return true, pl.SetLoudness(ctx, assetID, rep.OutputLUFS, rep.OutputTruePeak, rep.Passes, rep.CaptionsNote)
+}
+
 // Job es un archivo esperando a que lo normalicen.
 type Job struct {
 	AssetID  int64

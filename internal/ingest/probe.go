@@ -195,20 +195,24 @@ type probeJSON struct {
 }
 
 type probeStream struct {
-	Index          int               `json:"index"`
-	CodecName      string            `json:"codec_name"`
-	CodecType      string            `json:"codec_type"`
-	Profile        json.RawMessage   `json:"profile"`
-	Width          int               `json:"width"`
-	Height         int               `json:"height"`
-	PixFmt         string            `json:"pix_fmt"`
-	FieldOrder     string            `json:"field_order"`
-	RFrameRate     string            `json:"r_frame_rate"`
-	AvgFrameRate   string            `json:"avg_frame_rate"`
-	Duration       string            `json:"duration"`
-	NBFrames       string            `json:"nb_frames"`
-	Channels       int               `json:"channels"`
-	SampleRate     string            `json:"sample_rate"`
+	Index        int             `json:"index"`
+	CodecName    string          `json:"codec_name"`
+	CodecType    string          `json:"codec_type"`
+	Profile      json.RawMessage `json:"profile"`
+	Width        int             `json:"width"`
+	Height       int             `json:"height"`
+	PixFmt       string          `json:"pix_fmt"`
+	FieldOrder   string          `json:"field_order"`
+	RFrameRate   string          `json:"r_frame_rate"`
+	AvgFrameRate string          `json:"avg_frame_rate"`
+	Duration     string          `json:"duration"`
+	NBFrames     string          `json:"nb_frames"`
+	Channels     int             `json:"channels"`
+	SampleRate   string          `json:"sample_rate"`
+	// ClosedCaptions solo lo emiten los ffprobe viejos. Desde ffprobe 9 el
+	// campo desapareció de -show_streams, así que un 0 aquí no quiere decir
+	// "este video no trae subtítulos dentro de la imagen": quiere decir
+	// "esta versión de ffprobe no lo dice". Ver el comentario de fill.
 	ClosedCaptions int               `json:"closed_captions"`
 	Tags           map[string]string `json:"tags"`
 	Disposition    struct {
@@ -258,6 +262,15 @@ func fill(m *Measure, raw probeJSON) {
 						videoMs = int64(math.Round(float64(n) / m.FPSFloat * 1000))
 					}
 				}
+				// Subtítulos CEA-608 metidos dentro de la imagen. Solo se
+				// afirma que los hay cuando ffprobe lo dice: ffprobe 9 ya no
+				// emite closed_captions, y en esa versión esto nunca se
+				// enciende. Es un "no lo sé", no un "no los trae" — por eso
+				// no se toca HasCaptions cuando el campo falta, y el ingest
+				// no debe leer HasCaptions == false como certeza. Detectarlo
+				// de verdad (leer las SEI A/53) y volver a insertarlo en la
+				// copia de casa es F1-04, diferido a F2: ver
+				// docs/ACEPTACION.md.
 				if s.ClosedCaptions == 1 && !m.HasCaptions {
 					m.HasCaptions = true
 					m.CaptionFormat = "cea-608"

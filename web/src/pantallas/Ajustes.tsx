@@ -262,6 +262,126 @@ export function Ajustes() {
           </div>
         </Tarjeta>
 
+        {/* Avisos */}
+        <Tarjeta rotulo="AVISOS" ancha>
+          <div className="campo">
+            <label htmlFor="avisos-canal">Por dónde salen los avisos</label>
+            <select
+              id="avisos-canal"
+              value={ajustes.avisos_canal ?? 'ninguno'}
+              onChange={(e) => cambiar('avisos_canal', e.target.value)}
+            >
+              <option value="ninguno">Por ninguno · solo en pantalla</option>
+              <option value="telegram">Por Telegram</option>
+              <option value="correo">Por correo</option>
+            </select>
+            <span className="ayuda">
+              A 7 días de que venza una regla sin relevo, el aviso sale también por aquí.
+            </span>
+          </div>
+
+          {ajustes.avisos_canal === 'telegram' && (
+            <div style={{ display: 'grid', gap: 14, marginTop: 16 }}>
+              <CampoTexto
+                id="avisos-telegram-token"
+                etiqueta="Clave del bot de Telegram"
+                tipo="password"
+                valor={ajustes.avisos_telegram_token ?? ''}
+                ayuda="Te la da @BotFather cuando creas el bot."
+                alGuardar={(v) => cambiar('avisos_telegram_token', v)}
+              />
+              <CampoTexto
+                id="avisos-telegram-chat"
+                etiqueta="A qué conversación llega"
+                valor={ajustes.avisos_telegram_chat ?? ''}
+                marcador="-1001234567890"
+                ayuda="El número de la conversación o del grupo donde quieres el aviso."
+                alGuardar={(v) => cambiar('avisos_telegram_chat', v)}
+              />
+            </div>
+          )}
+
+          {ajustes.avisos_canal === 'correo' && (
+            <div style={{ display: 'grid', gap: 14, marginTop: 16 }}>
+              <CampoTexto
+                id="avisos-correo-para"
+                etiqueta="A qué correo llega"
+                tipo="email"
+                valor={ajustes.avisos_correo_para ?? ''}
+                marcador="rolando@ejemplo.com"
+                alGuardar={(v) => cambiar('avisos_correo_para', v)}
+              />
+              <CampoTexto
+                id="avisos-smtp-servidor"
+                etiqueta="Servidor de correo de salida"
+                valor={ajustes.avisos_smtp_servidor ?? ''}
+                marcador="correo.ejemplo.com:587"
+                ayuda="El nombre del servidor y el puerto, separados por dos puntos."
+                alGuardar={(v) => cambiar('avisos_smtp_servidor', v)}
+              />
+              <CampoTexto
+                id="avisos-smtp-usuario"
+                etiqueta="Usuario de ese correo"
+                valor={ajustes.avisos_smtp_usuario ?? ''}
+                alGuardar={(v) => cambiar('avisos_smtp_usuario', v)}
+              />
+              <CampoTexto
+                id="avisos-smtp-clave"
+                etiqueta="Contraseña de ese correo"
+                tipo="password"
+                valor={ajustes.avisos_smtp_clave ?? ''}
+                ayuda="Se guarda en la máquina de la estación y no sale de ahí."
+                alGuardar={(v) => cambiar('avisos_smtp_clave', v)}
+              />
+            </div>
+          )}
+        </Tarjeta>
+
+        {/* Fichas de programas */}
+        <Tarjeta rotulo="FICHAS DE PROGRAMAS">
+          <div className="entre">
+            <div>
+              <div style={{ font: '500 14.5px var(--sans)' }}>Buscarlas en internet</div>
+              <div className="tenue" style={{ fontSize: 12.5, marginTop: 3 }}>
+                Buscar sinopsis y carátulas en internet cuando el archivo no las trae
+              </div>
+            </div>
+            <button
+              className="interruptor"
+              role="switch"
+              aria-checked={ajustes.fichas_en_linea === 'si'}
+              onClick={() =>
+                cambiar('fichas_en_linea', ajustes.fichas_en_linea === 'si' ? 'no' : 'si')
+              }
+            />
+          </div>
+          {ajustes.fichas_en_linea === 'si' && (
+            <div style={{ marginTop: 16 }}>
+              <CampoTexto
+                id="clave-tmdb"
+                etiqueta="Clave de TMDB"
+                tipo="password"
+                valor={ajustes.clave_tmdb ?? ''}
+                ayuda="opcional; sin clave se usa TVmaze"
+                alGuardar={(v) => cambiar('clave_tmdb', v)}
+              />
+            </div>
+          )}
+        </Tarjeta>
+
+        {/* Guía */}
+        <Tarjeta rotulo="GUÍA">
+          <CampoTexto
+            id="guia-destino"
+            etiqueta="Mandarla también a esta dirección"
+            tipo="url"
+            valor={ajustes.guia_destino_http ?? ''}
+            marcador="https://ejemplo.com/guia"
+            ayuda="Además de escribir el archivo, enviar la guía a esta dirección (opcional; si falla no afecta al aire)"
+            alGuardar={(v) => cambiar('guia_destino_http', v)}
+          />
+        </Tarjeta>
+
         {/* Asistente de IA */}
         <Tarjeta rotulo="ASISTENTE DE IA" ancha>
           <div className="entre">
@@ -318,6 +438,49 @@ function Tarjeta({
       </div>
       {children}
     </section>
+  )
+}
+
+/**
+ * Un campo de texto que guarda cuando se sale de él o se aprieta Enter: así no
+ * se manda un ajuste por cada tecla.
+ */
+function CampoTexto({
+  id,
+  etiqueta,
+  valor,
+  ayuda,
+  marcador,
+  tipo = 'text',
+  alGuardar,
+}: {
+  id: string
+  etiqueta: string
+  valor: string
+  ayuda?: string
+  marcador?: string
+  tipo?: 'text' | 'password' | 'email' | 'url'
+  alGuardar: (v: string) => void
+}) {
+  const [borrador, setBorrador] = useState(valor)
+  useEffect(() => setBorrador(valor), [valor])
+  return (
+    <div className="campo">
+      <label htmlFor={id}>{etiqueta}</label>
+      <input
+        id={id}
+        type={tipo}
+        autoComplete="off"
+        placeholder={marcador}
+        value={borrador}
+        onChange={(e) => setBorrador(e.target.value)}
+        onBlur={() => borrador !== valor && alGuardar(borrador)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur()
+        }}
+      />
+      {ayuda && <span className="ayuda">{ayuda}</span>}
+    </div>
   )
 }
 

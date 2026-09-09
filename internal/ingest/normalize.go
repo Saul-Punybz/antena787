@@ -48,32 +48,53 @@ type NormalizeOptions struct {
 
 // LoudnessReport es lo que hay que poder enseñar después: cuánto medía antes,
 // cuánto mide ahora, y que las dos pasadas se hicieron de verdad (F1-03).
+//
+// Todos los campos son públicos a propósito: quien llama a Normalize —hoy
+// internal/app— tiene que poder guardarlos. Lo mínimo que pide F1-03 es dejar
+// constancia de OutputLUFS, OutputTruePeak y Passes; para eso está
+// PersistLoudness.SetLoudness (queue.go), y CaptionsNote es la nota que
+// acompaña al registro cuando los subtítulos no llegaron enteros.
 type LoudnessReport struct {
+	// TargetLUFS y TargetTruePeak son lo que pidió el perfil del país:
+	// −24 LUFS y −2 dBTP en Estados Unidos y Puerto Rico.
 	TargetLUFS     float64
 	TargetTruePeak float64
 
-	MeasuredLUFS      float64 // antes de corregir
-	MeasuredTruePeak  float64
-	MeasuredLRA       float64
-	MeasuredThreshold float64
-	TargetOffset      float64
+	// Lo que midió la primera pasada, antes de corregir nada. Si el archivo
+	// no trae sonido no se mide: quedan todos en cero.
+	MeasuredLUFS      float64 // volumen integrado del original
+	MeasuredTruePeak  float64 // pico real del original, en dBTP
+	MeasuredLRA       float64 // rango de volumen del original
+	MeasuredThreshold float64 // umbral que usó la medición
+	TargetOffset      float64 // corrección que la segunda pasada aplicó
 
-	OutputLUFS     float64 // después de corregir, medido de verdad
-	OutputTruePeak float64
-	OutputLRA      float64
+	// Lo que mide la copia ya normalizada. Es una medición de verdad, no una
+	// estimación: la tercera corrida de ffmpeg vuelve a escuchar el
+	// resultado. Verified dice si esa comprobación llegó a correr
+	// (SkipVerify y los archivos sin sonido la saltan).
+	OutputLUFS     float64 // volumen integrado de la copia de casa
+	OutputTruePeak float64 // pico real de la copia, en dBTP
+	OutputLRA      float64 // rango de volumen de la copia
 	Verified       bool
 
-	Passes int // 2 = medir y corregir; nunca 1
+	// Passes es el registro de que se hicieron las dos pasadas: 2 = medir y
+	// corregir, que es lo que exige F1-03; nunca 1. Es 0 cuando el archivo
+	// no trae sonido y no había nada que medir.
+	Passes int
 
+	// CaptionsKept dice si los subtítulos del original llegaron a la copia.
+	// CaptionsNote explica en cristiano lo que pasó cuando no llegaron
+	// enteros; es texto para enseñarle a una persona, no para la máquina.
 	CaptionsKept bool
 	CaptionsNote string
 
-	TrimmedHeadMs    int64
-	TrimmedTailMs    int64
-	OutputPath       string
-	OutputDurationMs int64
-	VideoFilter      string
-	AudioFilter      string
+	// Lo que se recortó y dónde quedó el resultado.
+	TrimmedHeadMs    int64  // negro y silencio quitados de la cabeza
+	TrimmedTailMs    int64  // negro y silencio quitados de la cola
+	OutputPath       string // ruta de la copia normalizada
+	OutputDurationMs int64  // cuánto dura la copia después del recorte
+	VideoFilter      string // cadena de conformado de imagen que se usó
+	AudioFilter      string // cadena de conformado de sonido que se usó
 }
 
 // Normalize deja una copia del archivo en el formato de casa: una

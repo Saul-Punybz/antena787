@@ -12,6 +12,7 @@ import type {
   ElementoDelPlan,
   Estado,
   FilaDelPlan,
+  FranjaSemana,
   Guia,
   MesDelPlan,
   Regla,
@@ -38,6 +39,18 @@ let reglas: Regla[] = reglasDemo.map((r) => ({ ...r }))
 let ajustes: Ajustes = { ...ajustesDemo }
 const dejadosPasar = new Set<number>()
 let siguienteId = 1000
+
+/**
+ * Lo que alguien movió a mano en la parrilla. El servidor de verdad lo guarda
+ * en el plan_item; aquí basta con acordarse del cambio y aplicarlo encima de
+ * lo que calculan las reglas.
+ */
+interface CambioAMano {
+  instante_planeado?: string
+  duracion_planeada_ms?: number
+  fijado: boolean
+}
+const aMano = new Map<number, CambioAMano>()
 
 /** El reloj del canal: arranca en el instante de los mockups y corre. */
 export function ahoraDemo(): Date {
@@ -73,8 +86,20 @@ function diaEmisionDe(t: Date): string {
  * La duración real es seis minutos menos que el slot: ese sobrante es el
  * hueco que la interfaz tiene que enseñar (PRD §13).
  */
-function elementosDelDia(dia: string): ElementoDelPlan[] {
-  const out: ElementoDelPlan[] = []
+interface BloqueDemo {
+  item: ElementoDelPlan
+  desdeMin: number
+  hastaMin: number
+}
+
+/** El minuto del reloj del canal al que cae un instante. */
+function minutoLocalDe(instante: string): number {
+  const t = new Date(Date.parse(instante) + DESFASE_H * 3_600_000)
+  return t.getUTCHours() * 60 + t.getUTCMinutes()
+}
+
+function bloquesDelDia(dia: string): BloqueDemo[] {
+  const out: BloqueDemo[] = []
   let i = 0
   let n = 0
   while (i < FRANJAS.length) {
@@ -88,7 +113,7 @@ function elementosDelDia(dia: string): ElementoDelPlan[] {
     const inicioMin = i * 30
     const slotMs = (j - i + 1) * 30 * 60_000
     const enVivo = EN_VIVO.has(nombre)
-    out.push({
+    const item: ElementoDelPlan = {
       id: Number(dia.replace(/-/g, '')) * 100 + n++,
       dia_emision: dia,
       instante_planeado: utcDe(dia, inicioMin).toISOString(),
@@ -100,10 +125,37 @@ function elementosDelDia(dia: string): ElementoDelPlan[] {
       temporada: enVivo ? null : 1 + ((i + dia.length) % 3),
       episodio: enVivo ? null : 1 + ((i * 7 + dia.charCodeAt(9)) % 26),
       en_vivo: enVivo,
-    })
+    }
+    let desde = inicioMin
+    let hasta = inicioMin + (j - i + 1) * 30
+    const cambio = aMano.get(item.id)
+    if (cambio) {
+      if (cambio.instante_planeado) {
+        item.instante_planeado = new Date(Date.parse(cambio.instante_planeado)).toISOString()
+        desde = minutoLocalDe(item.instante_planeado)
+        hasta = desde + (j - i + 1) * 30
+        item.hora_local = hhmm(desde % (24 * 60))
+      }
+      if (cambio.duracion_planeada_ms) item.duracion_planeada_ms = cambio.duracion_planeada_ms
+      if (cambio.fijado) item.fijado = true
+    }
+    out.push({ item, desdeMin: desde, hastaMin: hasta })
     i = j + 1
   }
+  out.sort((a, b) => a.desdeMin - b.desdeMin)
   return out
+}
+
+function elementosDelDia(dia: string): ElementoDelPlan[] {
+  return bloquesDelDia(dia).map((b) => b.item)
+}
+
+/** Busca un plan_item por su número en el día que lleva codificado. */
+function bloquePorId(id: number): BloqueDemo | null {
+  const codigo = String(Math.floor(id / 100))
+  if (codigo.length !== 8) return null
+  const dia = `${codigo.slice(0, 4)}-${codigo.slice(4, 6)}-${codigo.slice(6, 8)}`
+  return bloquesDelDia(dia).find((b) => b.item.id === id) ?? null
 }
 
 /** El día de emisión completo: de las 6:00 AM a las 6:00 AM del otro día. */
@@ -243,6 +295,9 @@ function estado(): Estado {
     version: ajustes.version ?? '1.0.0',
     retorno_de_aire: { hay: false, texto: 'Todavía no hay retorno de aire conectado' },
     control_manual: { activo: false },
+    // En modo demostración siempre se está adentro: no hay clave que pedir.
+    entraste: true,
+    instalacion_completa: true,
   }
 }
 
@@ -252,14 +307,23 @@ function semana(desde: string): SemanaDelPlan {
   const dias = []
   for (let i = 0; i < 7; i++) {
     const dia = sumar(desde, i)
-    const franjas = []
-    for (let k = 0; k < 48; k++) {
-      const nombre = programaEn(dia, FRANJAS[k])
-      franjas.push({
-        titulo: nombre || null,
-        en_vivo: EN_VIVO.has(nombre),
-        duracion_ms: 30 * 60_000,
-      })
+    const franjas: FranjaSemana[] = Array.from({ length: 48 }, () => ({
+      titulo: null,
+      en_vivo: false,
+      duracion_ms: 30 * 60_000,
+      plan_id: null,
+    }))
+    for (const b of bloquesDelDia(dia)) {
+      for (let k = Math.floor(b.desdeMin / 30); k < Math.ceil(b.hastaMin / 30); k++) {
+        if (k < 0 || k > 47) continue
+        franjas[k] = {
+          titulo: b.item.titulo ?? null,
+          en_vivo: Boolean(b.item.en_vivo),
+          duracion_ms: 30 * 60_000,
+          plan_id: b.item.id,
+          fijado: b.item.fijado,
+        }
+      }
     }
     dias.push({ dia, franjas, horas_vacias: horasVacias(dia) })
   }
@@ -456,6 +520,55 @@ export async function responder(ruta: string, init?: RequestInit): Promise<Respo
       { tipo: 'vencimiento', texto: 'Familia Robinson se vence el 6 de septiembre.' },
     ])
   if (p === '/plan/llenar-con-diferido') return json({ regla_creada: siguienteId++ })
+  const planId = p.match(/^\/plan\/(\d+)$/)
+  if (planId && metodo === 'PUT') {
+    const id = Number(planId[1])
+    const bloque = bloquePorId(id)
+    if (!bloque) return json({ error: 'Ese bloque ya no está en la parrilla.' }, 404)
+    if (cuerpo?.fijado === false) {
+      aMano.delete(id)
+      const suelto = bloquePorId(id)
+      return json(suelto ? suelto.item : bloque.item)
+    }
+    if (cuerpo?.instante_planeado && Number.isNaN(Date.parse(String(cuerpo.instante_planeado))))
+      return json(
+        { error: 'Esa hora no se entiende. Escríbela con fecha y hora.', campo: 'instante_planeado' },
+        400,
+      )
+    const previo = aMano.get(id)
+    const instante = cuerpo?.instante_planeado
+      ? new Date(Date.parse(String(cuerpo.instante_planeado))).toISOString()
+      : previo?.instante_planeado
+    const duracion =
+      typeof cuerpo?.duracion_planeada_ms === 'number'
+        ? cuerpo.duracion_planeada_ms
+        : previo?.duracion_planeada_ms
+    // Choque con otro bloque del mismo día: no se pisa nada al aire.
+    if (instante) {
+      const inicio = Date.parse(instante)
+      const largo = duracion ?? bloque.item.duracion_planeada_ms
+      const choque = bloquesDelDia(bloque.item.dia_emision).find((otro) => {
+        if (otro.item.id === id) return false
+        const a = Date.parse(otro.item.instante_planeado)
+        return inicio < a + otro.item.duracion_planeada_ms && a < inicio + largo
+      })
+      if (choque)
+        return json(
+          {
+            error: `A esa hora ya está ${choque.item.titulo}. Mueve uno de los dos o acorta el bloque.`,
+            campo: 'instante_planeado',
+          },
+          409,
+        )
+    }
+    aMano.set(id, {
+      instante_planeado: instante,
+      duracion_planeada_ms: duracion,
+      fijado: true,
+    })
+    const nuevo = bloquePorId(id)
+    return json(nuevo ? nuevo.item : bloque.item)
+  }
   if (p === '/guia') return json(guia(url.searchParams.get('dia') ?? '2026-09-08'))
   if (p === '/biblioteca') return json(titulos)
   const tituloId = p.match(/^\/biblioteca\/(\d+)$/)

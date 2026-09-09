@@ -2,6 +2,7 @@ package resolver
 
 import (
 	"reflect"
+	"sort"
 	"testing"
 	"time"
 
@@ -743,4 +744,132 @@ func catvWeek() *fx {
 	// La fila del Hellsing: termina antes de empezar.
 	f.rule(336, 336, "_____SD", "0:00", "2026-09-15", "2026-01-01", 1)
 	return f
+}
+
+// F1-22: el clip de relleno que se recorta para cuadrar el hueco sale con un
+// fundido de 1 segundo, y solo él: el resto del relleno sale entero.
+func TestFundidoDeUnSegundoEnElClipRecortado(t *testing.T) {
+	f := newCAtv()
+	// 24:03 de programa dejan exactamente 5:57 antes de la regla de las 8:30.
+	f.serie(420, "Programa de 24:03", 6, 24*time.Minute+3*time.Second)
+	f.serie(421, "El de las 8:30", 6, 20*time.Minute)
+	f.filler(1, 3*time.Minute)
+	f.filler(2, 2*time.Minute)
+	f.rule(420, 420, "LMMJV__", "8:00", "2026-09-01", "2026-09-30", 1)
+	f.rule(421, 421, "LMMJV__", "8:30", "2026-09-01", "2026-09-30", 1)
+
+	out := Resolve(f.in(f.local(t, "2026-09-07 08:00"), 2*time.Hour))
+
+	var hueco []model.PlanItem
+	for _, p := range out.Items {
+		if p.Origin == "relleno" && !p.PlannedAt.Before(f.local(t, "2026-09-07 08:00")) &&
+			p.PlannedAt.Before(f.local(t, "2026-09-07 08:30")) {
+			hueco = append(hueco, p)
+		}
+	}
+	if len(hueco) != 2 {
+		t.Fatalf("el hueco de 5:57 se cubre con dos clips y hay %d\n%s", len(hueco), f.dump(out))
+	}
+	if hueco[0].FadeOutMs != 0 {
+		t.Fatalf("el clip que va entero no lleva fundido y lleva %d ms", hueco[0].FadeOutMs)
+	}
+	if hueco[1].FadeOutMs != FillerFadeMs {
+		t.Fatalf("el clip recortado sale con fundido de 1 s y salió con %d ms\n%s",
+			hueco[1].FadeOutMs, f.dump(out))
+	}
+	// Y donde el relleno cuadra exacto, nadie lleva fundido.
+	for _, p := range out.Items {
+		if p.Origin == "relleno" && p.PlannedAt.After(f.local(t, "2026-09-07 08:50")) && p.FadeOutMs != 0 {
+			t.Fatalf("un clip que sale entero no puede llevar fundido\n%s", f.dump(out))
+		}
+	}
+}
+
+// F1-26: un ítem que una persona fijó a mano —aquí, el de mañana movido
+// cinco minutos— se queda donde lo pusieron: el resolver no le pone nada
+// encima, rellena a su alrededor y no se queja de él.
+func TestItemFijadoSeRespeta(t *testing.T) {
+	f := newCAtv()
+	f.serie(344, "You're Under Arrest", 12, 24*time.Minute)
+	f.serie(345, "Samurai X", 12, 24*time.Minute)
+	f.filler(1, time.Minute)
+	f.filler(2, 30*time.Second)
+	f.rule(344, 344, "LMMJV__", "14:00", "2026-07-07", "2026-09-16", 1)
+	f.rule(345, 345, "LMMJV__", "14:30", "2026-06-25", "2026-11-04", 1)
+
+	// El ítem de mañana a las 14:00, corrido a las 14:05 y clavado ahí.
+	fijado := model.PlanItem{
+		ID: 77, ChannelID: f.ch.ID, DeckID: deckProg,
+		BroadcastDay: "2026-09-08", PlannedAt: f.local(t, "2026-09-08 14:05"),
+		PlannedMs: (24 * time.Minute).Milliseconds(), Origin: "asset",
+		State: model.Planned, LocalClock: "14:05", Fijado: true,
+	}
+	in := f.in(f.local(t, "2026-09-07 12:00"), 48*time.Hour)
+	in.Existing = []model.PlanItem{fijado}
+	out := Resolve(in)
+
+	// Nadie se le monta encima.
+	for _, p := range out.Items {
+		if p.PlannedAt.Before(fijado.End()) && p.End().After(fijado.PlannedAt) {
+			t.Fatalf("un ítem (%s, %s) se montó encima del ítem fijado de las 14:05\n%s",
+				p.PlannedAt.In(f.loc).Format("2006-01-02 15:04:05"), p.Origin, f.dump(out))
+		}
+	}
+	// El resolver tampoco lo vuelve a poner: sigue siendo el que ya está.
+	for _, p := range out.Items {
+		if p.PlannedAt.Equal(fijado.PlannedAt) {
+			t.Fatalf("el resolver duplicó el ítem fijado\n%s", f.dump(out))
+		}
+	}
+	// Los cinco minutos de antes se cubren con relleno, sin dejar aire vacío.
+	antes := f.at(t, out, "2026-09-08 14:00")
+	if antes.Origin != "relleno" && antes.Origin != "cartel" {
+		t.Fatalf("las 14:00 de mañana son relleno hasta que entra lo fijado y salió %q", antes.Origin)
+	}
+	todo := Output{Items: append(append([]model.PlanItem(nil), out.Items...), fijado)}
+	sort.SliceStable(todo.Items, func(i, j int) bool {
+		return todo.Items[i].PlannedAt.Before(todo.Items[j].PlannedAt)
+	})
+	covered(t, f, todo, f.local(t, "2026-09-08 14:00"), f.local(t, "2026-09-08 14:30"))
+	// Y nada de avisos sobre el ítem fijado: no es un hueco ni un conflicto.
+	for _, w := range out.Warnings {
+		if w.Kind == WarnGap && w.At.Equal(fijado.PlannedAt) {
+			t.Fatalf("lo fijado no es un hueco: %s", w.Text)
+		}
+	}
+	// La regla siguiente entra a su hora, como si nada.
+	if got := f.titleOf(f.at(t, out, "2026-09-08 14:30")); got != "Samurai X" {
+		t.Fatalf("a las 14:30 entra Samurai X y salió %q\n%s", got, f.dump(out))
+	}
+}
+
+// F1-16, B5: el plan dice de quién es el contador de cada regla. Un ítem de
+// repetición lleva su propia regla en schedule_rule_id, así que quien lo
+// marque como emitido tiene que saber que el contador se escribe en la
+// primaria, no en la repetición.
+func TestElContadorTieneDuenoDeclarado(t *testing.T) {
+	f := newCAtv()
+	f.serie(344, "You're Under Arrest", 26, 24*time.Minute)
+	f.filler(1, time.Minute)
+	f.rule(344, 344, "LMMJV__", "14:00", "2026-07-07", "2026-09-16", 1)
+	f.rule(315, 344, "LMMJV__", "23:00", "2026-07-07", "2026-09-16", 1)
+	f.tweak(315, func(r *model.ScheduleRule) { id := int64(344); r.RepeatsOf = &id })
+
+	out := Resolve(f.in(f.local(t, "2026-09-07 06:00"), 24*time.Hour))
+
+	if out.CounterOwner[344] != 344 {
+		t.Fatalf("una regla normal es dueña de su contador y salió %d", out.CounterOwner[344])
+	}
+	if out.CounterOwner[315] != 344 {
+		t.Fatalf("el contador de la repetición es el de su primaria (344) y salió %d\n%s",
+			out.CounterOwner[315], f.dump(out))
+	}
+	// Y con el mapa, el ítem de las 11 PM sabe en qué regla se escribe.
+	noche := f.at(t, out, "2026-09-07 23:00")
+	if noche.RuleID == nil || *noche.RuleID != 315 {
+		t.Fatalf("el ítem de las 11 PM es de la regla 315 y salió %v", ruleOf(noche))
+	}
+	if out.EpisodeAdvance[out.CounterOwner[*noche.RuleID]] != *noche.EpisodeID {
+		t.Fatalf("el contador del dueño tiene que ser el episodio que salió\n%s", f.dump(out))
+	}
 }

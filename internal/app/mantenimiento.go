@@ -94,7 +94,7 @@ func (a *App) diskLoop(ctx context.Context) error {
 		last = level
 		switch level {
 		case "":
-			a.setAlarms(nil)
+			a.setAlarms("disco", nil)
 		case "aviso":
 			a.disk(free, "queda menos del 10 %% de disco libre (%.1f %%): conviene hacer sitio")
 		case "purga":
@@ -118,7 +118,17 @@ func (a *App) diskLoop(ctx context.Context) error {
 
 func (a *App) disk(free float64, format string) {
 	texto := fmt.Sprintf(format, free)
-	a.setAlarms([]string{texto})
+	nivel := NivelAviso
+	if free < DiskStop {
+		nivel = NivelProblema
+	}
+	a.setAlarms("disco", []Alarma{{
+		Tipo:    "disco",
+		Nivel:   nivel,
+		Texto:   texto,
+		Detalle: fmt.Sprintf("queda el %.1f %% del disco", free),
+		Accion:  &AccionAlarma{Texto: "ver la biblioteca", Ruta: "/biblioteca"},
+	}})
 	a.Incident("disco_bajo", texto)
 }
 

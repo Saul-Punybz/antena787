@@ -187,9 +187,23 @@ func (a *App) saveCatalog(ctx context.Context, asset *model.MediaAsset, title mo
 	return nil
 }
 
+// DiasDeCola es hasta dónde se mira hacia adelante buscando cuándo sale al
+// aire un archivo que espera turno en la cola de normalización.
+const DiasDeCola = 30
+
 // airsAt dice cuándo sale al aire ese archivo, para que la cola de
 // normalización lo ordene: lo que sale antes se normaliza antes (B7).
+//
+// La hora sale de **las reglas**, no del plan. Es a propósito: el resolver
+// solo mete en el plan material que ya está normalizado (F1-41), así que un
+// archivo recién llegado —el único que está en la cola— nunca aparecería en
+// plan_item y la cola degeneraría en orden de llegada, que es justo lo que
+// F1-42 prohíbe. El plan queda de respaldo para cuando las reglas no digan
+// nada (un archivo que alguien colocó a mano, por ejemplo).
 func (a *App) airsAt(ctx context.Context, assetID int64) time.Time {
+	if t := a.airsAtPorReglas(ctx, assetID); !t.IsZero() {
+		return t
+	}
 	now := a.Now()
 	items, err := a.Store.Plan.ListRange(ctx, a.ChannelID, now, now.Add(7*24*time.Hour))
 	if err != nil {
@@ -201,6 +215,94 @@ func (a *App) airsAt(ctx context.Context, assetID int64) time.Time {
 		}
 	}
 	return time.Time{}
+}
+
+// airsAtPorReglas busca la primera regla activa que programe ese archivo
+// —por el título que lo apunta o por uno de sus episodios— y devuelve su
+// próxima salida.
+func (a *App) airsAtPorReglas(ctx context.Context, assetID int64) time.Time {
+	ch, err := a.Store.Channel.Get(ctx, a.ChannelID)
+	if err != nil {
+		return time.Time{}
+	}
+	titulos := a.titlesOfAsset(ctx, assetID)
+	if len(titulos) == 0 {
+		return time.Time{}
+	}
+	rules, err := a.Store.Rule.ListAll(ctx, a.ChannelID)
+	if err != nil {
+		return time.Time{}
+	}
+	now := a.Now()
+	hoy := ch.BroadcastDay(now)
+
+	var primera time.Time
+	for _, rule := range rules {
+		if !rule.Active || rule.TitleID == nil || !titulos[*rule.TitleID] {
+			continue
+		}
+		if rule.At < 0 || rule.At > 1439 || !rule.Days.Valid() {
+			continue
+		}
+		// El día de hoy entra: puede que la regla salga esta misma tarde.
+		for d := 0; d <= DiasDeCola; d++ {
+			day := hoy.Add(d)
+			if day > rule.To {
+				break
+			}
+			if !rule.Covers(day) {
+				continue
+			}
+			cuando := instanteDe(ch, day, rule.At)
+			if cuando.Before(now) {
+				continue
+			}
+			if primera.IsZero() || cuando.Before(primera) {
+				primera = cuando
+			}
+			break
+		}
+	}
+	return primera
+}
+
+// titlesOfAsset devuelve los títulos que apuntan a ese archivo, sea
+// directamente o por medio de un episodio.
+func (a *App) titlesOfAsset(ctx context.Context, assetID int64) map[int64]bool {
+	out := map[int64]bool{}
+	titles, err := a.Store.Title.List(ctx)
+	if err != nil {
+		return out
+	}
+	for _, t := range titles {
+		if t.MediaAssetID != nil && *t.MediaAssetID == assetID {
+			out[t.ID] = true
+			continue
+		}
+		eps, err := a.Store.Episode.ListByTitle(ctx, t.ID)
+		if err != nil {
+			continue
+		}
+		for _, e := range eps {
+			if e.MediaAssetID != nil && *e.MediaAssetID == assetID {
+				out[t.ID] = true
+				break
+			}
+		}
+	}
+	return out
+}
+
+// instanteDe traduce una hora de pared a un instante dentro de un día de
+// emisión: lo anterior al inicio del día vive en el calendario siguiente,
+// igual que en el resolver.
+func instanteDe(ch model.Channel, day model.Day, min model.Minutes) time.Time {
+	base := day.Time(ch.Location())
+	if min < ch.BroadcastDayAt {
+		base = base.AddDate(0, 0, 1)
+	}
+	return time.Date(base.Year(), base.Month(), base.Day(),
+		int(min)/60, int(min)%60, 0, 0, ch.Location())
 }
 
 // ingestDeps arma lo que el ingest necesita del canal: el formato de casa y
@@ -222,8 +324,25 @@ func (a *App) ingestDeps(ctx context.Context) (ingest.Deps, error) {
 		TruePeak:    peak,
 		ChannelID:   nil,
 		ComputeHash: true,
+		Providers:   a.fichasEnLinea(ctx),
 		Now:         a.now,
 	}, nil
+}
+
+// fichasEnLinea enciende la búsqueda de fichas por internet si el ajuste lo
+// dice. De fábrica está apagada: la instalación entera funciona sin red y sin
+// que nadie tenga que sacar una clave (PRD §10). Con ella encendida se
+// consulta primero lo que no pide clave —TVmaze para series, la portada de
+// los discos para música— y solo después TMDB, y solo si hay clave puesta.
+func (a *App) fichasEnLinea(ctx context.Context) []ingest.Provider {
+	if a.setting(ctx, KeyOnlineInfo) != "si" {
+		return nil
+	}
+	return ingest.Providers(ingest.ProviderConfig{
+		TVmaze:          true,
+		CoverArtArchive: true,
+		TMDBAPIKey:      a.setting(ctx, KeyTMDBKey),
+	})
 }
 
 // loudnessTarget: la señal abierta pide −24 LKFS y la web −16 LUFS (PRD §7).
@@ -313,8 +432,15 @@ func (a *App) normalizeOne(ctx context.Context, j ingest.Job) (string, error) {
 	dst := ingest.NormalizedPathFor(dir, asset.Path, ".mkv")
 	lufs, peak := a.loudnessTarget(ctx)
 	opts := ingest.NormalizeOptionsFor(asset, m)
-	if _, err := ingest.Normalize(ctx, a.FFmpeg, asset.Path, dst, FormatOf(ch.FormatProfile), lufs, peak, opts); err != nil {
+	reporte, err := ingest.Normalize(ctx, a.FFmpeg, asset.Path, dst, FormatOf(ch.FormatProfile), lufs, peak, opts)
+	if err != nil {
 		return "", err
+	}
+	// F1-03 pide que quede constancia de las dos pasadas de volumen: aquí es
+	// donde el reporte deja de vivir solo en memoria.
+	if _, err := ingest.SaveLoudness(ctx, &persist{a: a}, asset.ID, reporte); err != nil {
+		a.Publish("material", "volumen",
+			"no se pudo anotar cómo quedó el sonido de "+filepath.Base(asset.Path)+": "+err.Error())
 	}
 	return dst, nil
 }
@@ -352,6 +478,37 @@ func (p *persist) SetNormalizeState(ctx context.Context, assetID int64, state, n
 		p.a.Recalc()
 	case ingest.NormalizeFailed:
 		p.a.Incident("normalizacion_fallida", filepath.Base(asset.Path)+": "+plainReason)
+	}
+	return nil
+}
+
+// SetLoudness anota cómo quedó medida la copia normalizada. Es la mitad de
+// F1-03 que faltaba: sin esto el reporte de volumen se moría al terminar la
+// normalización y las columnas `lufs` y `true_peak` se quedaban vacías.
+//
+// pasadas == 0 quiere decir que el archivo no traía sonido y no había nada
+// que medir: entonces no se escribe un cero que parecería una medición.
+func (p *persist) SetLoudness(ctx context.Context, assetID int64, lufs, truePeak float64, pasadas int, nota string) error {
+	asset, err := p.a.Store.Media.Get(ctx, assetID)
+	if err != nil {
+		return err
+	}
+	if pasadas > 0 {
+		medido, pico := lufs, truePeak
+		asset.LUFS = &medido
+		asset.TruePeak = &pico
+	}
+	asset.UpdatedAt = p.a.Now()
+	if err := p.a.Store.Media.Update(ctx, &asset); err != nil {
+		return err
+	}
+	if nota != "" {
+		p.a.Incident("subtitulos", filepath.Base(asset.Path)+": "+nota)
+	}
+	if pasadas > 0 {
+		p.a.Publish("material", "volumen", fmt.Sprintf(
+			"%s quedó medido en %.1f, con el pico en %.1f, después de %d pasadas",
+			filepath.Base(asset.Path), lufs, truePeak, pasadas))
 	}
 	return nil
 }

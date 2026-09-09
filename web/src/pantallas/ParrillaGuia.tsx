@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { PestanasDeParrilla } from './Parrilla'
 import { api } from '../lib/api'
 import { useEstado } from '../lib/estado'
-import { duracionLarga, haceCuanto, hora } from '../lib/fechas'
+import { diaYMes, duracionLarga, haceCuanto, hora, sumarDias } from '../lib/fechas'
 import { IconoAlerta, IconoEquis, IconoOk } from '../componentes/Iconos'
 import type { Guia } from '../lib/tipos'
 
@@ -11,9 +11,14 @@ export function ParrillaGuia() {
   const { estado } = useEstado()
   const zona = estado?.canal.zona_horaria ?? 'UTC'
   const [guia, setGuia] = useState<Guia | null>(null)
-  const dia = '2026-09-08'
+  // Por defecto, el día que está saliendo al aire; las flechas mueven de día,
+  // igual que en Semana y en Mes.
+  const hoy = estado?.dia_emision ?? null
+  const [elegido, setElegido] = useState<string | null>(null)
+  const dia = elegido ?? hoy
 
   useEffect(() => {
+    if (!dia) return
     api.guia(dia).then(setGuia).catch(() => setGuia(null))
   }, [dia])
 
@@ -26,10 +31,28 @@ export function ParrillaGuia() {
           <h1 className="titulo-pantalla">Guía electrónica</h1>
           <p className="subtitulo">
             Lo que ve el televidente en su televisor, comparado con lo que de verdad va a
-            salir.
+            salir{dia ? `, el ${diaYMes(dia)}` : ''}.
           </p>
         </div>
-        <PestanasDeParrilla />
+        <div className="fila" style={{ gap: 10 }}>
+          <button
+            className="boton"
+            aria-label="El día antes"
+            disabled={!dia}
+            onClick={() => dia && setElegido(sumarDias(dia, -1))}
+          >
+            ←
+          </button>
+          <button
+            className="boton"
+            aria-label="El día después"
+            disabled={!dia}
+            onClick={() => dia && setElegido(sumarDias(dia, 1))}
+          >
+            →
+          </button>
+          <PestanasDeParrilla />
+        </div>
       </div>
 
       {!guia && <p className="cargando">Comparando la guía con el plan…</p>}

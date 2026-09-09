@@ -286,6 +286,9 @@ function EditorDeRegla({
     try {
       if (regla) await api.editarRegla(regla.id, cuerpo, soloHoy)
       else await api.crearRegla(cuerpo)
+      // La regla sola no mueve nada: el plan se vuelve a armar aquí mismo,
+      // para que la parrilla enseñe el cambio sin esperar la corrida del reloj.
+      await api.recalcular().catch(() => {})
       alGuardar()
     } catch (e) {
       // El texto del error del servidor ya viene en cristiano (docs/API.md).
@@ -298,6 +301,7 @@ function EditorDeRegla({
   async function borrar() {
     if (!regla) return
     await api.borrarRegla(regla.id).catch(() => {})
+    await api.recalcular().catch(() => {})
     alGuardar()
   }
 
@@ -450,6 +454,8 @@ function PanelDeImportacion({
     setError(null)
     try {
       setResumen(await api.importarHoja(texto))
+      // La hoja crea reglas: la parrilla se vuelve a armar de una vez.
+      await api.recalcular().catch(() => {})
     } catch (e) {
       setError(e instanceof ErrorDeApi ? e.message : 'No se pudo leer lo que pegaste.')
     } finally {
@@ -464,6 +470,8 @@ function PanelDeImportacion({
         resumen.relevos_propuestos.map((r) => ({ regla: r.regla, releva_a: r.releva_a })),
       )
       .catch(() => {})
+    // Un relevo cambia quién ocupa la franja: hay que volver a armar el plan.
+    await api.recalcular().catch(() => {})
     alTerminar()
   }
 

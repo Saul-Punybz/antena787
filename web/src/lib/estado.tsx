@@ -48,10 +48,19 @@ export function ProveedorDeEstado({ children }: { children: ReactNode }) {
         if (e.necesita_instalacion) {
           setNecesita(true)
           setEstado(null)
-        } else {
-          setNecesita(false)
-          setEstado(e)
+          setSinSesion(false)
+          return
         }
+        setNecesita(false)
+        // /estado contesta sin clave para poder decir si hay que instalar. Si
+        // hay clave puesta y esta sesión no ha entrado, se pide la clave en vez
+        // de enseñar un Al aire vacío.
+        if (e.entraste === false) {
+          setSinSesion(true)
+          setEstado(null)
+          return
+        }
+        setEstado(e)
         setSinSesion(false)
       })
       .catch((err: unknown) => {

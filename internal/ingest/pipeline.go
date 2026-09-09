@@ -114,6 +114,17 @@ func Ingest(ctx context.Context, d Deps, path string) (model.MediaAsset, model.T
 	}); err != nil {
 		return fail(err)
 	}
+	// Lo medido se apunta antes de decidir nada: un archivo que acabe en
+	// cuarentena también se ve en Biblioteca, y se ve mejor con su duración
+	// y su formato puestos. Quien lo deje pasar no tiene que remedirlo.
+	asset.Codec = m.Codec
+	asset.Resolution = m.Resolution
+	asset.FPS = m.FPS
+	asset.AudioChannels = m.AudioChannels
+	asset.DurationMs = m.DurationMs
+	asset.HasCaptions = m.HasCaptions
+	asset.CaptionFormat = m.CaptionFormat
+
 	if !m.HasVideo && !m.HasAudio {
 		return fail(Plainf(nil, "el archivo %q no tiene ni imagen ni sonido: no hay nada que emitir", trimName(path)))
 	}
@@ -123,14 +134,16 @@ func Ingest(ctx context.Context, d Deps, path string) (model.MediaAsset, model.T
 	if err := retry.retry(ctx, func() error { return CheckDecodable(ctx, d.FFmpeg, path) }); err != nil {
 		return fail(err)
 	}
-
-	asset.Codec = m.Codec
-	asset.Resolution = m.Resolution
-	asset.FPS = m.FPS
-	asset.AudioChannels = m.AudioChannels
-	asset.DurationMs = m.DurationMs
-	asset.HasCaptions = m.HasCaptions
-	asset.CaptionFormat = m.CaptionFormat
+	// Sin sonido detectable no se da por listo solo (F1-10). No es un
+	// archivo roto —puede ser material mudo a propósito— así que tampoco se
+	// descarta: queda en cuarentena con su motivo en cristiano y decide una
+	// persona con el botón de "dejarlo pasar bajo mi responsabilidad" (PRD
+	// §9 paso 1). Si lo deja pasar, la normalización le pone el silencio de
+	// casa (NormalizeOptions.NoAudio, que sale de NormalizeOptionsFor) y el
+	// archivo entra al formato de casa como cualquier otro.
+	if !m.HasAudio {
+		return fail(Plainf(nil, "%q no trae sonido: revisa el máster antes de programarlo", trimName(path)))
+	}
 
 	if d.ComputeHash {
 		if h, err := HashFile(ctx, path); err == nil {
@@ -209,6 +222,10 @@ func cardToModel(c Card, channelID *int64) (model.Title, []model.Episode) {
 // NormalizeOptionsFor arma las opciones de normalización de un asset ya
 // ingerido: lo que se recorta, si hay que desentrelazar y qué hacer con los
 // subtítulos. Es lo que le pasa la cola a Normalize.
+//
+// Un archivo sin sonido solo llega hasta aquí si una persona lo dejó pasar
+// bajo su responsabilidad (F1-10): en ese caso se marca NoAudio y la copia de
+// casa sale con el silencio sintetizado del perfil, en vez de sin pista.
 func NormalizeOptionsFor(a model.MediaAsset, m Measure) NormalizeOptions {
 	o := NormalizeOptions{
 		SourceDurationMs: a.DurationMs,

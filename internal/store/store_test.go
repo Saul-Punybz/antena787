@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -837,5 +838,206 @@ func TestCanalSeActualiza(t *testing.T) {
 	fantasma := model.Channel{ID: 99, Name: "No existe", Kind: model.ChannelTV, TimeZone: "UTC"}
 	if err := s.Channel.Update(ctx, fantasma); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("se esperaba ErrNotFound, salió: %v", err)
+	}
+}
+
+// esquemaDe devuelve el esquema entero de la base —tablas, índices y
+// triggers— para poder compararlo entre dos bases.
+func esquemaDe(t *testing.T, s *Store) string {
+	t.Helper()
+	rows, err := s.DB().QueryContext(context.Background(),
+		`SELECT type, name, ifnull(sql, '') FROM sqlite_master
+		 WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name`)
+	if err != nil {
+		t.Fatalf("no se pudo leer el esquema: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var todo string
+	for rows.Next() {
+		var tipo, nombre, sql string
+		if err := rows.Scan(&tipo, &nombre, &sql); err != nil {
+			t.Fatal(err)
+		}
+		todo += tipo + " " + nombre + "\n" + sql + "\n\n"
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return todo
+}
+
+// Una base recién creada y una base vieja migrada tienen que terminar
+// idénticas: schema.sql es el punto de partida y los escalones de migrations
+// se aplican a las dos.
+func TestBaseNuevaYBaseMigradaQuedanIguales(t *testing.T) {
+	ctx := context.Background()
+
+	nueva, _ := abrir(t)
+	if v, err := nueva.Version(ctx); err != nil || v != SchemaVersion() {
+		t.Fatalf("la base nueva quedó en la versión %d (%v), se esperaba %d", v, err, SchemaVersion())
+	}
+
+	// Una base como la que dejó la versión 1 publicada: solo schema.sql.
+	ruta := filepath.Join(t.TempDir(), "vieja.db")
+	db, err := openDB(ruta)
+	if err != nil {
+		t.Fatalf("no se pudo crear la base vieja: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, schemaSQL); err != nil {
+		t.Fatalf("no se pudo aplicar el esquema de la versión 1: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, "PRAGMA user_version = 1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	vieja, err := Open(ruta)
+	if err != nil {
+		t.Fatalf("la base de la versión 1 no migró: %v", err)
+	}
+	t.Cleanup(func() { _ = vieja.Close() })
+
+	if v, err := vieja.Version(ctx); err != nil || v != SchemaVersion() {
+		t.Fatalf("la base migrada quedó en la versión %d (%v), se esperaba %d", v, err, SchemaVersion())
+	}
+	if a, b := esquemaDe(t, nueva), esquemaDe(t, vieja); a != b {
+		t.Fatalf("una base nueva y una migrada no quedaron iguales\n--- nueva ---\n%s\n--- migrada ---\n%s", a, b)
+	}
+	// Y la migración deja respaldo de la base que ya existía.
+	if LatestBackup(ruta) == "" {
+		t.Fatal("migrar una base que ya existía tiene que dejar un respaldo")
+	}
+}
+
+// F1-22: el fundido de salida del clip recortado viaja al plan y vuelve.
+func TestFundidoDeSalidaSeGuarda(t *testing.T) {
+	ctx := context.Background()
+	s, _ := abrir(t)
+
+	programa, err := s.Deck.ByKind(ctx, DefaultChannelID, model.DeckProgram)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inicio := time.Date(2026, 9, 7, 20, 0, 0, 0, time.UTC)
+	item := model.PlanItem{
+		ChannelID: DefaultChannelID, DeckID: programa.ID, BroadcastDay: "2026-09-07",
+		PlannedAt: inicio, PlannedMs: 177000, Origin: "relleno",
+		LocalClock: "16:00", FadeOutMs: 1000,
+	}
+	if err := s.Plan.Insert(ctx, &item); err != nil {
+		t.Fatalf("no entró el ítem: %v", err)
+	}
+	leidos, err := s.Plan.ListDay(ctx, DefaultChannelID, "2026-09-07")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(leidos) != 1 || leidos[0].FadeOutMs != 1000 || leidos[0].Fijado {
+		t.Fatalf("el fundido de salida no se guardó: %+v", leidos)
+	}
+}
+
+// F1-26: lo que una persona fija a mano sobrevive al resolver, queda anotado
+// en la bitácora y no se puede mover encima de otro ítem.
+func TestFijarYLiberarUnItemDelPlan(t *testing.T) {
+	ctx := context.Background()
+	s, _ := abrir(t)
+
+	programa, err := s.Deck.ByKind(ctx, DefaultChannelID, model.DeckProgram)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// El canal por defecto está en Puerto Rico y su día empieza a las 6:00 AM.
+	inicio := time.Date(2026, 9, 7, 18, 0, 0, 0, time.UTC) // 14:00 local
+	nuevo := func(cuando time.Time, dur time.Duration, hora string) *model.PlanItem {
+		p := &model.PlanItem{
+			ChannelID: DefaultChannelID, DeckID: programa.ID, BroadcastDay: "2026-09-07",
+			PlannedAt: cuando, PlannedMs: dur.Milliseconds(), Origin: "asset",
+			LocalClock: hora,
+		}
+		if err := s.Plan.Insert(ctx, p); err != nil {
+			t.Fatalf("no entró el ítem de las %s: %v", hora, err)
+		}
+		return p
+	}
+	uno := nuevo(inicio, 24*time.Minute, "14:00")
+	dos := nuevo(inicio.Add(30*time.Minute), 24*time.Minute, "14:30")
+
+	// Moverlo cinco minutos más tarde y clavarlo ahí.
+	cuando := model.Ms(inicio.Add(5 * time.Minute))
+	if err := s.Plan.Fijar(ctx, uno.ID, cuando, nil); err != nil {
+		t.Fatalf("no se pudo fijar el ítem: %v", err)
+	}
+	leidos, err := s.Plan.ListDay(ctx, DefaultChannelID, "2026-09-07")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(leidos) != 2 {
+		t.Fatalf("tenían que quedar dos ítems y hay %d", len(leidos))
+	}
+	if !leidos[0].Fijado || model.Ms(leidos[0].PlannedAt) != cuando || leidos[0].LocalClock != "14:05" {
+		t.Fatalf("el ítem no quedó fijado a las 14:05: %+v", leidos[0])
+	}
+
+	// El resolver borra el futuro planeado, pero lo fijado se queda.
+	n, err := s.Plan.DeleteFuturePlanned(ctx, DefaultChannelID, inicio.Add(-time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("se tenía que borrar solo el ítem suelto y se borraron %d", n)
+	}
+	quedan, err := s.Plan.ListDay(ctx, DefaultChannelID, "2026-09-07")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(quedan) != 1 || quedan[0].ID != uno.ID {
+		t.Fatalf("lo fijado tiene que sobrevivir al resolver: %+v", quedan)
+	}
+
+	// El cambio quedó en la bitácora, y la cadena sigue sana.
+	bitacora, err := s.Audit.List(ctx, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bitacora) != 1 || bitacora[0].Entity != "plan_item" || bitacora[0].Field != "fijado" ||
+		bitacora[0].EntityID == nil || *bitacora[0].EntityID != uno.ID {
+		t.Fatalf("fijar un ítem tiene que anotarse en la bitácora: %+v", bitacora)
+	}
+	if !strings.Contains(bitacora[0].After, "fijado a las 14:05") {
+		t.Fatalf("la anotación no dice cómo quedó el ítem: %q", bitacora[0].After)
+	}
+	if rota, err := s.Audit.Verify(ctx); err != nil || rota != nil {
+		t.Fatalf("la bitácora quedó rota: %v %+v", err, rota)
+	}
+
+	// Soltarlo lo devuelve al resolver, y también se anota.
+	if err := s.Plan.Liberar(ctx, uno.ID); err != nil {
+		t.Fatalf("no se pudo soltar el ítem: %v", err)
+	}
+	sueltos, err := s.Plan.ListDay(ctx, DefaultChannelID, "2026-09-07")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sueltos) != 1 || sueltos[0].Fijado {
+		t.Fatalf("el ítem tenía que quedar suelto: %+v", sueltos)
+	}
+	if bitacora, err := s.Audit.List(ctx, 0); err != nil || len(bitacora) != 2 {
+		t.Fatalf("soltar un ítem también se anota: %v %+v", err, bitacora)
+	}
+
+	// Fijar un ítem encima de otro lo rechaza el esquema.
+	_ = dos
+	otro := nuevo(inicio.Add(2*time.Hour), 24*time.Minute, "16:00")
+	if err := s.Plan.Fijar(ctx, otro.ID, model.Ms(inicio.Add(10*time.Minute)), nil); !errors.Is(err, ErrOverlap) {
+		t.Fatalf("mover un ítem encima de otro tiene que dar ErrOverlap y dio: %v", err)
+	}
+	// Y un id que no existe se dice claro.
+	if err := s.Plan.Fijar(ctx, 9999, cuando, nil); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("se esperaba ErrNotFound y salió: %v", err)
+	}
+	if err := s.Plan.Liberar(ctx, 9999); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("se esperaba ErrNotFound y salió: %v", err)
 	}
 }

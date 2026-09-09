@@ -345,6 +345,14 @@ type PlanItem struct {
 	CuedAt       *time.Time `json:"cued_en" db:"cued_en_ms"`
 	Error        string     `json:"error" db:"error"`
 	LocalClock   string     `json:"hora_local" db:"hora_local"`
+	// FadeOutMs es el fundido de salida, en milisegundos: 0 es "sale entero".
+	// Lo pone el resolver en el último clip de relleno cuando hay que
+	// recortarlo para cuadrar el hueco (PRD §14.1: fundido de 1 segundo).
+	FadeOutMs int64 `json:"fundido_salida_ms" db:"fundido_salida_ms"`
+	// Fijado dice que a este ítem lo puso una persona a mano: el resolver no
+	// lo mueve ni lo borra en su próxima corrida, y su hora es tan dura como
+	// la de un bloque en vivo.
+	Fijado bool `json:"fijado" db:"fijado"`
 }
 
 // End es el fin planeado.

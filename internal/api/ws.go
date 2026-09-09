@@ -123,6 +123,9 @@ func (s *Server) pushStatus(ws *wsConn, r *http.Request) error {
 		"dia_emision": ch.BroadcastDay(now),
 		"alarmas":     s.App.Alarms(),
 		"version":     s.App.Version,
+		// El menú lee esto en cada empujón, no solo en el primer /estado: si
+		// no fuera, la sexta entrada aparecería y desaparecería sola.
+		"hay_anunciantes": s.hayAnunciantes(ctx),
 	}
 	items, err := s.App.Store.Plan.ListRange(ctx, s.App.ChannelID, now.Add(-6*time.Hour), now.Add(6*time.Hour))
 	if err == nil {

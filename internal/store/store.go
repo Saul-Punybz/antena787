@@ -147,9 +147,11 @@ func (s *Store) wire() {
 	s.Live = &LiveSourceRepo{db: s.db}
 	s.Rule = &ScheduleRuleRepo{db: s.db}
 	s.Deck = &DeckRepo{db: s.db}
-	s.Plan = &PlanRepo{db: s.db}
 	s.Incident = &IncidentRepo{db: s.db}
 	s.Audit = &AuditRepo{db: s.db}
+	// El plan anota en la bitácora lo que se toca a mano (fijar y soltar un
+	// ítem), así que necesita la cadena de auditoría.
+	s.Plan = &PlanRepo{db: s.db, audit: s.Audit}
 	s.Settings = &SettingsRepo{db: s.db}
 }
 

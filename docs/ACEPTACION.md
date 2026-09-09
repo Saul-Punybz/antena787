@@ -101,6 +101,7 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   recodificación y se reinsertan explícitamente en el mux del archivo
   normalizado — el archivo de salida tiene subtítulos, no solo el de
   entrada.
+  *Diferido a F2 el 9 de septiembre de 2026: no existe paso de extracción ni reinserción, y ffprobe ≥ 9 dejó de emitir `closed_captions`, así que la detección del 608 embebido tampoco es fiable. La prueba `TestF1_04_CEA608SobreviveAlFormatoDeCasa` queda escrita y saltada hasta que F2 la cierre. Ver la tabla del 9 de septiembre en el Resumen.*
 - **F1-05** [AUTO] — Dado un archivo con 0.8 segundos de negro (luma media
   < 16) y silencio (audio < −60 dBFS) al inicio, y 0.3 segundos al final ·
   Cuando el ingest lo analiza · Entonces recorta el tramo inicial (≥ 0.5 s,
@@ -191,6 +192,7 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   residual queda en 0, y no hay subtítulos que romper porque el relleno no
   lleva. Si el exceso mínimo posible superara los 5 s, la combinación se
   descarta y se busca otra.
+  *Alcance de F1 (9 de septiembre de 2026): el resolver deja `fundido_salida_ms = 1000` en el clip recortado; aplicar el fundido de verdad es del motor (F2).*
 - **F1-23** [AUTO] — Dado un plan resuelto sin vencimientos próximos ·
   Cuando una regla llega a 30, luego a 14, luego a 7 días de su
   `fecha_fin` · Entonces se genera un aviso de vencimiento en cada uno de
@@ -292,6 +294,7 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   programado `dentro_de` que no terminaría antes de las 13:00 · Cuando el
   resolver lo materializa · Entonces **no lo arranca**: el fin del bloque en
   vivo es tan duro como el de un slot de archivo.
+  *Alcance de F1 (9 de septiembre de 2026): el resolver de F1 no materializa ítems `dentro_de` (llegan con F2); lo que F1 verifica es que una regla que arranca dentro de un bloque en vivo no lo recorta ni se desborda de su fin, y que se avisa en cristiano.*
 
 ### Material listo para aire (§9 pasos 1 y 3)
 
@@ -308,6 +311,7 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   abre Biblioteca (y Anuncios, si es un spot) · Entonces aparece marcado
   **"aún no listo para aire"**, no como disponible; y una compra del portal no
   se da por lista hasta que termina.
+  *Alcance de F1 (9 de septiembre de 2026): la mitad de Anuncios y la compra del portal es F4; en F1 se verifica Biblioteca.*
 
 ### No-solape en el esquema (§15)
 
@@ -378,6 +382,7 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   su `advertiser` y su cobro · Cuando el resolver corre · Entonces la
   materializa como cualquier otra regla y el bloque queda **en la parrilla y
   en el reporte de ingresos**, no en una libreta aparte.
+  *Alcance de F1 (9 de septiembre de 2026): en F1 el bloque queda en la parrilla y en la guía con su anunciante y su cobro guardados; el reporte de ingresos es F4, donde la tabla de cobertura coloca publicidad y cobro.*
 - **F1-56** [AUTO] — Dado el paquete completo de cadenas de la interfaz —todo
   lo que llega a ver el operador— · Cuando se buscan los cinco términos que el
   principio 3 prohíbe (*driver*, *códec*, *GOP*, *LKFS*, *transport stream*) ·
@@ -389,6 +394,7 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   menú tiene **cinco** entradas; al registrar el primer anunciante pasa a
   **seis** (aparece Anuncios); y ni multi-canal ni roles ni nombres de usuario
   son visibles en ninguna pantalla.
+  *Alcance de F1 (9 de septiembre de 2026): el servidor informa `hay_anunciantes` leyendo la tabla; el alta de anunciantes (la pantalla que hace pasar de cinco a seis) es F4.*
 
 ---
 
@@ -1008,6 +1014,22 @@ posterior a `docs/AUDITORIA_2026-09-04.md`):
 | **F2-43** | retención de "N días" sin default | **7 días** por defecto, **30** si el disco alcanza |
 | **F2-48** | "reintenta automáticamente" | **espera progresiva 1, 2, 4… con tope de 60 s** |
 | **F2-63** | listaba 4 tipos de incidente | lista los 9, y exige que **cada tipo se distinga** |
+
+**Qué cambió en la verificación del 9 de septiembre de 2026** (los 57 criterios
+de F1 recorridos uno por uno contra lo construido; informe en
+`docs/f1/VERIFICACION-F1-2026-09-09.md`):
+
+| Criterio | Decisión | Por qué |
+|---|---|---|
+| **F1-04** | **diferido a F2** | no hay paso de extracción/reinserción de CEA-608 (tamaño L) y ffprobe ≥ 9 ya no emite `closed_captions`; la prueba queda escrita y saltada |
+| **F1-22** | F1 deja el dato, F2 aplica el fundido | el plan guarda `fundido_salida_ms = 1000` en el clip recortado; el motor lo aplica |
+| **F1-39** | la mitad `dentro_de` es F2 | el resolver de F1 no materializa `dentro_de`; sí se verifica que el fin del vivo es duro para lo que arranca dentro |
+| **F1-43** | la mitad de Anuncios/portal es F4 | no hay pantalla de Anuncios ni compras en F1 |
+| **F1-55** | la mitad del reporte de ingresos es F4 | anunciante y cobro se guardan y el bloque sale en parrilla y guía; el reporte vive con publicidad (F4) |
+| **F1-57** | el alta de anunciantes es F4 | `hay_anunciantes` se calcula de la tabla; la pantalla de alta llega con Anuncios |
+
+Ninguno se borró ni se renumeró. Los seis siguen contando dentro de los 57 de F1
+con su alcance ajustado; la parte diferida se vuelve a verificar en su fase.
 
 ---
 

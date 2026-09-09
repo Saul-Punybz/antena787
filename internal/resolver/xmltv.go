@@ -211,9 +211,19 @@ func maxInt(a, b int) int {
 // fechas que no cuadran (PRD §9 paso 3, criterio F1-28). Lista vacía quiere
 // decir que la guía se puede publicar.
 func ValidateXMLTV(data []byte) []string {
+	graves, avisos := ValidateXMLTVPorGravedad(data)
+	return append(graves, avisos...)
+}
+
+// ValidateXMLTVPorGravedad es ValidateXMLTV con los problemas partidos en dos:
+// los graves (XML roto, canal sin declarar, horas que no se entienden,
+// programas que se pisan) hacen que la guía no se publique; los avisos (aire
+// sin describir por encima de MaxGuideGap) se publican igual y solo se avisan,
+// porque un canal que todavía no está lleno deja huecos a propósito.
+func ValidateXMLTVPorGravedad(data []byte) (graves, avisos []string) {
 	var doc xmlTV
 	if err := xml.Unmarshal(data, &doc); err != nil {
-		return []string{fmt.Sprintf("la guía no es XML válido: %v", err)}
+		return []string{fmt.Sprintf("la guía no es XML válido: %v", err)}, nil
 	}
 	var problems []string
 	if len(doc.Channels) == 0 {
@@ -290,12 +300,12 @@ func ValidateXMLTV(data []byte) []string {
 				continue
 			}
 			if gap := cur.from.Sub(prev.to); gap > MaxGuideGap {
-				problems = append(problems, fmt.Sprintf("la guía deja %s sin describir entre %s y %s",
+				avisos = append(avisos, fmt.Sprintf("la guía deja %s sin describir entre %s y %s",
 					humanDuration(gap), prev.to.Format("2006-01-02 15:04"), cur.from.Format("2006-01-02 15:04")))
 			}
 		}
 	}
-	return problems
+	return problems, avisos
 }
 
 // GuideAccuracy mide la exactitud de la guía contra lo que de verdad salió

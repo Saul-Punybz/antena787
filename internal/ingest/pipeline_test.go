@@ -477,10 +477,17 @@ func esperaHasta(t *testing.T, plazo time.Duration, cond func() bool) {
 
 type estadoNorm struct{ state, path, reason string }
 
+type registroVolumen struct {
+	lufs, truePeak float64
+	pasadas        int
+	nota           string
+}
+
 type persistenciaDePrueba struct {
 	mu      sync.Mutex
 	assets  []model.MediaAsset
 	estados map[int64][]estadoNorm
+	volumen map[int64]registroVolumen
 }
 
 func (p *persistenciaDePrueba) SaveAsset(ctx context.Context, a *model.MediaAsset) error {
@@ -498,6 +505,58 @@ func (p *persistenciaDePrueba) SetNormalizeState(ctx context.Context, id int64, 
 		p.estados = map[int64][]estadoNorm{}
 	}
 	p.estados[id] = append(p.estados[id], estadoNorm{state, path, reason})
+	return nil
+}
+
+// SetLoudness hace de persistenciaDePrueba una PersistLoudness: guarda el
+// registro de volumen igual que lo guardaría la base.
+func (p *persistenciaDePrueba) SetLoudness(ctx context.Context, id int64, lufs, truePeak float64, pasadas int, nota string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.volumen == nil {
+		p.volumen = map[int64]registroVolumen{}
+	}
+	p.volumen[id] = registroVolumen{lufs, truePeak, pasadas, nota}
+	return nil
+}
+
+func (p *persistenciaDePrueba) loudness(id int64) registroVolumen {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.volumen[id]
+}
+
+// TestSaveLoudnessGuardaElRegistroDeLasDosPasadas comprueba que el reporte
+// que devuelve Normalize se puede guardar tal cual (F1-03), y que una
+// persistencia que no sepa hacerlo no rompe nada.
+func TestSaveLoudnessGuardaElRegistroDeLasDosPasadas(t *testing.T) {
+	ctx := context.Background()
+	rep := LoudnessReport{OutputLUFS: -24.1, OutputTruePeak: -2.4, Passes: 2, CaptionsNote: "sin novedad"}
+
+	p := &persistenciaDePrueba{}
+	guardado, err := SaveLoudness(ctx, p, 7, rep)
+	if err != nil {
+		t.Fatalf("SaveLoudness: %v", err)
+	}
+	if !guardado {
+		t.Fatal("la persistencia de prueba sí sabe guardar el volumen")
+	}
+	if got := p.loudness(7); got.lufs != -24.1 || got.truePeak != -2.4 || got.pasadas != 2 || got.nota != "sin novedad" {
+		t.Errorf("registro guardado = %+v", got)
+	}
+
+	// Una persistencia de las de antes no rompe: solo no guarda.
+	guardado, err = SaveLoudness(ctx, soloEstado{}, 7, rep)
+	if err != nil || guardado {
+		t.Errorf("guardado=%v err=%v; se esperaba que no guardara y no fallara", guardado, err)
+	}
+}
+
+// soloEstado es una persistencia que no sabe de volumen.
+type soloEstado struct{}
+
+func (soloEstado) SaveAsset(context.Context, *model.MediaAsset) error { return nil }
+func (soloEstado) SetNormalizeState(context.Context, int64, string, string, string) error {
 	return nil
 }
 

@@ -161,7 +161,7 @@ type TMDB struct {
 // Lookup todavía no consulta nada. Devuelve el error diciendo por qué, para
 // que quien lo encienda sepa exactamente qué falta.
 func (t *TMDB) Lookup(ctx context.Context, q Query) (*Card, error) {
-	return nil, Plainf(nil, "el driver de TMDB no está construido todavía: llega en F2, con su clave y su atribución visible en pantalla")
+	return nil, Plainf(nil, "todavía no busco fichas en TMDB: llega en F2, con su clave y su crédito visible en pantalla")
 }
 
 // ── ayudas ────────────────────────────────────────────────────────────

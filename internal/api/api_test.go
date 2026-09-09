@@ -479,10 +479,19 @@ func TestGuiaXMLEsValida(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("/guia dio %d: %s", w.Code, w.Body.String())
 	}
-	var filas []map[string]any
-	c.json(w, &filas)
+	// La guía contra el plan viaja como {"dia":…, "filas":[…]}, que es lo que
+	// pinta la pantalla Parrilla · Guía (web/src/lib/tipos.ts, `Guia`).
+	var comparacion struct {
+		Dia   model.Day        `json:"dia"`
+		Filas []map[string]any `json:"filas"`
+	}
+	c.json(w, &comparacion)
+	filas := comparacion.Filas
 	if len(filas) == 0 {
 		t.Fatal("la comparación de guía contra plan llegó vacía")
+	}
+	if comparacion.Dia != anunciado {
+		t.Fatalf("la comparación dice ser del día %q y se pidió la del %q", comparacion.Dia, anunciado)
 	}
 	for _, f := range filas {
 		if f["coincide"] != true {

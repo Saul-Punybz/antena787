@@ -63,7 +63,58 @@ const (
 	// KeyCountry y KeyQuality son las del paso 6.
 	KeyCountry = "pais"
 	KeyQuality = "calidad"
+
+	// KeyGuideHTTP es un destino opcional al que se le manda la guía por la
+	// red cada vez que se publica. Vacío = no se manda a ningún sitio
+	// (F1-49). Que el envío falle nunca afecta a la guía local ni al aire.
+	KeyGuideHTTP = "guia_destino_http"
+	// KeyOnlineInfo enciende la búsqueda de fichas por internet ("si"/"no",
+	// de fábrica "no"): sin ella la instalación funciona entera sin red
+	// (PRD §10, F1-09).
+	KeyOnlineInfo = "fichas_en_linea"
+	// KeyTMDBKey es la clave de TMDB, que es el único servicio de fichas que
+	// pide una. Vacío = no se consulta.
+	KeyTMDBKey = "clave_tmdb"
+
+	// Los avisos que salen de la máquina (F1-46). KeyNoticeChannel vale
+	// "ninguno", "telegram" o "correo".
+	KeyNoticeChannel = "avisos_canal"
+	KeyTelegramToken = "avisos_telegram_token"
+	KeyTelegramChat  = "avisos_telegram_chat"
+	KeyNoticeMailTo  = "avisos_correo_para"
+	KeySMTPServer    = "avisos_smtp_servidor"
+	KeySMTPUser      = "avisos_smtp_usuario"
+	KeySMTPPass      = "avisos_smtp_clave"
 )
+
+// Niveles de una alarma, tal como los pinta Al aire.
+const (
+	NivelBien     = "bien"
+	NivelAviso    = "aviso"
+	NivelProblema = "problema"
+)
+
+// AccionAlarma es el botón que acompaña a una alarma: qué dice y a dónde
+// lleva dentro de la interfaz.
+type AccionAlarma struct {
+	Texto string `json:"texto"`
+	Ruta  string `json:"ruta"`
+}
+
+// Alarma es lo que se enseña en Al aire: una frase que una persona entiende,
+// su gravedad y, si la hay, la pantalla donde se arregla. Es el mismo objeto
+// que espera la interfaz (web/src/lib/tipos.ts, `Alarma`).
+type Alarma struct {
+	Tipo    string        `json:"tipo,omitempty"`
+	Nivel   string        `json:"nivel"`
+	Texto   string        `json:"texto"`
+	Detalle string        `json:"detalle,omitempty"`
+	Accion  *AccionAlarma `json:"accion,omitempty"`
+}
+
+// fuentesDeAlarma es el orden en que se enseñan las alarmas vivas. Cada
+// fuente manda sobre las suyas y no pisa las de las demás.
+var fuentesDeAlarma = []string{"guia", "disco", "vencimiento", "avisos"}
 
 // DBName es el nombre del archivo de la base dentro de la carpeta de datos.
 const DBName = "antena.db"
@@ -156,7 +207,8 @@ type App struct {
 	guideAt    time.Time
 	warnings   []resolver.Warning
 	advance    map[int64]int64
-	alarms     []string
+	owner      map[int64]int64
+	alarms     map[string][]Alarma
 	started    bool
 }
 
@@ -209,6 +261,8 @@ func Open(opts Options) (*App, error) {
 		bus:          newBus(),
 		recalc:       make(chan struct{}, 1),
 		advance:      map[int64]int64{},
+		owner:        map[int64]int64{},
+		alarms:       map[string][]Alarma{},
 	}
 	if a.now == nil {
 		a.now = time.Now
@@ -386,22 +440,42 @@ func (a *App) Recalc() {
 	}
 }
 
-// Alarms son las alarmas vivas que enseña /estado.
-func (a *App) Alarms() []string {
+// Alarms son las alarmas vivas que enseña /estado, en el orden en que Al
+// aire las pinta. Nunca es nil: una lista vacía quiere decir que no hay nada
+// que avisar.
+func (a *App) Alarms() []Alarma {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
-	out := append([]string(nil), a.alarms...)
+	out := []Alarma{}
+	for _, fuente := range fuentesDeAlarma {
+		out = append(out, a.alarms[fuente]...)
+	}
 	if a.FFmpegErr != nil {
-		out = append(out, a.FFmpegErr.Error())
+		out = append(out, Alarma{
+			Tipo:   "material",
+			Nivel:  NivelProblema,
+			Texto:  a.FFmpegErr.Error(),
+			Accion: &AccionAlarma{Texto: "ver los ajustes", Ruta: "/ajustes"},
+		})
 	}
 	if a.Restored {
-		out = append(out, "la base estaba dañada y se restauró el respaldo más reciente")
+		out = append(out, Alarma{
+			Tipo:    "base",
+			Nivel:   NivelAviso,
+			Texto:   "la base estaba dañada y se restauró el respaldo más reciente",
+			Detalle: "revisa si falta algo de las últimas horas",
+		})
 	}
 	return out
 }
 
-func (a *App) setAlarms(list []string) {
+// setAlarms reemplaza las alarmas de una fuente. Una lista vacía las apaga.
+func (a *App) setAlarms(fuente string, list []Alarma) {
 	a.mu.Lock()
-	a.alarms = list
+	if len(list) == 0 {
+		delete(a.alarms, fuente)
+	} else {
+		a.alarms[fuente] = list
+	}
 	a.mu.Unlock()
 }

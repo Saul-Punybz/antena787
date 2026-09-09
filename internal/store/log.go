@@ -134,10 +134,37 @@ func auditHash(prev string, e model.AuditEntry) string {
 	return hex.EncodeToString(suma[:])
 }
 
+// ejecutor es lo que la bitácora necesita de la base: sirve tanto una
+// conexión como una transacción abierta por otro cambio, para que el cambio y
+// su anotación entren o no entren juntos.
+type ejecutor interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
 // Append añade una entrada al final de la cadena. Calcula hash_prev y hash y
 // los deja en e. Va en una transacción para que dos escrituras no se lleven
 // el mismo eslabón.
 func (r *AuditRepo) Append(ctx context.Context, e *model.AuditEntry) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return translate("anotar en la bitácora", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := r.appendIn(ctx, tx, e); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		e.ID = 0 // no llegó a entrar: nadie se queda con un id que no existe
+		return translate("anotar en la bitácora", err)
+	}
+	return nil
+}
+
+// appendIn es Append sin transacción propia: la pone quien llama. Así un
+// cambio del plan y su anotación en la bitácora son una sola escritura.
+func (r *AuditRepo) appendIn(ctx context.Context, db ejecutor, e *model.AuditEntry) error {
 	if e == nil {
 		return errors.New("hace falta la entrada de la bitácora")
 	}
@@ -154,21 +181,15 @@ func (r *AuditRepo) Append(ctx context.Context, e *model.AuditEntry) error {
 		e.Kind = "cambio"
 	}
 
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return translate("anotar en la bitácora", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
 	var prev string
-	err = tx.QueryRowContext(ctx, `SELECT hash FROM audit_log ORDER BY id DESC LIMIT 1`).Scan(&prev)
+	err := db.QueryRowContext(ctx, `SELECT hash FROM audit_log ORDER BY id DESC LIMIT 1`).Scan(&prev)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return translate("anotar en la bitácora", err)
 	}
 	e.HashPrev = prev
 	e.Hash = auditHash(prev, *e)
 
-	res, err := tx.ExecContext(ctx, `
+	res, err := db.ExecContext(ctx, `
 		INSERT INTO audit_log (entidad, entidad_id, campo, valor_anterior, valor_nuevo,
 			autor, origen, instante_ms, aplica_en, tipo, hash_prev, hash)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -179,9 +200,6 @@ func (r *AuditRepo) Append(ctx context.Context, e *model.AuditEntry) error {
 	}
 	id, err := res.LastInsertId()
 	if err != nil {
-		return translate("anotar en la bitácora", err)
-	}
-	if err := tx.Commit(); err != nil {
 		return translate("anotar en la bitácora", err)
 	}
 	e.ID = id

@@ -241,3 +241,50 @@ export function textoDiasRestantes(dias: number): string {
 export function horasBonitas(h: number): string {
   return Number.isInteger(h) ? `${h} h` : `${h.toFixed(1).replace('.0', '')} h`
 }
+
+/** Cuántos minutos va la zona del canal por delante de UTC en ese instante. */
+function desfaseEnMinutos(zona: string, t: Date): number {
+  const p = formateador(zona, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(t)
+  const v = (tipo: string) => Number(p.find((x) => x.type === tipo)?.value ?? '0')
+  const comoSiFueraUtc = Date.UTC(
+    v('year'),
+    v('month') - 1,
+    v('day'),
+    v('hour') % 24,
+    v('minute'),
+    v('second'),
+  )
+  return Math.round((comoSiFueraUtc - t.getTime()) / 60_000)
+}
+
+/**
+ * Un día de emisión y una hora de reloj del canal → ISO 8601 con desfase,
+ * "2026-09-08T15:30:00-04:00". Es lo que espera PUT /plan/{id}: la hora tal
+ * como la ve quien está en la estación, con su desfase escrito al lado.
+ */
+export function instanteEnZona(dia: string, minutos: number, zona: string): string {
+  const [a, m, d] = dia.split('-').map(Number)
+  const comoSiFueraUtc = Date.UTC(a, m - 1, d) + minutos * 60_000
+  // Dos pasadas: la primera estima el desfase, la segunda lo confirma con el
+  // instante ya corregido (importa en la noche en que cambia la hora).
+  let desfase = desfaseEnMinutos(zona, new Date(comoSiFueraUtc))
+  desfase = desfaseEnMinutos(zona, new Date(comoSiFueraUtc - desfase * 60_000))
+  const t = new Date(comoSiFueraUtc - desfase * 60_000)
+  const pared = new Date(t.getTime() + desfase * 60_000)
+  const dos = (n: number) => String(n).padStart(2, '0')
+  const signo = desfase < 0 ? '-' : '+'
+  const abs = Math.abs(desfase)
+  return (
+    `${pared.getUTCFullYear()}-${dos(pared.getUTCMonth() + 1)}-${dos(pared.getUTCDate())}` +
+    `T${dos(pared.getUTCHours())}:${dos(pared.getUTCMinutes())}:00` +
+    `${signo}${dos(Math.floor(abs / 60))}:${dos(abs % 60)}`
+  )
+}

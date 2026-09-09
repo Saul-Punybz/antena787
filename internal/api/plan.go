@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -10,6 +11,7 @@ import (
 
 	"antena787/internal/model"
 	"antena787/internal/resolver"
+	"antena787/internal/store"
 )
 
 // planRow es una fila de la parrilla: o un plan_item con su título puesto, o
@@ -184,14 +186,25 @@ func hueco(from, to time.Time, loc *time.Location) planRow {
 
 // ── la semana ─────────────────────────────────────────────────────────
 
-// weekSlot es media hora de la parrilla semanal: lo que hay puesto y si es
-// un hueco. Es lo que dibuja Parrilla · Semana.
+// weekSlot es media hora de la parrilla semanal: qué la ocupa, o nada. Un
+// tramo vacío llega con `titulo` y `plan_id` en nulo, que es como la
+// interfaz sabe que ahí no hay nada puesto (web/src/lib/tipos.ts,
+// `FranjaSemana`).
 type weekSlot struct {
-	Clock string `json:"hora"`
-	Title string `json:"titulo"`
-	State string `json:"estado,omitempty"`
-	Gap   bool   `json:"hueco"`
+	Clock    string  `json:"hora"`
+	Title    *string `json:"titulo"`
+	Live     bool    `json:"en_vivo"`
+	Duration int64   `json:"duracion_ms"`
+	PlanID   *int64  `json:"plan_id"`
+	Fijado   bool    `json:"fijado"`
+	State    string  `json:"estado,omitempty"`
 }
+
+// FranjasPorDia son las medias horas que tiene un día en la tira semanal.
+const FranjasPorDia = 48
+
+// franjaMs es lo que dura una franja de la tira semanal.
+const franjaMs int64 = 30 * 60 * 1000
 
 func (s *Server) planSemana(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -212,30 +225,115 @@ func (s *Server) planSemana(w http.ResponseWriter, r *http.Request) {
 	}
 	loc := ch.Location()
 
-	days := []map[string]any{}
+	type diaSemana struct {
+		Day    model.Day  `json:"dia"`
+		Slots  []weekSlot `json:"franjas"`
+		Vacias float64    `json:"horas_vacias"`
+	}
+	dias := []diaSemana{}
+	vaciasSemana := 0.0
 	for n := 0; n < 7; n++ {
 		day := from.Add(n)
-		items, err := s.App.Store.Plan.ListDay(ctx, s.App.ChannelID, day)
+		// La tira se dibuja sobre el reloj del día natural —la interfaz la
+		// recorre de las 6:00 a la medianoche— así que se pide el plan de
+		// ese calendario completo, no el del día de emisión, que empieza y
+		// termina desplazado.
+		medianoche := day.Time(loc)
+		items, err := s.App.Store.Plan.ListRange(ctx, s.App.ChannelID,
+			medianoche, medianoche.AddDate(0, 0, 1))
 		if err != nil {
 			failStore(w, err, "leer el plan de la semana")
 			return
 		}
-		slots := []weekSlot{}
-		for t := ch.DayStart(day); t.Before(ch.DayEnd(day)); t = t.Add(30 * time.Minute) {
-			slot := weekSlot{Clock: t.In(loc).Format("15:04"), Gap: true, Title: "sin programar"}
+		slots := make([]weekSlot, 0, FranjasPorDia)
+		vacias := 0.0
+		for k := 0; k < FranjasPorDia; k++ {
+			t := medianoche.Add(time.Duration(k) * 30 * time.Minute)
+			slot := weekSlot{
+				Clock:    t.In(loc).Format("15:04"),
+				Duration: franjaMs,
+			}
+			ocupada := false
 			for i := range items {
 				it := items[i]
-				if !t.Before(it.PlannedAt) && t.Before(it.End()) {
-					name, _ := cat.name(it)
-					slot = weekSlot{Clock: slot.Clock, Title: name, State: string(it.State)}
-					break
+				if t.Before(it.PlannedAt) || !t.Before(it.End()) {
+					continue
 				}
+				name, _ := cat.name(it)
+				titulo := name
+				id := it.ID
+				slot.Title = &titulo
+				slot.PlanID = &id
+				slot.Fijado = it.Fijado
+				slot.State = string(it.State)
+				slot.Live = it.Origin == model.OriginLiveSource
+				ocupada = true
+				break
+			}
+			if !ocupada {
+				vacias += 0.5
 			}
 			slots = append(slots, slot)
 		}
-		days = append(days, map[string]any{"dia_emision": day, "franjas": slots})
+		vaciasSemana += vacias
+		dias = append(dias, diaSemana{Day: day, Slots: slots, Vacias: vacias})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"desde": from, "dias": days})
+
+	todas := make([][]weekSlot, 0, len(dias))
+	for _, d := range dias {
+		todas = append(todas, d.Slots)
+	}
+	cuerpo := map[string]any{
+		"desde":               from,
+		"dias":                dias,
+		"horas_vacias_semana": vaciasSemana,
+	}
+	if nota := notaDeLaSemana(todas); nota != "" {
+		cuerpo["nota"] = nota
+	}
+	writeJSON(w, http.StatusOK, cuerpo)
+}
+
+// notaDeLaSemana busca el tramo más largo que está vacío **los siete días** y
+// lo dice con palabras. Es la frase que la parrilla enseña debajo de la tira:
+// "1:00 – 6:00 AM está vacío los siete días".
+func notaDeLaSemana(dias [][]weekSlot) string {
+	if len(dias) == 0 {
+		return ""
+	}
+	vaciaSiempre := func(k int) bool {
+		for _, slots := range dias {
+			if k >= len(slots) || slots[k].Title != nil {
+				return false
+			}
+		}
+		return true
+	}
+	mejorIni, mejorLargo := -1, 0
+	ini, largo := -1, 0
+	for k := 0; k <= FranjasPorDia; k++ {
+		if k < FranjasPorDia && vaciaSiempre(k) {
+			if ini < 0 {
+				ini, largo = k, 0
+			}
+			largo++
+			continue
+		}
+		if ini >= 0 && largo > mejorLargo {
+			mejorIni, mejorLargo = ini, largo
+		}
+		ini, largo = -1, 0
+	}
+	// Menos de dos horas seguidas no merece una frase.
+	if mejorIni < 0 || mejorLargo < 4 {
+		return ""
+	}
+	desde := dias[0][mejorIni].Clock
+	hasta := "24:00"
+	if fin := mejorIni + mejorLargo; fin < FranjasPorDia {
+		hasta = dias[0][fin].Clock
+	}
+	return fmt.Sprintf("Además, de %s a %s está vacío los siete días", desde, hasta)
 }
 
 // ── el mes ────────────────────────────────────────────────────────────
@@ -267,23 +365,43 @@ func (s *Server) planMes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	days := []map[string]any{}
+	type diaMes struct {
+		Day      model.Day `json:"dia"`
+		Libres   float64   `json:"horas_sin_llenar"`
+		Llenas   []bool    `json:"franjas_llenas"`
+		Vencen   []string  `json:"vencimientos"`
+		Estrenan []string  `json:"estrenos"`
+	}
+	loc := ch.Location()
+	days := []diaMes{}
+	vaciasMes := 0.0
 	for d := first; d.Month() == first.Month(); d = d.AddDate(0, 0, 1) {
 		day := model.Day(d.Format("2006-01-02"))
-		items, err := s.App.Store.Plan.ListDay(ctx, s.App.ChannelID, day)
+		medianoche := day.Time(loc)
+		items, err := s.App.Store.Plan.ListRange(ctx, s.App.ChannelID,
+			medianoche, medianoche.AddDate(0, 0, 1))
 		if err != nil {
 			failStore(w, err, "leer el plan del mes")
 			return
 		}
-		var covered time.Duration
-		for _, it := range items {
-			covered += time.Duration(it.PlannedMs) * time.Millisecond
+		// La barra del mes es la misma tira de 48 medias horas que la de la
+		// semana: llena o vacía, sin nombres.
+		llenas := make([]bool, FranjasPorDia)
+		libres := 0.0
+		for k := 0; k < FranjasPorDia; k++ {
+			t := medianoche.Add(time.Duration(k) * 30 * time.Minute)
+			for _, it := range items {
+				if !t.Before(it.PlannedAt) && t.Before(it.End()) {
+					llenas[k] = true
+					break
+				}
+			}
+			if !llenas[k] {
+				libres += 0.5
+			}
 		}
-		total := ch.DayEnd(day).Sub(ch.DayStart(day))
-		libre := total - covered
-		if libre < 0 {
-			libre = 0
-		}
+		vaciasMes += libres
+
 		vencen, estrenan := []string{}, []string{}
 		for _, rule := range rules {
 			name := ruleTitleName(cat, rule)
@@ -294,14 +412,24 @@ func (s *Server) planMes(w http.ResponseWriter, r *http.Request) {
 				estrenan = append(estrenan, name)
 			}
 		}
-		days = append(days, map[string]any{
-			"dia_emision":      day,
-			"horas_sin_llenar": round1(libre.Hours()),
-			"vencimientos":     vencen,
-			"estrenos":         estrenan,
+		days = append(days, diaMes{
+			Day:      day,
+			Libres:   round1(libres),
+			Llenas:   llenas,
+			Vencen:   vencen,
+			Estrenan: estrenan,
 		})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"mes": mes, "dias": days})
+	porcentaje := 0
+	if total := float64(len(days)) * 24; total > 0 {
+		porcentaje = int(vaciasMes/total*100 + 0.5)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"mes":              mes,
+		"dias":             days,
+		"horas_vacias_mes": round1(vaciasMes),
+		"porcentaje_vacio": porcentaje,
+	})
 }
 
 func ruleTitleName(cat catalog, rule model.ScheduleRule) string {
@@ -473,7 +601,6 @@ func (s *Server) guiaContraPlan(w http.ResponseWriter, r *http.Request) {
 		failStore(w, err, "leer la biblioteca")
 		return
 	}
-	loc := ch.Location()
 
 	guia := []model.PlanItem{}
 	for _, it := range s.App.GuideItems() {
@@ -498,11 +625,13 @@ func (s *Server) guiaContraPlan(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		fila := map[string]any{
-			"guia":     s.row(cat, loc, &guia[i]),
+			"guia":     programaDeGuia(cat, guia[i]),
 			"coincide": match != nil && match.PlannedAt.Equal(g.PlannedAt) && match.PlannedMs == g.PlannedMs,
 		}
 		if match != nil {
-			fila["plan"] = s.row(cat, loc, match)
+			fila["plan"] = programaDeGuia(cat, *match)
+		} else {
+			fila["plan"] = nil
 		}
 		filas = append(filas, fila)
 	}
@@ -513,9 +642,228 @@ func (s *Server) guiaContraPlan(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		filas = append(filas, map[string]any{
-			"plan":     s.row(cat, loc, &plan[j]),
+			"guia":     nil,
+			"plan":     programaDeGuia(cat, plan[j]),
 			"coincide": false,
 		})
 	}
-	writeJSON(w, http.StatusOK, filas)
+
+	cuerpo := map[string]any{
+		"dia":                    day,
+		"filas":                  filas,
+		"identificador_de_canal": resolver.ChannelID(ch),
+	}
+	if _, at := s.App.Guide(); !at.IsZero() {
+		cuerpo["revalidada"] = at
+	}
+	if porque := porQueNoCoinciden(filas); porque != "" {
+		cuerpo["por_que_no_coinciden"] = porque
+	}
+	writeJSON(w, http.StatusOK, cuerpo)
+}
+
+// programaDeGuia es un bloque tal como lo lee la pantalla de la guía: qué
+// es, cuándo empieza y cuánto dura (web/src/lib/tipos.ts, `ProgramaDeGuia`).
+func programaDeGuia(cat catalog, it model.PlanItem) map[string]any {
+	title, _ := cat.name(it)
+	return map[string]any{
+		"titulo":      title,
+		"inicio":      it.PlannedAt,
+		"duracion_ms": it.PlannedMs,
+	}
+}
+
+// porQueNoCoinciden explica en una frase por qué la guía y el plan no dicen
+// lo mismo, cuando no lo dicen.
+func porQueNoCoinciden(filas []map[string]any) string {
+	malas := 0
+	for _, f := range filas {
+		if f["coincide"] != true {
+			malas++
+		}
+	}
+	if malas == 0 {
+		return ""
+	}
+	if malas == 1 {
+		return "Un bloque cambió después de publicar la guía. Se arregla solo en el próximo recálculo; " +
+			"si corre prisa, pulsa «Recalcular» en la parrilla."
+	}
+	return fmt.Sprintf("%d bloques cambiaron después de publicar la guía. Se arreglan solos en el "+
+		"próximo recálculo; si corre prisa, pulsa «Recalcular» en la parrilla.", malas)
+}
+
+// ── mover un bloque a mano (F1-26) ────────────────────────────────────
+
+// cambioDePlan es el cuerpo de PUT /plan/{id}: cualquier subconjunto de las
+// tres cosas que una persona puede tocar. Los punteros distinguen "no lo
+// mandó" de "lo mandó vacío".
+type cambioDePlan struct {
+	Instante *string `json:"instante_planeado"`
+	Duracion *int64  `json:"duracion_planeada_ms"`
+	Fijado   *bool   `json:"fijado"`
+}
+
+// planPut mueve un bloque del plan a mano, o lo suelta.
+//
+// Con `instante_planeado` o `duracion_planeada_ms` el bloque queda **fijado**:
+// la corrida siguiente del resolver ni lo mueve ni lo borra. Con
+// `{"fijado": false}` a secas se suelta y vuelve a mandar la regla. En los
+// dos casos la guía se rehace en la misma corrida (F1-48) y se avisa por el
+// bus, para que la parrilla se refresque sola.
+func (s *Server) planPut(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r, "id")
+	if !ok {
+		return
+	}
+	var body cambioDePlan
+	if !decode(w, r, &body) {
+		return
+	}
+	ctx := r.Context()
+	antes, err := s.App.PlanItem(ctx, id)
+	if err != nil {
+		failStore(w, err, "ese bloque del plan")
+		return
+	}
+
+	switch {
+	case body.Instante != nil || body.Duracion != nil:
+		if !s.fijarPlan(w, r, antes, body) {
+			return
+		}
+	case body.Fijado != nil && !*body.Fijado:
+		if err := s.App.Store.Plan.Liberar(ctx, id); err != nil {
+			s.falloDelPlan(w, ctx, err, time.Time{}, 0)
+			return
+		}
+		s.audit(r, "plan_item", &id, "fijado", "fijado", "suelto")
+	case body.Fijado != nil && *body.Fijado:
+		if err := s.App.Store.Plan.Fijar(ctx, id, model.Ms(antes.PlannedAt), nil); err != nil {
+			s.falloDelPlan(w, ctx, err, antes.PlannedAt, antes.PlannedMs)
+			return
+		}
+		s.audit(r, "plan_item", &id, "fijado", "suelto", "fijado")
+	default:
+		fail(w, http.StatusBadRequest,
+			"no me dijiste qué cambiar: la hora, la duración, o soltarlo con \"fijado\": false", "")
+		return
+	}
+
+	// La guía sigue al plan en la misma corrida y la interfaz se entera por
+	// el mismo evento que publica el recálculo.
+	if err := s.App.RefreshGuide(ctx); err != nil {
+		s.App.Publish("plan", "guia", "no se pudo publicar la guía: "+err.Error())
+	}
+	s.App.Publish("plan", "recalculado", "alguien movió un bloque a mano en la parrilla")
+
+	despues, err := s.App.PlanItem(ctx, id)
+	if err != nil {
+		failStore(w, err, "ese bloque del plan")
+		return
+	}
+	ch, err := s.App.Store.Channel.Get(ctx, s.App.ChannelID)
+	if err != nil {
+		failStore(w, err, "el canal")
+		return
+	}
+	cat, err := s.catalog(ctx)
+	if err != nil {
+		failStore(w, err, "leer la biblioteca")
+		return
+	}
+	writeJSON(w, http.StatusOK, s.row(cat, ch.Location(), &despues))
+}
+
+// fijarPlan aplica la parte de mover y estirar. Devuelve false si ya contestó
+// con un error.
+func (s *Server) fijarPlan(w http.ResponseWriter, r *http.Request, antes model.PlanItem, body cambioDePlan) bool {
+	ctx := r.Context()
+	cuando := antes.PlannedAt
+	if body.Instante != nil {
+		t, err := time.Parse(time.RFC3339, strings.TrimSpace(*body.Instante))
+		if err != nil {
+			failf(w, http.StatusBadRequest, "instante_planeado",
+				"no entendí la hora %q: se escribe como 2026-09-08T15:30:00-04:00", *body.Instante)
+			return false
+		}
+		cuando = t.UTC()
+	}
+	var duracion *int64
+	if body.Duracion != nil {
+		if *body.Duracion <= 0 {
+			fail(w, http.StatusBadRequest,
+				"la duración tiene que ser mayor que cero", "duracion_planeada_ms")
+			return false
+		}
+		d := *body.Duracion
+		duracion = &d
+	}
+	if err := s.App.Store.Plan.Fijar(ctx, antes.ID, model.Ms(cuando), duracion); err != nil {
+		dur := antes.PlannedMs
+		if duracion != nil {
+			dur = *duracion
+		}
+		s.falloDelPlan(w, ctx, err, cuando, dur)
+		return false
+	}
+	s.audit(r, "plan_item", &antes.ID, "instante_planeado",
+		antes.PlannedAt.Format(time.RFC3339), cuando.Format(time.RFC3339))
+	if duracion != nil {
+		s.audit(r, "plan_item", &antes.ID, "duracion_planeada_ms",
+			humanMs(antes.PlannedMs), humanMs(*duracion))
+	}
+	return true
+}
+
+// falloDelPlan traduce lo que el esquema rechazó a la frase que ve la
+// persona, con el código que le corresponde.
+func (s *Server) falloDelPlan(w http.ResponseWriter, ctx context.Context, err error,
+	desde time.Time, durMs int64) {
+	switch {
+	case errors.Is(err, store.ErrOverlap):
+		fail(w, http.StatusConflict, s.choque(ctx, desde, durMs), "instante_planeado")
+	case errors.Is(err, store.ErrFueraDeVigencia):
+		fail(w, http.StatusBadRequest,
+			"esa hora se sale de las fechas de la regla que puso el bloque: cambia la regla o suelta el bloque",
+			"instante_planeado")
+	case errors.Is(err, store.ErrNotFound):
+		fail(w, http.StatusNotFound, "ese bloque del plan ya no está", "")
+	default:
+		failf(w, http.StatusInternalServerError, "", "no se pudo mover el bloque: %s", err)
+	}
+}
+
+// choque busca qué hay puesto donde la persona quiso poner el bloque, para
+// poder decirlo por su nombre. Si no se puede averiguar barato, lo dice sin
+// nombre: la frase sigue siendo útil.
+func (s *Server) choque(ctx context.Context, desde time.Time, durMs int64) string {
+	generico := "a esa hora ya hay otra cosa puesta: muévela primero, o elige otro hueco"
+	if desde.IsZero() || durMs <= 0 {
+		return generico
+	}
+	hasta := desde.Add(time.Duration(durMs) * time.Millisecond)
+	items, err := s.App.Store.Plan.ListRange(ctx, s.App.ChannelID, desde, hasta)
+	if err != nil || len(items) == 0 {
+		return generico
+	}
+	cat, err := s.catalog(ctx)
+	if err != nil {
+		return generico
+	}
+	ch, err := s.App.Store.Channel.Get(ctx, s.App.ChannelID)
+	if err != nil {
+		return generico
+	}
+	for _, it := range items {
+		name, _ := cat.name(it)
+		if name == "" {
+			continue
+		}
+		return fmt.Sprintf("a esa hora ya está %s, de %s a %s: muévelo primero, o elige otro hueco",
+			name,
+			it.PlannedAt.In(ch.Location()).Format("15:04"),
+			it.End().In(ch.Location()).Format("15:04"))
+	}
+	return generico
 }

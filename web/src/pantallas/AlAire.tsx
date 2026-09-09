@@ -226,7 +226,7 @@ export function AlAire() {
         {/* El semáforo y las salidas */}
         <aside style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div className="rotulo">ESTADO</div>
-          {estado.alarmas.map((a, i) => (
+          {(estado.alarmas ?? []).map((a, i) => (
             <TarjetaDeAlarma key={i} alarma={a} />
           ))}
 
@@ -337,17 +337,26 @@ export function AlAire() {
   )
 }
 
+/**
+ * Una alarma se pinta con lo que traiga: `detalle` y `accion` son opcionales
+ * (los avisos de vencimiento llegan solo con nivel y texto) y la tarjeta tiene
+ * que quedar igual de limpia sin ellos.
+ */
 function TarjetaDeAlarma({ alarma }: { alarma: Alarma }) {
+  const nivel: Alarma['nivel'] =
+    alarma.nivel === 'problema' || alarma.nivel === 'aviso' || alarma.nivel === 'bien'
+      ? alarma.nivel
+      : 'aviso'
   const clase =
-    alarma.nivel === 'problema'
+    nivel === 'problema'
       ? 'tarjeta tarjeta--problema'
-      : alarma.nivel === 'aviso'
+      : nivel === 'aviso'
         ? 'tarjeta tarjeta--aviso'
         : 'tarjeta'
   return (
     <div className={clase} style={{ padding: '14px 16px' }}>
       <div className="fila" style={{ alignItems: 'flex-start', gap: 12 }}>
-        <span className={'punto punto--' + alarma.nivel} style={{ marginTop: 5 }} />
+        <span className={'punto punto--' + nivel} style={{ marginTop: 5 }} />
         <div className="crece">
           <div style={{ font: '600 14.5px var(--sans)' }}>{alarma.texto}</div>
           {alarma.detalle && (
@@ -356,7 +365,7 @@ function TarjetaDeAlarma({ alarma }: { alarma: Alarma }) {
             </div>
           )}
         </div>
-        {alarma.accion && (
+        {alarma.accion?.ruta && alarma.accion.texto && (
           <Link to={alarma.accion.ruta} style={{ fontSize: 13, flexShrink: 0 }}>
             {alarma.accion.texto}
           </Link>

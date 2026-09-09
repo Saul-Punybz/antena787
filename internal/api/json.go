@@ -58,6 +58,9 @@ func decode(w http.ResponseWriter, r *http.Request, into any) bool {
 // que importar encoding/json solo para esto.
 func jsonUnmarshal(data []byte, into any) error { return json.Unmarshal(data, into) }
 
+// jsonMarshal es json.Marshal, por la misma razón.
+func jsonMarshal(v any) ([]byte, error) { return json.Marshal(v) }
+
 // plainJSON traduce el error del decodificador a algo que se pueda leer.
 func plainJSON(err error) string {
 	var ut *json.UnmarshalTypeError

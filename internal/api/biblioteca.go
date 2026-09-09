@@ -26,12 +26,34 @@ const (
 	EstadoCuarentena = "cuarentena"
 )
 
-// titleOut es un título con lo que hace falta para pintarlo en Biblioteca.
+// titleOut es un título con lo que hace falta para pintarlo en Biblioteca:
+// cuántos episodios tiene, en qué estado está su material, cuánto dura, y si
+// hay alguna regla que lo esté programando (web/src/lib/tipos.ts,
+// `TituloDeBiblioteca`).
 type titleOut struct {
 	model.Title
-	Episodes int    `json:"episodios"`
+	Episodes     int    `json:"episodios"`
+	Estado       string `json:"estado_material"`
+	DurMs        int64  `json:"duracion_ms"`
+	EnLaParrilla bool   `json:"en_la_parrilla"`
+	// Hora es la hora de pared a la que sale, "HH:MM", y ReglaHasta el día
+	// en que se acaba la regla que lo pone. Nulos si no está en la parrilla.
+	Hora       *string    `json:"hora"`
+	ReglaHasta *model.Day `json:"regla_hasta"`
+
+	// Los dos nombres de antes, que docs/API.md prometía y alguna
+	// herramienta de fuera puede estar leyendo. Dicen lo mismo que
+	// estado_material y duracion_ms, en texto.
 	Material string `json:"material"`
 	Duration string `json:"duracion,omitempty"`
+}
+
+// episodeOut es un episodio con el estado de su material, que es lo que la
+// ficha del título pinta al lado de cada uno.
+type episodeOut struct {
+	model.Episode
+	DurMs  int64  `json:"duracion_ms"`
+	Estado string `json:"estado_material"`
 }
 
 func (s *Server) bibliotecaList(w http.ResponseWriter, r *http.Request) {
@@ -41,28 +63,40 @@ func (s *Server) bibliotecaList(w http.ResponseWriter, r *http.Request) {
 		failStore(w, err, "leer la biblioteca")
 		return
 	}
+	reglas := s.reglasPorTitulo(ctx)
 	out := make([]titleOut, 0, len(titles))
 	for _, t := range titles {
-		out = append(out, s.titleOut(ctx, t))
+		out = append(out, s.titleOut(ctx, t, reglas))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
 
-func (s *Server) titleOut(ctx context.Context, t model.Title) titleOut {
-	eps, _ := s.App.Store.Episode.ListByTitle(ctx, t.ID)
-	out := titleOut{Title: t, Episodes: len(eps), Material: EstadoNoListo}
-
-	assets := []int64{}
-	if t.MediaAssetID != nil {
-		assets = append(assets, *t.MediaAssetID)
+// reglasPorTitulo devuelve, por título, la regla activa que lo programa más
+// temprano. Es lo que llena `en_la_parrilla`, `hora` y `regla_hasta`.
+func (s *Server) reglasPorTitulo(ctx context.Context) map[int64]model.ScheduleRule {
+	out := map[int64]model.ScheduleRule{}
+	rules, err := s.App.Store.Rule.ListAll(ctx, s.App.ChannelID)
+	if err != nil {
+		return out
 	}
-	for _, e := range eps {
-		if e.MediaAssetID != nil {
-			assets = append(assets, *e.MediaAssetID)
+	for _, r := range rules {
+		if !r.Active || r.TitleID == nil {
+			continue
+		}
+		anterior, hay := out[*r.TitleID]
+		if !hay || r.At < anterior.At {
+			out[*r.TitleID] = r
 		}
 	}
-	var ms int64
+	return out
+}
+
+// estadoDelMaterial resume en una palabra en qué estado está el material de
+// un conjunto de archivos, y cuánto suman.
+func (s *Server) estadoDelMaterial(ctx context.Context, assets []int64) (estado string, ms int64) {
+	estado = EstadoNoListo
 	cuarentena := false
+	listo := false
 	for _, id := range assets {
 		a, err := s.App.Store.Media.Get(ctx, id)
 		if err != nil {
@@ -73,14 +107,43 @@ func (s *Server) titleOut(ctx context.Context, t model.Title) titleOut {
 			cuarentena = true
 		}
 		if a.Ready() {
-			out.Material = EstadoListo
+			listo = true
 		}
 	}
-	if out.Material != EstadoListo && cuarentena {
-		out.Material = EstadoCuarentena
+	switch {
+	case listo:
+		estado = EstadoListo
+	case cuarentena:
+		estado = EstadoCuarentena
 	}
+	return estado, ms
+}
+
+func (s *Server) titleOut(ctx context.Context, t model.Title, reglas map[int64]model.ScheduleRule) titleOut {
+	eps, _ := s.App.Store.Episode.ListByTitle(ctx, t.ID)
+	out := titleOut{Title: t, Episodes: len(eps)}
+
+	assets := []int64{}
+	if t.MediaAssetID != nil {
+		assets = append(assets, *t.MediaAssetID)
+	}
+	for _, e := range eps {
+		if e.MediaAssetID != nil {
+			assets = append(assets, *e.MediaAssetID)
+		}
+	}
+	estado, ms := s.estadoDelMaterial(ctx, assets)
+	out.Estado, out.Material = estado, estado
+	out.DurMs = ms
 	if ms > 0 {
 		out.Duration = humanMs(ms)
+	}
+	if rule, hay := reglas[t.ID]; hay {
+		hora := rule.At.String()
+		hasta := rule.To
+		out.EnLaParrilla = true
+		out.Hora = &hora
+		out.ReglaHasta = &hasta
 	}
 	return out
 }
@@ -97,10 +160,32 @@ func (s *Server) bibliotecaGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	eps, _ := s.App.Store.Episode.ListByTitle(ctx, id)
-	writeJSON(w, http.StatusOK, map[string]any{
-		"titulo":    s.titleOut(ctx, t),
-		"episodios": eps,
-	})
+	lista := make([]episodeOut, 0, len(eps))
+	for _, e := range eps {
+		assets := []int64{}
+		if e.MediaAssetID != nil {
+			assets = append(assets, *e.MediaAssetID)
+		}
+		estado, ms := s.estadoDelMaterial(ctx, assets)
+		lista = append(lista, episodeOut{Episode: e, DurMs: ms, Estado: estado})
+	}
+	// La ficha es el título entero, con la lista de episodios dentro
+	// (web/src/lib/tipos.ts, `FichaDeTitulo`).
+	ficha := map[string]any{"lista_de_episodios": lista}
+	raw, err := jsonMarshal(s.titleOut(ctx, t, s.reglasPorTitulo(ctx)))
+	if err != nil {
+		failStore(w, err, "leer ese título")
+		return
+	}
+	campos := map[string]any{}
+	if err := jsonUnmarshal(raw, &campos); err != nil {
+		failStore(w, err, "leer ese título")
+		return
+	}
+	for k, v := range campos {
+		ficha[k] = v
+	}
+	writeJSON(w, http.StatusOK, ficha)
 }
 
 func (s *Server) bibliotecaPut(w http.ResponseWriter, r *http.Request) {
@@ -128,7 +213,7 @@ func (s *Server) bibliotecaPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.auditDiff(r, "title", &nuevo.ID, old, nuevo)
-	writeJSON(w, http.StatusOK, s.titleOut(ctx, nuevo))
+	writeJSON(w, http.StatusOK, s.titleOut(ctx, nuevo, s.reglasPorTitulo(ctx)))
 }
 
 // ── el material ───────────────────────────────────────────────────────

@@ -17,6 +17,10 @@ var (
 
 	// ErrDates es el CHECK (fecha_fin >= fecha_inicio): el bug del Hellsing.
 	ErrDates = errors.New("la fecha de fin no puede ser anterior a la de inicio")
+
+	// ErrFueraDeVigencia es el trigger que ata el día de emisión de un
+	// plan_item a las fechas de su regla (PRD §15).
+	ErrFueraDeVigencia = errors.New("ese día queda fuera de las fechas de la regla")
 )
 
 // ErrCorrupt dice que la base no pasó PRAGMA integrity_check. Lleva la ruta
@@ -51,6 +55,8 @@ func translate(op string, err error) error {
 	switch {
 	case strings.Contains(texto, "plan_item solapado"):
 		return fmt.Errorf("%s: %w", op, ErrOverlap)
+	case strings.Contains(texto, "fuera de la vigencia"):
+		return fmt.Errorf("%s: %w", op, ErrFueraDeVigencia)
 	case strings.Contains(texto, "CHECK constraint failed") &&
 		(strings.Contains(texto, "fecha_fin") || strings.Contains(texto, "fecha_inicio") ||
 			strings.Contains(texto, "ventana_fin") || strings.Contains(texto, "ventana_inicio")):

@@ -53,6 +53,11 @@ export interface ElementoDelPlan {
   origen: 'asset' | 'live_source' | 'relleno' | 'cartel'
   estado: EstadoPlan
   hora_local: HoraDelDia
+  /**
+   * Lo movió una persona a mano desde la parrilla: el resolver no lo vuelve a
+   * pisar. Se suelta con PUT /plan/{id} {"fijado": false}.
+   */
+  fijado?: boolean
   // embebidos que el servidor añade para la interfaz
   titulo?: string
   temporada?: number | null
@@ -68,6 +73,15 @@ export interface HuecoDelPlan {
 
 export type FilaDelPlan = ElementoDelPlan | HuecoDelPlan
 
+/** Cuerpo de PUT /plan/{id}: mover un bloque a mano, o soltarlo. */
+export interface CambioDePlan {
+  /** ISO 8601 con desfase, p. ej. "2026-09-08T15:30:00-04:00". */
+  instante_planeado?: Instante
+  duracion_planeada_ms?: number
+  /** false suelta el bloque: vuelve a mandar la regla. */
+  fijado?: boolean
+}
+
 export function esHueco(x: FilaDelPlan): x is HuecoDelPlan {
   return (x as HuecoDelPlan).hueco === true
 }
@@ -75,7 +89,7 @@ export function esHueco(x: FilaDelPlan): x is HuecoDelPlan {
 export type NivelAlarma = 'bien' | 'aviso' | 'problema'
 
 export interface Alarma {
-  tipo: 'sobrecupo' | 'hueco' | 'vencimiento' | 'sin_relleno' | 'material' | string
+  tipo?: 'sobrecupo' | 'hueco' | 'vencimiento' | 'sin_relleno' | 'material' | string
   nivel: NivelAlarma
   texto: string
   detalle?: string
@@ -84,6 +98,10 @@ export interface Alarma {
 
 export interface Estado {
   necesita_instalacion?: boolean
+  /** La instalación se terminó de contestar (los nueve pasos del asistente). */
+  instalacion_completa?: boolean
+  /** Hay cookie de sesión válida. En falso, la interfaz lleva a Entrar. */
+  entraste?: boolean
   canal: Canal
   modo: ModoCanal
   ahora: Instante
@@ -133,6 +151,10 @@ export interface FranjaSemana {
   titulo: string | null
   en_vivo: boolean
   duracion_ms: number
+  /** El plan_item que ocupa la franja, para poder moverlo o soltarlo. */
+  plan_id?: number | null
+  /** Ese plan_item lo fijó una persona a mano. */
+  fijado?: boolean
 }
 
 export interface DiaDeLaSemana {

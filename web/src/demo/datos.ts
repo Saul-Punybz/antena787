@@ -385,4 +385,17 @@ export const ajustes: Ajustes = {
   subtitulos: 'se conservan',
   equipo_de_alertas: 'Sage ENDEC · por red',
   asistente_ia: 'apagado',
+  // Avisos: por dónde sale el aviso de que una regla se vence sin relevo.
+  avisos_canal: 'ninguno',
+  avisos_telegram_token: '',
+  avisos_telegram_chat: '',
+  avisos_correo_para: '',
+  avisos_smtp_servidor: '',
+  avisos_smtp_usuario: '',
+  avisos_smtp_clave: '',
+  // Fichas de programas: sinopsis y carátulas cuando el archivo no las trae.
+  fichas_en_linea: 'no',
+  clave_tmdb: '',
+  // Guía: además del archivo, mandarla a una dirección.
+  guia_destino_http: '',
 }

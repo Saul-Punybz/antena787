@@ -2,9 +2,11 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"antena787/internal/model"
@@ -106,6 +108,7 @@ func (a *App) Resolve(ctx context.Context) (resolver.Output, error) {
 	a.mu.Lock()
 	a.warnings = out.Warnings
 	a.advance = out.EpisodeAdvance
+	a.owner = out.CounterOwner
 	a.mu.Unlock()
 
 	a.expiryNotices(ctx, in.Rules, out.Warnings)
@@ -221,27 +224,47 @@ func (a *App) resolverInput(ctx context.Context) (resolver.Input, error) {
 	}, nil
 }
 
-// expiryNotices guarda el aviso de vencimiento que toca en la regla y deja
-// una entrada de aviso. Se manda una sola vez por umbral: el resolver ya
-// calla los de las reglas que tienen quien las releve (auditoría B10).
+// expiryNotices guarda el aviso de vencimiento que toca en la regla, lo deja
+// como alarma viva —para que Al aire lo enseñe, que es la tercera pantalla
+// que pide F1-46— y, en el umbral de los siete días, lo saca por el canal de
+// avisos configurado. Se manda una sola vez por umbral y por regla: el
+// resolver ya calla los de las reglas que tienen quien las releve
+// (auditoría B10).
 func (a *App) expiryNotices(ctx context.Context, rules []model.ScheduleRule, warns []resolver.Warning) {
 	byID := map[int64]model.ScheduleRule{}
 	for _, r := range rules {
 		byID[r.ID] = r
 	}
+	alarmas := []Alarma{}
 	for _, w := range warns {
 		if w.Kind != resolver.WarnExpiry || w.Notice == "" || w.RuleID == nil {
 			continue
 		}
 		rule, ok := byID[*w.RuleID]
-		if !ok || rule.LastNoticeSent == w.Notice {
+		if !ok {
+			continue
+		}
+		// La alarma se enseña siempre que el aviso siga vigente, aunque ya se
+		// hubiera anotado: es un estado, no un suceso.
+		alarmas = append(alarmas, Alarma{
+			Tipo:    "vencimiento",
+			Nivel:   NivelAviso,
+			Texto:   w.Text,
+			Detalle: fmt.Sprintf("la regla llega hasta el %s", rule.To),
+			Accion:  &AccionAlarma{Texto: "ver", Ruta: "/reglas?filtro=vencen"},
+		})
+		if rule.LastNoticeSent == w.Notice {
 			continue
 		}
 		if err := a.Store.Rule.SetLastNotice(ctx, rule.ID, w.Notice); err != nil {
 			continue
 		}
 		a.Incident("vencimiento", w.Text)
+		if w.Notice == UmbralDeAviso {
+			a.Notificar(ctx, "Antena787 · una regla se acaba", w.Text)
+		}
 	}
+	a.setAlarms("vencimiento", alarmas)
 }
 
 // rebuildGuide regenera el XMLTV con el plan que hay ahora mismo, lo deja en
@@ -268,12 +291,50 @@ func (a *App) rebuildGuide(ctx context.Context, ch model.Channel) error {
 		return err
 	}
 
+	// La puerta de F1-28: el validador propio corre **antes** de publicar. Si
+	// la guía está mal armada, la que ya estaba sigue puesta —vale más una
+	// guía vieja que una guía mal— y queda constancia de por qué.
+	graves, flojos := resolver.ValidateXMLTVPorGravedad(data)
+	if len(graves) > 0 {
+		detalle := strings.Join(graves, "; ")
+		a.Incident("guia_rechazada", "la guía no se publicó porque "+detalle)
+		a.setAlarms("guia", []Alarma{{
+			Tipo:    "guia",
+			Nivel:   NivelProblema,
+			Texto:   "la guía no se pudo publicar: sigue puesta la anterior",
+			Detalle: detalle,
+			Accion:  &AccionAlarma{Texto: "ver la parrilla", Ruta: "/parrilla"},
+		}})
+		return errors.New(detalle)
+	}
+	if len(flojos) > 0 {
+		a.setAlarms("guia", []Alarma{{
+			Tipo:    "hueco",
+			Nivel:   NivelAviso,
+			Texto:   "la guía se publicó con tramos sin describir",
+			Detalle: strings.Join(flojos, "; "),
+			Accion:  &AccionAlarma{Texto: "llenar", Ruta: "/parrilla"},
+		}})
+	} else {
+		a.setAlarms("guia", nil)
+	}
+
 	a.mu.Lock()
 	a.guide = data
 	a.guideItems = items
 	a.guideAt = now
 	a.mu.Unlock()
 
+	if err := a.writeGuide(ctx, data); err != nil {
+		return err
+	}
+	a.pushGuide(ctx, data)
+	return nil
+}
+
+// writeGuide deja la guía en la ruta configurada, si la hay, con un cambio de
+// nombre atómico: quien la esté leyendo nunca ve media guía.
+func (a *App) writeGuide(ctx context.Context, data []byte) error {
 	path, err := a.Store.Settings.Get(ctx, KeyGuidePath)
 	if err != nil || path == "" {
 		return nil //nolint:nilerr // que no haya ruta configurada no es un fallo
@@ -360,12 +421,21 @@ func (a *App) MarkAired(ctx context.Context, itemID int64, at time.Time, actualM
 	if err := a.Store.Plan.MarkAired(ctx, itemID, at, actualMs, partial); err != nil {
 		return err
 	}
-	item, err := a.planItem(ctx, itemID)
+	item, err := a.PlanItem(ctx, itemID)
 	if err != nil || item.RuleID == nil {
 		return nil //nolint:nilerr // sin regla no hay contador que avanzar
 	}
+	// El contador no es siempre de la regla que puso el bloque: una regla de
+	// repetición no tiene contador propio y escribe en el de su primaria
+	// (auditoría B5). Quién es la dueña lo dijo el resolver en CounterOwner,
+	// y hay que resolverlo **antes** de buscar el avance, porque el avance
+	// también está indexado por la regla dueña.
+	dueña := *item.RuleID
 	a.mu.RLock()
-	ep, ok := a.advance[*item.RuleID]
+	if o, hay := a.owner[dueña]; hay && o != 0 {
+		dueña = o
+	}
+	ep, ok := a.advance[dueña]
 	a.mu.RUnlock()
 	if !ok && item.EpisodeID != nil {
 		ep, ok = *item.EpisodeID, true
@@ -373,12 +443,12 @@ func (a *App) MarkAired(ctx context.Context, itemID int64, at time.Time, actualM
 	if !ok {
 		return nil
 	}
-	return a.Store.Rule.SetLastEpisode(ctx, *item.RuleID, ep)
+	return a.Store.Rule.SetLastEpisode(ctx, dueña, ep)
 }
 
-// planItem busca un plan_item por id. El store no expone un Get, y esto es
+// PlanItem busca un plan_item por id. El store no expone un Get, y esto es
 // lo único que lo necesita.
-func (a *App) planItem(ctx context.Context, id int64) (model.PlanItem, error) {
+func (a *App) PlanItem(ctx context.Context, id int64) (model.PlanItem, error) {
 	items, err := a.Store.Plan.ListRange(ctx, a.ChannelID,
 		time.Unix(0, 0).UTC(), a.Now().Add(365*24*time.Hour))
 	if err != nil {
