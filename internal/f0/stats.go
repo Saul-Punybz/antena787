@@ -16,12 +16,16 @@ import (
 type Stats struct {
 	f      *os.File
 	encPID int
+	// Windows reporta segundos de CPU acumulados, no porcentaje: se guarda
+	// la lectura anterior por proceso y se saca el % del incremento.
+	lastCPU map[int]float64
+	lastAt  time.Time
 }
 
 func NewStats(path string, encPID int) *Stats {
 	f, _ := os.Create(path)
 	fmt.Fprintln(f, "t,cpu_pct_total,rss_mb_total,cpu_pct_encoder,rss_mb_encoder,procesos_ffmpeg")
-	return &Stats{f: f, encPID: encPID}
+	return &Stats{f: f, encPID: encPID, lastCPU: map[int]float64{}}
 }
 
 func (s *Stats) Run(ctx context.Context, every time.Duration) {
@@ -32,7 +36,7 @@ func (s *Stats) Run(ctx context.Context, every time.Duration) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			cpuT, rssT, cpuE, rssE, n := sample(s.encPID)
+			cpuT, rssT, cpuE, rssE, n := s.sample()
 			fmt.Fprintf(s.f, "%s,%.1f,%.0f,%.1f,%.0f,%d\n", time.Now().Format(time.RFC3339), cpuT, rssT, cpuE, rssE, n)
 		}
 	}
@@ -41,7 +45,8 @@ func (s *Stats) Run(ctx context.Context, every time.Duration) {
 func (s *Stats) Close() { s.f.Close() }
 
 // sample usa ps (Unix) o PowerShell (Windows): sin dependencias, sin CGo.
-func sample(encPID int) (cpuT, rssT, cpuE, rssE float64, n int) {
+func (s *Stats) sample() (cpuT, rssT, cpuE, rssE float64, n int) {
+	encPID := s.encPID
 	self := os.Getpid()
 	if runtime.GOOS == "windows" {
 		out, err := exec.Command("powershell", "-NoProfile", "-Command",
@@ -49,20 +54,39 @@ func sample(encPID int) (cpuT, rssT, cpuE, rssE float64, n int) {
 		if err != nil {
 			return
 		}
+		now := time.Now()
+		dt := now.Sub(s.lastAt).Seconds()
+		seen := map[int]bool{}
 		for _, ln := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 			fs := strings.Fields(ln)
 			if len(fs) < 3 {
 				continue
 			}
 			pid, _ := strconv.Atoi(fs[0])
+			secs, _ := strconv.ParseFloat(strings.ReplaceAll(fs[1], ",", "."), 64)
 			rss, _ := strconv.ParseFloat(fs[2], 64)
+			seen[pid] = true
+			var cpu float64
+			if prev, ok := s.lastCPU[pid]; ok && dt > 0 {
+				cpu = 100 * (secs - prev) / dt
+			}
+			s.lastCPU[pid] = secs
 			rssT += rss / 1048576
-			n++
+			cpuT += cpu
+			if pid != self {
+				n++
+			}
 			if pid == encPID {
-				rssE = rss / 1048576
+				rssE, cpuE = rss/1048576, cpu
 			}
 		}
-		return // CPU acumulada en Windows no es %, se deja en 0 y se lee del Administrador de tareas
+		for pid := range s.lastCPU {
+			if !seen[pid] {
+				delete(s.lastCPU, pid)
+			}
+		}
+		s.lastAt = now
+		return
 	}
 	out, err := exec.Command("ps", "-axo", "pid=,%cpu=,rss=,comm=").Output()
 	if err != nil {
