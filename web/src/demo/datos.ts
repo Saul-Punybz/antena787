@@ -233,6 +233,11 @@ const SIN_PROGRAMAR = [
   'Kimba',
   'El Chavo animado',
   'Los Picapiedra',
+  // Las fichas del catálogo que la hoja llama de otra manera: la hoja dice
+  // «Samurai X» y «SaberMarionette», el catálogo dice esto (F1-64, F1-65).
+  'Rurouni Kenshin',
+  'Saber Marionette J',
+  'Saber Marionette R',
 ]
 
 const SINOPSIS: Record<string, string> = {

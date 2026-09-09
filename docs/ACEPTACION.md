@@ -432,6 +432,31 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   `pista_audio_sap` (nulo hasta F2) y ningún otro campo hay que inventar
   después: el motor de F2 la lleva al mux sin cambiar el esquema.
 
+### Emparejar títulos (issue #13, 9 de septiembre de 2026; §9 importador)
+
+- **F1-64** [AUTO] — Dado una hoja con un título que no se parece a ninguno
+  del catálogo (`Samurai X`, cuya ficha es `Rurouni Kenshin`) · Cuando corre
+  el importador · Entonces **no** crea una ficha nueva callado: la regla se
+  importa igual (la hoja nunca se rechaza), el título queda marcado
+  **«por emparejar»**, aparece en la lista `titulos_sin_emparejar` de la
+  respuesta y en la pantalla de Reglas, y sale un aviso en Al aire mientras
+  quede alguno.
+- **F1-65** [AUTO] — Dado un título que se parece **igual** a varios del
+  catálogo (`SaberMarionette` ↔ `Saber Marionette J` / `R`) · Cuando corre el
+  importador · Entonces **no adivina**: lo deja por emparejar con esos
+  candidatos listados, y el nombre del catálogo manda cuando la persona elige.
+- **F1-66** [AUTO] — Dado un título por emparejar · Cuando la persona lo
+  empareja con una ficha del catálogo · Entonces las reglas que lo usaban
+  pasan a esa ficha, el título provisional desaparece, el plan se recalcula,
+  y el nombre de la hoja queda guardado como **alias** de la ficha: la
+  siguiente hoja que traiga ese nombre se empareja sola, sin preguntar.
+- **F1-67** [AUTO] — Dado un título por emparejar · Cuando la persona dice
+  «es un título nuevo» o «no es un programa» · Entonces en el primer caso la
+  ficha se queda como propia y deja de estar por emparejar; en el segundo el
+  título y las reglas que lo usaban se quitan, diciendo cuántas. Y el nombre
+  de una fuente en vivo (`RadioOnce Live!`) **nunca** entra al catálogo como
+  título.
+
 ---
 
 ## F2 · Playout (motor, decks, fuentes en vivo, manual, diferido, grabación, salidas)

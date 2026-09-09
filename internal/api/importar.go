@@ -119,7 +119,9 @@ func (s *Server) importarHoja(w http.ResponseWriter, r *http.Request) {
 	if catalogo.Kind == importer.KindCatalog {
 		fichas, errs := importer.Catalog(catalogo)
 		res.RowErrors = append(res.RowErrors, errs...)
-		res.ApplyCatalog(fichas)
+		// Los alias van primero: lo que una persona ya emparejó en otra hoja
+		// no se vuelve a preguntar (F1-66).
+		res.ApplyCatalogCon(fichas, s.aliasDelCanal(ctx))
 	}
 
 	filas := []filaConError{}
@@ -130,15 +132,48 @@ func (s *Server) importarHoja(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	// Lo que quedó por emparejar, por índice de título: el importador ya dijo
+	// cuáles son y a qué fichas se parecían (F1-64, F1-65).
+	sinPareja := map[int]*importer.Unmatched{}
+	if res.Match != nil {
+		for k := range res.Match.Unmatched {
+			u := &res.Match.Unmatched[k]
+			if idx, ok := res.Match.TitleIndex[u.Name]; ok && res.Match.EsProvisional(idx) {
+				sinPareja[idx] = u
+			}
+		}
+	}
+	porNombre := map[string]int{}
+	for i := range res.Titles {
+		if _, ya := porNombre[res.Titles[i].Name]; !ya {
+			porNombre[res.Titles[i].Name] = i
+		}
+	}
+
 	// Los títulos primero: las reglas apuntan a ellos por identificador.
 	titleIDs := make([]int64, len(res.Titles))
+	pendientes := make([]bool, len(res.Titles))
 	creados := 0
 	for i := range res.Titles {
 		t := res.Titles[i]
+		u, provisional := sinPareja[i]
+		if provisional {
+			// Nace marcado: nadie crea una ficha nueva callado. Los
+			// candidatos van con él para que la pantalla los ofrezca.
+			t.PendienteEmparejar = true
+			t.Candidatos = idsDeCandidatos(u, porNombre, titleIDs)
+		}
+		// Un nombre que ya se emparejó a mano va derecho a su ficha, aunque
+		// la hoja de hoy venga sin catálogo detrás.
+		if id, ok := s.tituloDelAlias(ctx, t.Name); ok {
+			titleIDs[i] = id
+			continue
+		}
 		existente, err := s.App.Store.Title.FindByName(ctx, t.Name)
 		switch {
 		case err == nil:
 			titleIDs[i] = existente.ID
+			pendientes[i] = existente.PendienteEmparejar
 		case errors.Is(err, store.ErrNotFound):
 			t.ID = 0
 			if err := s.App.Store.Title.Insert(ctx, &t); err != nil {
@@ -149,7 +184,12 @@ func (s *Server) importarHoja(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			titleIDs[i] = t.ID
-			creados++
+			pendientes[i] = t.PendienteEmparejar
+			// Un título por emparejar todavía no es una ficha del catálogo:
+			// no se cuenta como título creado.
+			if !provisional {
+				creados++
+			}
 			s.audit(r, "title", &t.ID, "importado", "", t.Name)
 		default:
 			failStore(w, err, "leer la biblioteca")
@@ -232,7 +272,37 @@ func (s *Server) importarHoja(w http.ResponseWriter, r *http.Request) {
 		corridas = append(corridas, f)
 	}
 
+	// Y lo que no se pudo emparejar solo, con su identificador ya guardado:
+	// desde aquí la pantalla de Reglas lo resuelve de un clic (F1-64).
+	sinEmparejar := []tituloSinEmparejar{}
+	if res.Match != nil {
+		for k := range res.Match.Unmatched {
+			u := &res.Match.Unmatched[k]
+			idx, ok := res.Match.TitleIndex[u.Name]
+			if !ok || idx < 0 || idx >= len(titleIDs) || titleIDs[idx] == 0 || !pendientes[idx] {
+				continue
+			}
+			sinEmparejar = append(sinEmparejar, tituloSinEmparejar{
+				ID:         titleIDs[idx],
+				Nombre:     u.Name,
+				Texto:      u.Text,
+				Candidatos: candidatosDeLaHoja(u, porNombre, titleIDs),
+				Reglas:     len(u.Rules),
+				Franjas:    sinNil(u.Slots),
+			})
+		}
+	}
+	avisos := res.Notices
+	if avisos == nil {
+		avisos = []importer.Notice{}
+	}
+	duplicados := res.PossibleDuplicates
+	if duplicados == nil {
+		duplicados = []importer.DuplicateWarning{}
+	}
+
 	s.App.Recalc()
+	s.App.RefreshPendientes(ctx)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"reglas_creadas":          creadas,
 		"titulos_creados":         creados,
@@ -240,10 +310,94 @@ func (s *Server) importarHoja(w http.ResponseWriter, r *http.Request) {
 		"repeticiones_propuestas": repeticiones,
 		"filas_con_error":         filas,
 		"fechas_corridas":         corridas,
-		"posibles_duplicados":     res.PossibleDuplicates,
-		"avisos":                  res.Notices,
+		"posibles_duplicados":     duplicados,
+		"avisos":                  avisos,
+		"titulos_sin_emparejar":   sinEmparejar,
 		"resumen":                 res.Summary(),
 	})
+}
+
+// aliasDelCanal traduce los alias guardados a lo que entiende el importador:
+// el nombre de la hoja y el nombre de la ficha a la que va. Los que apuntan a
+// una ficha que ya no existe se quedan fuera, sin ruido.
+func (s *Server) aliasDelCanal(ctx context.Context) []importer.Alias {
+	guardados, err := s.App.Store.Alias.ListByChannel(ctx, s.App.ChannelID)
+	if err != nil || len(guardados) == 0 {
+		return nil
+	}
+	nombres := map[int64]string{}
+	if todos, err := s.App.Store.Title.List(ctx); err == nil {
+		for _, t := range todos {
+			nombres[t.ID] = t.Name
+		}
+	}
+	out := make([]importer.Alias, 0, len(guardados))
+	for _, a := range guardados {
+		ficha := nombres[a.TitleID]
+		if ficha == "" {
+			continue
+		}
+		out = append(out, importer.Alias{Nombre: a.Alias, Titulo: ficha})
+	}
+	return out
+}
+
+// tituloDelAlias dice a qué ficha va ese nombre de la hoja, si ya se aprendió
+// y la ficha sigue estando.
+func (s *Server) tituloDelAlias(ctx context.Context, nombre string) (int64, bool) {
+	id, ok, err := s.App.Store.Alias.Resolve(ctx, s.App.ChannelID, nombre)
+	if err != nil || !ok {
+		return 0, false
+	}
+	if _, err := s.App.Store.Title.Get(ctx, id); err != nil {
+		return 0, false
+	}
+	return id, true
+}
+
+// idsDeCandidatos traduce los nombres de los candidatos a identificadores de
+// la base. Se guardan en la ficha provisional para que la pantalla los ofrezca
+// sin volver a correr el emparejamiento (F1-65).
+func idsDeCandidatos(u *importer.Unmatched, porNombre map[string]int, ids []int64) []int64 {
+	if u == nil || len(u.Candidates) == 0 {
+		return nil
+	}
+	out := make([]int64, 0, len(u.Candidates))
+	for _, nombre := range u.Candidates {
+		if idx, ok := porNombre[nombre]; ok && idx < len(ids) && ids[idx] != 0 {
+			out = append(out, ids[idx])
+		}
+	}
+	return out
+}
+
+// candidatosDeLaHoja arma los candidatos como los pinta la pantalla: la
+// ficha, su nombre y cuánto se parecía.
+func candidatosDeLaHoja(u *importer.Unmatched, porNombre map[string]int, ids []int64) []candidatoDeTitulo {
+	out := []candidatoDeTitulo{}
+	if u == nil {
+		return out
+	}
+	for i, nombre := range u.Candidates {
+		idx, ok := porNombre[nombre]
+		if !ok || idx >= len(ids) || ids[idx] == 0 {
+			continue
+		}
+		c := candidatoDeTitulo{ID: ids[idx], Nombre: nombre}
+		if i < len(u.CandidateScores) {
+			c.Puntuacion = u.CandidateScores[i]
+		}
+		out = append(out, c)
+	}
+	return out
+}
+
+// sinNil deja una lista de textos lista para JSON: nunca null.
+func sinNil(in []string) []string {
+	if in == nil {
+		return []string{}
+	}
+	return in
 }
 
 // liveSourceFor devuelve la fuente en vivo de ese nombre, creándola la
@@ -273,11 +427,12 @@ func (s *Server) liveSourceFor(ctx context.Context, name string, cache map[strin
 
 func dentro(ids []int64, i int) bool { return i >= 0 && i < len(ids) && ids[i] != 0 }
 
+// nombreDeRegla es cómo se llama la fila i: el nombre del título si lo tiene
+// y, si no —una fuente en vivo no es un título—, el que traía la hoja. Sin
+// esto la fila de «RadioOnce Live!» se quedaría sin fuente detrás, porque su
+// título ya no existe (F1-67).
 func nombreDeRegla(res importer.Result, i int) string {
-	if t := res.TitleFor(i); t != nil {
-		return t.Name
-	}
-	return ""
+	return res.NameFor(i)
 }
 
 func sheetID(res importer.Result, i int) string {

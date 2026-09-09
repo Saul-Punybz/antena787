@@ -203,8 +203,13 @@ func TestReglasDeLaHojaReal(t *testing.T) {
 	if live.EpisodesPerRun != 0 {
 		t.Fatalf("349 trae %d episodios por corrida; un vivo no lleva", live.EpisodesPerRun)
 	}
-	if res.TitleFor(i).Name != "RadioOnce Live!" {
-		t.Fatalf("el título de 349 es %q", res.TitleFor(i).Name)
+	// Y el nombre de la fuente en vivo no entra al catálogo como título
+	// (F1-67): la regla se queda sin título y apunta a su fuente.
+	if got := res.TitleFor(i); got != nil {
+		t.Fatalf("349 se quedó con el título %q; una fuente en vivo no es un título", got.Name)
+	}
+	if res.NameFor(i) != "RadioOnce Live!" {
+		t.Fatalf("el nombre de 349 es %q", res.NameFor(i))
 	}
 	var aviso string
 	for _, n := range res.Notices {
@@ -504,11 +509,11 @@ func TestCatalogoDeLaHojaReal(t *testing.T) {
 	}
 
 	// Y el catálogo se junta con lo que salió de las reglas sin duplicar: de
-	// los 29 títulos de las reglas, 8 se llaman exactamente igual que una
-	// ficha del catálogo, así que quedan 139 y no 147.
+	// los 28 títulos de las reglas, 8 se llaman exactamente igual que una
+	// ficha del catálogo, así que quedan 138 y no 146.
 	res := Rules(reglasDeLaHoja(t), catv, WithLiveNames("RadioOnce Live!"))
-	if len(res.Titles) != 29 {
-		t.Fatalf("las reglas trajeron %d títulos, se esperaban 29", len(res.Titles))
+	if len(res.Titles) != 28 {
+		t.Fatalf("las reglas trajeron %d títulos, se esperaban 28", len(res.Titles))
 	}
 	todos, sinPareja := MergeTitles(res.Titles, titles)
 	if len(todos) == 0 || len(sinPareja) == 0 {
@@ -591,22 +596,27 @@ func TestEmparejaErratasConElCatalogo(t *testing.T) {
 	}
 	fichas, _ := Catalog(cat)
 	res := Rules(reglasDeLaHoja(t), catv, WithLiveNames("RadioOnce Live!"))
-	if len(res.Titles) != 29 {
-		t.Fatalf("las reglas trajeron %d títulos, se esperaban 29", len(res.Titles))
+	if len(res.Titles) != 28 {
+		t.Fatalf("las reglas trajeron %d títulos, se esperaban 28", len(res.Titles))
 	}
 
 	m := res.ApplyCatalog(fichas)
 
-	// 17 erratas emparejadas solas; 24 de los 29 títulos de las reglas quedan
-	// apuntando a una ficha del catálogo, y 4 se quedan para la pantalla.
+	// 17 erratas emparejadas solas; 24 de los 28 títulos de las reglas quedan
+	// apuntando a una ficha del catálogo, y 3 se quedan para la pantalla:
+	// «RadioOnce Live!» ya no está, porque el nombre de una fuente en vivo no
+	// es un título y nunca entra al catálogo (F1-67).
 	if len(m.Matched) != 17 {
 		t.Fatalf("erratas emparejadas: %d, se esperaban 17: %+v", len(m.Matched), m.Matched)
 	}
-	if len(m.Unmatched) != 4 {
-		t.Fatalf("títulos sin pareja: %d, se esperaban 4: %+v", len(m.Unmatched), m.Unmatched)
+	if len(m.Unmatched) != 3 {
+		t.Fatalf("títulos sin pareja: %d, se esperaban 3: %+v", len(m.Unmatched), m.Unmatched)
 	}
-	if len(res.Titles) != 122 {
-		t.Fatalf("quedaron %d títulos, se esperaban 122 (las 118 fichas más los 4 sin ficha)", len(res.Titles))
+	if len(res.Titles) != 121 {
+		t.Fatalf("quedaron %d títulos, se esperaban 121 (las 118 fichas más los 3 sin ficha)", len(res.Titles))
+	}
+	if res.Match == nil || len(res.Match.Unmatched) != len(m.Unmatched) {
+		t.Fatalf("el emparejamiento no quedó en Result.Match: %+v", res.Match)
 	}
 
 	pareja := map[string]string{}
@@ -648,15 +658,19 @@ func TestEmparejaErratasConElCatalogo(t *testing.T) {
 	for k := range res.Rules {
 		ti := res.TitleFor(k)
 		if ti == nil {
-			t.Fatalf("la regla %s se quedó sin título", res.SheetIDs[k])
+			if res.Rules[k].Kind != model.RuleLive {
+				t.Fatalf("la regla %s se quedó sin título", res.SheetIDs[k])
+			}
+			continue
 		}
 		if ti.Synopsis != "" {
 			con++
 		}
 	}
-	// Las 8 que se quedan sin sinopsis son las que no tienen ficha (Los
-	// Simuladores, RadioOnce Live!, SaberMarionette, Samurai X ×2) y las que
-	// la tienen vacía en el catálogo (Gaming Longplays ×2, Lorcanitos).
+	// Las 7 que se quedan sin sinopsis son las que no tienen ficha (Los
+	// Simuladores, SaberMarionette, Samurai X ×2) y las que la tienen vacía
+	// en el catálogo (Gaming Longplays ×2, Lorcanitos). La de RadioOnce
+	// Live! ya ni siquiera tiene título.
 	if con != 26 {
 		t.Fatalf("%d de las 34 reglas quedaron con sinopsis, se esperaban 26", con)
 	}
@@ -673,10 +687,14 @@ func TestEmparejaErratasConElCatalogo(t *testing.T) {
 	if !strings.Contains(saber.Text, "no quise adivinar") {
 		t.Fatalf("el aviso de la duda dice %q", saber.Text)
 	}
-	for _, n := range []string{"Los Simuladores", "Samurai X", "RadioOnce Live!"} {
+	for _, n := range []string{"Los Simuladores", "Samurai X"} {
 		if _, ok := sin[n]; !ok {
 			t.Fatalf("«%s» debía quedar sin pareja", n)
 		}
+	}
+	// El nombre de la fuente en vivo no se pregunta: nunca fue un título.
+	if _, ok := sin["RadioOnce Live!"]; ok {
+		t.Fatal("«RadioOnce Live!» es una fuente en vivo y no debía salir por emparejar")
 	}
 
 	// Y el emparejamiento se cuenta fila por fila, en cristiano.
@@ -688,6 +706,225 @@ func TestEmparejaErratasConElCatalogo(t *testing.T) {
 	}
 	if !strings.Contains(zorro, "«Zorro 57» es «Zorro (1957)» en el catálogo") {
 		t.Fatalf("el aviso del emparejamiento dice %q", zorro)
+	}
+}
+
+// fichasDeLaHoja devuelve el catálogo de la hoja real de CAtv.
+func fichasDeLaHoja(t *testing.T) []model.Title {
+	t.Helper()
+	for _, s := range ParseAll(hoja(t)) {
+		if s.Kind == KindCatalog {
+			fichas, _ := Catalog(s)
+			return fichas
+		}
+	}
+	t.Fatal("la hoja no trae catálogo")
+	return nil
+}
+
+// F1-66 — «Samurai X» y «Rurouni Kenshin» no se parecen en nada: el parecido
+// nunca los va a juntar. Pero si una persona ya los emparejó en otra hoja, se
+// recuerda y no se vuelve a preguntar.
+func TestRecuerdaElAliasDeOtraHoja(t *testing.T) {
+	fichas := fichasDeLaHoja(t)
+	res := Rules(reglasDeLaHoja(t), catv, WithLiveNames("RadioOnce Live!"))
+	m := res.ApplyCatalogCon(fichas, []Alias{{Nombre: "Samurai X", Titulo: "Rurouni Kenshin"}})
+
+	// De los tres que quedaban por emparejar se va «Samurai X», que ya se
+	// sabía: quedan «Los Simuladores» y «SaberMarionette».
+	if len(m.Unmatched) != 2 {
+		t.Fatalf("títulos sin pareja: %d, se esperaban 2: %+v", len(m.Unmatched), m.Unmatched)
+	}
+	for _, u := range m.Unmatched {
+		if u.Name == "Samurai X" || u.Name == "SamuraiX" {
+			t.Fatalf("«%s» ya se sabía y no debía volver a preguntarse", u.Name)
+		}
+	}
+
+	// Las dos escrituras de la hoja van a la ficha de siempre, sin crear una
+	// nueva.
+	for _, id := range []string{"345", "311"} {
+		i, _ := buscar(t, res, id)
+		got := res.TitleFor(i)
+		if got == nil || got.Name != "Rurouni Kenshin" {
+			t.Fatalf("la regla %s apunta a %v, se esperaba «Rurouni Kenshin»", id, got)
+		}
+		if got.Synopsis == "" {
+			t.Fatalf("la regla %s no se quedó con la ficha del catálogo", id)
+		}
+	}
+	if len(res.Titles) != len(fichas)+2 {
+		t.Fatalf("quedaron %d títulos, se esperaban %d (las fichas más los 2 sin ficha)",
+			len(res.Titles), len(fichas)+2)
+	}
+
+	// Y se dice de dónde salió, en cristiano.
+	var dicho string
+	for _, x := range m.Matched {
+		if x.From == "Samurai X" {
+			dicho = x.Text
+			if x.Score != 1 {
+				t.Fatalf("el alias no es un parecido: quedó en %.2f", x.Score)
+			}
+		}
+	}
+	if dicho != "«Samurai X» es «Rurouni Kenshin»: lo recordaba de otra hoja" {
+		t.Fatalf("el aviso del alias dice %q", dicho)
+	}
+	var aviso string
+	for _, n := range res.Notices {
+		if n.Title == "Samurai X" {
+			aviso = n.Text
+		}
+	}
+	if !strings.Contains(aviso, "lo recordaba de otra hoja") {
+		t.Fatalf("el aviso del alias no llegó a los avisos del importador: %q", aviso)
+	}
+
+	// Un alias que apunta a una ficha que no está en este catálogo no hace
+	// nada: se vuelve a preguntar, como antes.
+	res2 := Rules(reglasDeLaHoja(t), catv, WithLiveNames("RadioOnce Live!"))
+	m2 := res2.ApplyCatalogCon(fichas, []Alias{{Nombre: "Samurai X", Titulo: "Una ficha que no existe"}})
+	if len(m2.Unmatched) != 3 {
+		t.Fatalf("con un alias que no apunta a ninguna ficha se esperaban 3 sin pareja: %+v", m2.Unmatched)
+	}
+}
+
+// F1-64/F1-65 — Lo que queda por emparejar se enseña con lo que hace falta
+// para reconocerlo: en qué reglas sale, con qué Id y en qué franja.
+func TestLoQuedaPorEmparejarDiceDondeSale(t *testing.T) {
+	res := Rules(reglasDeLaHoja(t), catv, WithLiveNames("RadioOnce Live!"))
+	m := res.ApplyCatalog(fichasDeLaHoja(t))
+
+	sin := map[string]Unmatched{}
+	for _, u := range m.Unmatched {
+		sin[u.Name] = u
+	}
+	saber, ok := sin["SaberMarionette"]
+	if !ok {
+		t.Fatalf("«SaberMarionette» debía quedar por emparejar: %+v", m.Unmatched)
+	}
+	if len(saber.Rules) == 0 {
+		t.Fatal("«SaberMarionette» no dice en qué reglas sale")
+	}
+	if len(saber.SheetIDs) != len(saber.Rules) || len(saber.Slots) != len(saber.Rules) {
+		t.Fatalf("el contexto no cuadra: %+v", saber)
+	}
+	for k, i := range saber.Rules {
+		if res.NameFor(i) != "SaberMarionette" {
+			t.Fatalf("la regla %d no es de «SaberMarionette» sino de %q", i, res.NameFor(i))
+		}
+		if saber.SheetIDs[k] != res.SheetIDs[i] {
+			t.Fatalf("el Id de la hoja quedó en %q y la regla trae %q", saber.SheetIDs[k], res.SheetIDs[i])
+		}
+		franja := DescribePattern(res.Rules[i].Days) + " a las " + FormatClock(res.Rules[i].At)
+		if saber.Slots[k] != franja {
+			t.Fatalf("la franja dice %q, se esperaba %q", saber.Slots[k], franja)
+		}
+		if !strings.Contains(saber.Slots[k], "a las") {
+			t.Fatalf("la franja %q no se lee como una persona", saber.Slots[k])
+		}
+	}
+
+	// Los candidatos vienen con su parecido, en el mismo orden, y empatados
+	// dentro del margen: por eso no se adivina.
+	if len(saber.Candidates) != 2 || len(saber.CandidateScores) != 2 {
+		t.Fatalf("se esperaban 2 candidatos con su puntuación: %+v", saber)
+	}
+	mejor := 0.0
+	for _, p := range saber.CandidateScores {
+		if p < MatchThreshold {
+			t.Fatalf("un candidato quedó en %.3f, por debajo del umbral", p)
+		}
+		if p > mejor {
+			mejor = p
+		}
+	}
+	for k, p := range saber.CandidateScores {
+		if mejor-p > MatchMargin {
+			t.Fatalf("«%s» quedó a %.3f del mejor y no debía contar como empate", saber.Candidates[k], mejor-p)
+		}
+	}
+
+	// El que no se parece a nada no trae candidatos ni puntuaciones.
+	solo, ok := sin["Los Simuladores"]
+	if !ok || len(solo.Candidates) != 0 || len(solo.CandidateScores) != 0 {
+		t.Fatalf("«Los Simuladores» no tiene ficha y no debía traer candidatos: %+v", solo)
+	}
+	if len(solo.Rules) == 0 || len(solo.Slots) == 0 {
+		t.Fatalf("«Los Simuladores» no dice dónde sale: %+v", solo)
+	}
+}
+
+// F1-64 — El título que se crea porque la regla lo nombra queda marcado como
+// provisional: no se cuela al catálogo como una ficha más.
+func TestLosTitulosSinFichaQuedanMarcados(t *testing.T) {
+	fichas := fichasDeLaHoja(t)
+	res := Rules(reglasDeLaHoja(t), catv, WithLiveNames("RadioOnce Live!"))
+	m := res.ApplyCatalog(fichas)
+
+	if len(m.Provisional) != len(m.Unmatched) {
+		t.Fatalf("%d títulos provisionales y %d sin pareja", len(m.Provisional), len(m.Unmatched))
+	}
+	porNombre := map[string]bool{}
+	for _, i := range m.Provisional {
+		if i < len(fichas) {
+			t.Fatalf("el título %d es una ficha del catálogo y no puede ser provisional", i)
+		}
+		if !m.EsProvisional(i) {
+			t.Fatalf("EsProvisional(%d) dice que no y está en la lista", i)
+		}
+		porNombre[m.Titles[i].Name] = true
+	}
+	for _, u := range m.Unmatched {
+		if !porNombre[u.Name] {
+			t.Fatalf("«%s» quedó sin pareja y su título no está marcado como provisional", u.Name)
+		}
+	}
+	// Las fichas del catálogo no lo son.
+	for i := range fichas {
+		if m.EsProvisional(i) {
+			t.Fatalf("la ficha «%s» quedó marcada como provisional", m.Titles[i].Name)
+		}
+	}
+}
+
+// F1-67 — El nombre de una fuente en vivo no es un programa: no se crea
+// título, no se empareja y no se pregunta por él.
+func TestLaFuenteEnVivoNoEsUnTitulo(t *testing.T) {
+	tsv := strings.Join([]string{
+		"Id\tVideo\tDuración\tDías\tHoras\tFec Ini\tFec Final",
+		"305\tRadioOnce Live!\t6\tLMMJV__\t12:00:00 PM\t9/7/2026\t12/7/2026",
+		"306\tZoids\t1\tLMMJV__\t1:00:00 PM\t9/7/2026\t12/7/2026",
+	}, "\n")
+	sheet, errs := Parse(tsv)
+	if len(errs) != 0 {
+		t.Fatalf("Parse devolvió errores: %v", errs)
+	}
+	res := Rules(sheet, catv, WithLiveNames("RadioOnce Live!"))
+	if len(res.Titles) != 1 || res.Titles[0].Name != "Zoids" {
+		t.Fatalf("los títulos quedaron en %+v, se esperaba solo «Zoids»", res.Titles)
+	}
+	i, _ := buscar(t, res, "305")
+	if res.TitleIndex[i] != -1 || res.TitleFor(i) != nil {
+		t.Fatalf("la fila de la fuente en vivo se quedó con título: %v", res.TitleFor(i))
+	}
+	if res.NameFor(i) != "RadioOnce Live!" {
+		t.Fatalf("el nombre de la fila en vivo es %q", res.NameFor(i))
+	}
+
+	// Y tampoco entra al emparejamiento: el catálogo no la ve.
+	m := res.ApplyCatalog([]model.Title{{Name: "Zoids: Chaotic Century"}})
+	if len(m.Unmatched) != 0 {
+		t.Fatalf("no debía quedar nada por emparejar: %+v", m.Unmatched)
+	}
+	for _, ti := range res.Titles {
+		if ti.Name == "RadioOnce Live!" {
+			t.Fatal("«RadioOnce Live!» entró al catálogo como título")
+		}
+	}
+	if res.TitleFor(i) != nil {
+		t.Fatalf("la fila en vivo se quedó con título después de emparejar: %v", res.TitleFor(i))
 	}
 }
 

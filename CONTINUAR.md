@@ -1,6 +1,6 @@
 # CONTINUAR — dónde quedamos y qué sigue
 
-_Última sesión: 9 de septiembre de 2026 (tres tandas). Siguiente: la que venga._
+_Última sesión: 9 de septiembre de 2026 (cuatro tandas). **Siguiente: a las 11, en la rama `wip/emparejar-titulos`.**_
 
 ## Dónde estamos
 
@@ -29,7 +29,12 @@ _Última sesión: 9 de septiembre de 2026 (tres tandas). Siguiente: la que venga
     responsabilidad del operador); LUFS y pico verdadero se guardan.
   - La cola de normalización prioriza por hora de aire calculada desde las
     reglas.
-- **Repo:** https://github.com/Saul-Punybz/antena787 (privado).
+- **Repo:** https://github.com/Saul-Punybz/antena787 (privado). `main` está
+  verde en `74353f8`; el trabajo a medias vive en `wip/emparejar-titulos`.
+- **Investigación y decisiones nuevas (9 sept):**
+  `docs/investigacion/PROYECTOS-SIMILARES-2026-09-09.md` (27 proyectos
+  comparables) y `docs/adr/0010-eas-integrate-the-endec-never-replace-it.md`
+  (EAS: integrar el ENDEC, evidencia SAME en el retorno, CAP informativo).
 
 ## Cómo arrancar
 
@@ -74,8 +79,28 @@ go test ./... -count=1           # todo debe estar verde
    procedencia «propuesta del asistente» queda en el incidente y en
    `instalacion.propuesta`, no en cada regla (columna `nota` + migración es el
    arreglo). La opción `custom` de formato no se ofrece en el asistente.
-3. **Pantalla de emparejar títulos** (issue #13): lo que el importador deja en
-   `Unmatched` (`Samurai X` ↔ `Rurouni Kenshin`, `SaberMarionette` J/R).
+3. **Pantalla de emparejar títulos (issue #13) — A MEDIAS, rama
+   `wip/emparejar-titulos`.** Criterios F1-64 a F1-67 escritos en
+   `ACEPTACION.md`. Hecho y verde por separado: esquema **v4**
+   (`title.pendiente_emparejar`, `title.candidatos`, tabla `title_alias`,
+   `Title.Emparejar/MarcarPropio/QuitarProvisional`, `Store.Alias`,
+   `model.ClaveDeNombre`), importador (alias antes del difuso,
+   `Unmatched` con reglas/franjas/puntuaciones, provisionales marcados, las
+   fuentes en vivo ya no crean título, etiquetas JSON en snake_case), e
+   interfaz (`SeccionSinEmparejar` en Reglas, buscador, tres acciones, demo).
+   **Falta el cableado en `internal/app` + `internal/api`** (un agente lo
+   estaba terminando al guardar): `importar.go` con `ApplyCatalogCon` y
+   `titulos_sin_emparejar`, `nombreDeRegla` → `res.NameFor(i)`,
+   `internal/api/titulos.go` (`GET /titulos/sin-emparejar`,
+   `GET /titulos/buscar`, `POST /titulos/{id}/emparejar`), alarma
+   «N títulos por emparejar», pruebas con la hoja real de CAtv, `docs/API.md`.
+   Contrato exacto: el que consume `web/src/lib/tipos.ts`
+   (`TituloSinEmparejar`, `ResultadoDeEmparejar`) y `web/src/demo/servidor.ts`.
+   **Para retomar:** `git checkout wip/emparejar-titulos && go build ./...`;
+   si `internal/api` no compila, terminar el cableado de arriba; luego
+   `go test ./... -count=1`, `make antena`, humo con la hoja de CAtv
+   (importar → `usar` Samurai X → Rurouni Kenshin → reimportar y ver que se
+   recuerda), commit, merge a `main`, cerrar #13.
 4. **Modo sombra con archivos de verdad** (y firma de los tres criterios
    manuales F1-32, F1-43, F1-53 con Rolando): videos reales en la carpeta
    vigilada, ver que el ingest mide, normaliza y el resolver programa.

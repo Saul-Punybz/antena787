@@ -14,6 +14,7 @@ import type {
   CambioDePlan,
   Canal,
   CuerposDePaso,
+  DecisionDeEmparejar,
   ElementoDelPlan,
   EnCuarentena,
   Estado,
@@ -27,9 +28,12 @@ import type {
   ReglaNueva,
   RellenoPorDefecto,
   RespuestasDePaso,
+  ResultadoDeEmparejar,
   ResumenDeImportacion,
   SemanaDelPlan,
   TituloDeBiblioteca,
+  TituloDelCatalogo,
+  TituloSinEmparejar,
 } from './tipos'
 import { ErrorDeApi } from './tipos'
 
@@ -178,6 +182,24 @@ export const api = {
     pedir<ResumenDeImportacion>('/importar/hoja', conCuerpo('POST', { texto })),
   confirmarRelevos: (relevos: { regla: number; releva_a: number }[]) =>
     pedir<{ ok: true }>('/importar/confirmar-relevos', conCuerpo('POST', relevos)),
+
+  /**
+   * Los títulos que la hoja trajo con un nombre que el catálogo no tiene
+   * (F1-64). Queda guardado entre importaciones: la lista sigue ahí hasta que
+   * alguien decida. Vacía cuando no hay ninguno.
+   */
+  titulosSinEmparejar: () => pedir<TituloSinEmparejar[]>('/titulos/sin-emparejar'),
+  /** Busca fichas del catálogo por nombre, para escoger a mano con cuál es. */
+  buscarTitulos: (q: string) =>
+    pedir<TituloDelCatalogo[]>(`/titulos/buscar?q=${encodeURIComponent(q)}`),
+  /**
+   * Decide un título por emparejar: `usar` lo manda a una ficha del catálogo
+   * (y guarda el nombre de la hoja como alias, para que la próxima se empareje
+   * sola), `propio` lo deja como ficha suya, `quitar` se lleva el título y las
+   * reglas que lo usaban (F1-66, F1-67).
+   */
+  emparejarTitulo: (id: number, decision: DecisionDeEmparejar) =>
+    pedir<ResultadoDeEmparejar>(`/titulos/${id}/emparejar`, conCuerpo('POST', decision)),
 
   /** Sube material por multipart a la carpeta vigilada. */
   async subirMaterial(archivos: File[]): Promise<{ recibidos: number }> {

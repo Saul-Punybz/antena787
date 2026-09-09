@@ -59,9 +59,9 @@ type RepeatProposal struct {
 // nunca los fusiona solo: "SamuraiX" y "Samurai X" quedan como dos títulos y
 // decide la persona.
 type DuplicateWarning struct {
-	A    string
-	B    string
-	Text string
+	A    string `json:"a"`
+	B    string `json:"b"`
+	Text string `json:"texto"`
 }
 
 // Result es todo lo que salió de la hoja: lo que se importa, lo que no
@@ -70,6 +70,7 @@ type Result struct {
 	Rules      []model.ScheduleRule
 	Titles     []model.Title
 	SheetIDs   []string // SheetIDs[i] es el Id que traía la hoja para Rules[i]
+	Names      []string // Names[i] es el nombre tal como venía en la hoja para Rules[i]
 	TitleIndex []int    // TitleIndex[i] es el índice en Titles del título de Rules[i] (-1 si ninguno)
 
 	RowErrors          []RowError
@@ -78,6 +79,11 @@ type Result struct {
 	Handoffs           []HandoffProposal
 	Repeats            []RepeatProposal
 	PossibleDuplicates []DuplicateWarning
+
+	// Match es lo que dejó el emparejamiento con el catálogo: las erratas
+	// que se juntaron solas y los títulos que quedaron por emparejar. Es nil
+	// mientras no se llame a ApplyCatalog.
+	Match *MatchResult
 }
 
 // TitleFor devuelve el título de la regla i, o nil.
@@ -94,6 +100,18 @@ func (r *Result) TitleFor(i int) *model.Title {
 		return nil
 	}
 	return &r.Titles[t]
+}
+
+// NameFor devuelve el nombre de la regla i: el del título si lo tiene y, si
+// no lo tiene —una fuente en vivo no es un título—, el que traía la hoja.
+func (r *Result) NameFor(i int) string {
+	if t := r.TitleFor(i); t != nil {
+		return t.Name
+	}
+	if i >= 0 && i < len(r.Names) {
+		return r.Names[i]
+	}
+	return ""
 }
 
 // Summary cuenta en una línea qué pasó, para enseñárselo a una persona.
@@ -223,24 +241,33 @@ func Rules(sheet Sheet, ch model.Channel, opts ...Option) Result {
 		// El título: se crea por nombre y no se duplica. Nombres que solo
 		// difieren en espacios o mayúsculas son el mismo; los demás no se
 		// fusionan solos (ver PossibleDuplicates).
-		key := strings.ToLower(cleanName(p.name))
-		ti, ok := titles[key]
-		if !ok {
-			ti = len(res.Titles)
-			titles[key] = ti
-			t := model.Title{
-				Name:           cleanName(p.name),
-				Kind:           model.TitleProgram,
-				MetadataSource: "hoja",
+		//
+		// El nombre de una fuente en vivo no es un título y nunca entra al
+		// catálogo (F1-67): "RadioOnce Live!" es de dónde sale la señal, no
+		// un programa con ficha. Esas reglas se quedan sin título y apuntan
+		// a su fuente por LiveSourceID, que pone el store.
+		ti := -1
+		if !p.live {
+			key := strings.ToLower(cleanName(p.name))
+			var ok bool
+			ti, ok = titles[key]
+			if !ok {
+				ti = len(res.Titles)
+				titles[key] = ti
+				t := model.Title{
+					Name:           cleanName(p.name),
+					Kind:           model.TitleProgram,
+					MetadataSource: "hoja",
+				}
+				if ch.ID != 0 {
+					id := ch.ID
+					t.ChannelID = &id
+				}
+				res.Titles = append(res.Titles, t)
 			}
-			if ch.ID != 0 {
-				id := ch.ID
-				t.ChannelID = &id
+			if p.episodes > maxEpisodes[ti] {
+				maxEpisodes[ti] = p.episodes
 			}
-			res.Titles = append(res.Titles, t)
-		}
-		if p.episodes > maxEpisodes[ti] {
-			maxEpisodes[ti] = p.episodes
 		}
 
 		rule := model.ScheduleRule{
@@ -260,6 +287,7 @@ func Rules(sheet Sheet, ch model.Channel, opts ...Option) Result {
 		idx := len(res.Rules)
 		res.Rules = append(res.Rules, rule)
 		res.SheetIDs = append(res.SheetIDs, p.sheetID)
+		res.Names = append(res.Names, cleanName(p.name))
 		res.TitleIndex = append(res.TitleIndex, ti)
 
 		// Corrimiento por día de emisión (auditoría B1): la hoja usa fecha de
@@ -285,11 +313,7 @@ func Rules(sheet Sheet, ch model.Channel, opts ...Option) Result {
 	// La duración del espacio, si nos pasaron la parrilla.
 	if o.grid != nil {
 		for i := range res.Rules {
-			name := ""
-			if t := res.TitleFor(i); t != nil {
-				name = t.Name
-			}
-			if ms := slotFromGrid(o.grid, res.Rules[i].At, name); ms > 0 {
+			if ms := slotFromGrid(o.grid, res.Rules[i].At, res.NameFor(i)); ms > 0 {
 				res.Rules[i].SlotMs = ms
 				continue
 			}
@@ -480,15 +504,15 @@ func proposeHandoffs(res *Result) []HandoffProposal {
 			if ra.At != rb.At || ra.Days != rb.Days || ra.To.Add(1) != rb.From {
 				continue
 			}
-			ta, tb := res.TitleFor(a), res.TitleFor(b)
-			if ta == nil || tb == nil || loose(ta.Name) == loose(tb.Name) {
+			na, nb := res.NameFor(a), res.NameFor(b)
+			if na == "" || nb == "" || loose(na) == loose(nb) {
 				continue
 			}
 			out = append(out, HandoffProposal{
 				From: a, To: b,
 				FromID: res.SheetIDs[a], ToID: res.SheetIDs[b],
 				At:   ra.At,
-				Text: fmt.Sprintf("¿%s releva a %s a las %s?", tb.Name, ta.Name, FormatClock(ra.At)),
+				Text: fmt.Sprintf("¿%s releva a %s a las %s?", nb, na, FormatClock(ra.At)),
 			})
 		}
 	}
@@ -511,8 +535,8 @@ func proposeRepeats(res *Result, ch model.Channel) []RepeatProposal {
 			if ra.Days != rb.Days || ra.At == rb.At {
 				continue
 			}
-			ta, tb := res.TitleFor(a), res.TitleFor(b)
-			if ta == nil || tb == nil || loose(ta.Name) != loose(tb.Name) {
+			na, nb := res.NameFor(a), res.NameFor(b)
+			if na == "" || nb == "" || loose(na) != loose(nb) {
 				continue
 			}
 			if absDays(ra.From, rb.From) > nearDays || absDays(ra.To, rb.To) > nearDays {
@@ -531,8 +555,8 @@ func proposeRepeats(res *Result, ch model.Channel) []RepeatProposal {
 				Primary: primary, Repeat: repeat,
 				PrimaryID: res.SheetIDs[primary], RepeatID: res.SheetIDs[repeat],
 				Text: fmt.Sprintf("«%s» de las %s parece la repetición de «%s» de las %s: ¿la marco como segundo pase?",
-					res.TitleFor(repeat).Name, FormatClock(res.Rules[repeat].At),
-					res.TitleFor(primary).Name, FormatClock(res.Rules[primary].At)),
+					res.NameFor(repeat), FormatClock(res.Rules[repeat].At),
+					res.NameFor(primary), FormatClock(res.Rules[primary].At)),
 			})
 		}
 	}

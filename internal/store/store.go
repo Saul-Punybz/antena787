@@ -55,6 +55,7 @@ type Store struct {
 	Output   *OutputRepo
 	Media    *MediaAssetRepo
 	Title    *TitleRepo
+	Alias    *AliasRepo
 	Episode  *EpisodeRepo
 	Filler   *FillerRepo
 	Live     *LiveSourceRepo
@@ -144,7 +145,10 @@ func (s *Store) wire() {
 	// La biblioteca anota en la bitácora lo que se cambia a mano (la pista de
 	// sonido que va al aire), así que necesita la cadena de auditoría.
 	s.Media = &MediaAssetRepo{db: s.db, audit: s.Audit}
-	s.Title = &TitleRepo{db: s.db}
+	// El catálogo anota en la bitácora lo que se empareja a mano (F1-66,
+	// F1-67), así que necesita la cadena de auditoría.
+	s.Title = &TitleRepo{db: s.db, audit: s.Audit}
+	s.Alias = &AliasRepo{db: s.db}
 	s.Episode = &EpisodeRepo{db: s.db}
 	s.Filler = &FillerRepo{db: s.db}
 	s.Live = &LiveSourceRepo{db: s.db}

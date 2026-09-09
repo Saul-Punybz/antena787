@@ -132,7 +132,7 @@ type Alarma struct {
 
 // fuentesDeAlarma es el orden en que se enseñan las alarmas vivas. Cada
 // fuente manda sobre las suyas y no pisa las de las demás.
-var fuentesDeAlarma = []string{"guia", "disco", "vencimiento", "avisos"}
+var fuentesDeAlarma = []string{"guia", "disco", "vencimiento", "emparejar", "avisos"}
 
 // DBName es el nombre del archivo de la base dentro de la carpeta de datos.
 const DBName = "antena.db"
@@ -345,6 +345,10 @@ func (a *App) Start(parent context.Context) {
 	a.mu.Unlock()
 
 	a.ctx, a.cancel = context.WithCancel(parent)
+
+	// Los títulos por emparejar que quedaron de la última vez siguen ahí:
+	// el aviso se enciende al arrancar, no en la siguiente importación.
+	a.RefreshPendientes(a.ctx)
 
 	a.guard("resolver", a.resolverLoop)
 	a.guard("ingest", a.ingestLoop)

@@ -27,6 +27,7 @@ type Migration struct {
 var migrations = []Migration{
 	{Version: 2, SQL: migracion2},
 	{Version: 3, SQL: migracion3},
+	{Version: 4, SQL: migracion4},
 }
 
 // migracion2 cierra tres huecos de integridad del plan (F1-12, F1-22, F1-26
@@ -110,6 +111,40 @@ ALTER TABLE media_asset ADD COLUMN audio_sidecar TEXT NOT NULL DEFAULT '';
 
 -- El archivo de subtítulos que estaba al lado, con el mismo nombre.
 ALTER TABLE media_asset ADD COLUMN subtitulos_sidecar TEXT NOT NULL DEFAULT '';
+`
+
+// migracion4 le da al catálogo la memoria de los emparejamientos (F1-64 a
+// F1-67): qué títulos quedaron por emparejar, con qué fichas se parecían, y
+// cómo llama la hoja a cada ficha para que la próxima vez se empareje sola.
+//
+// Como las de arriba, no va en schema.sql: ese archivo es la foto de la
+// versión 1 y todas las bases —nuevas y viejas— suben por estos mismos
+// escalones, que es lo que hace que terminen idénticas.
+const migracion4 = `
+-- El importador lo creó porque el nombre de la hoja no cuadró con ninguna
+-- ficha: la regla entró igual, pero falta que alguien diga con cuál va.
+ALTER TABLE title ADD COLUMN pendiente_emparejar INTEGER NOT NULL DEFAULT 0;
+
+-- Las fichas que se le parecían tanto que no se podía elegir sin adivinar:
+-- JSON [12, 15]. Vacío cuando no se parecía a ninguna.
+ALTER TABLE title ADD COLUMN candidatos TEXT NOT NULL DEFAULT '[]';
+
+-- Los que no están emparejados se buscan seguido; el resto no estorba.
+CREATE INDEX title_pendiente ON title(channel_id, pendiente_emparejar);
+
+-- Cómo llama la hoja a una ficha del catálogo. El alias se guarda tal como
+-- se escribió y la clave es su forma comparable (model.ClaveDeNombre), que
+-- es por donde se busca: una sola por canal.
+CREATE TABLE title_alias (
+  id          INTEGER PRIMARY KEY,
+  channel_id  INTEGER REFERENCES channel(id),   -- NULL = vale para todos
+  alias       TEXT NOT NULL,                    -- como lo escribe la hoja
+  clave       TEXT NOT NULL,                    -- minúsculas, sin acentos ni signos
+  title_id    INTEGER NOT NULL REFERENCES title(id) ON DELETE CASCADE,
+  creado      TEXT NOT NULL,
+  UNIQUE (channel_id, clave)
+);
+CREATE INDEX title_alias_titulo ON title_alias(title_id);
 `
 
 // SchemaVersion es la versión a la que lleva este binario.

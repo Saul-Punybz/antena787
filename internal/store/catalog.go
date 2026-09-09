@@ -12,24 +12,30 @@ import (
 // ── títulos ───────────────────────────────────────────────────────────
 
 // TitleRepo son las obras: series, películas, promos, ids, spots.
-type TitleRepo struct{ db *sql.DB }
+type TitleRepo struct {
+	db    *sql.DB
+	audit *AuditRepo // para anotar lo que se empareja a mano; puede ser nil
+}
 
 const titleCols = `id, channel_id, nombre, tipo, sinopsis, anio, genero,
 	clasificacion_contenido, clasificacion_audiencia, caratula, fuente_ficha,
-	media_asset_id`
+	media_asset_id, pendiente_emparejar, candidatos`
 
 func scanTitle(sc interface{ Scan(...any) error }) (model.Title, error) {
 	var t model.Title
 	var canal, asset sql.NullInt64
 	var anio sql.NullInt64
+	var candidatos string
 	err := sc.Scan(&t.ID, &canal, &t.Name, &t.Kind, &t.Synopsis, &anio, &t.Genre,
-		&t.ContentRating, &t.AudienceRating, &t.Artwork, &t.MetadataSource, &asset)
+		&t.ContentRating, &t.AudienceRating, &t.Artwork, &t.MetadataSource, &asset,
+		&t.PendienteEmparejar, &candidatos)
 	if err != nil {
 		return model.Title{}, err
 	}
 	t.ChannelID = ptrInt64(canal)
 	t.Year = ptrInt(anio)
 	t.MediaAssetID = ptrInt64(asset)
+	t.Candidatos = parseInt64s(candidatos)
 	return t, nil
 }
 
@@ -41,11 +47,11 @@ func (r *TitleRepo) Insert(ctx context.Context, t *model.Title) error {
 	res, err := r.db.ExecContext(ctx, `
 		INSERT INTO title (channel_id, nombre, tipo, sinopsis, anio, genero,
 			clasificacion_contenido, clasificacion_audiencia, caratula,
-			fuente_ficha, media_asset_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			fuente_ficha, media_asset_id, pendiente_emparejar, candidatos)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		nullInt64(t.ChannelID), t.Name, string(t.Kind), t.Synopsis, nullInt(t.Year),
 		t.Genre, t.ContentRating, t.AudienceRating, t.Artwork, t.MetadataSource,
-		nullInt64(t.MediaAssetID))
+		nullInt64(t.MediaAssetID), t.PendienteEmparejar, jsonInt64s(t.Candidatos))
 	if err != nil {
 		return translate("guardar el título", err)
 	}
@@ -65,11 +71,12 @@ func (r *TitleRepo) Update(ctx context.Context, t *model.Title) error {
 	res, err := r.db.ExecContext(ctx, `
 		UPDATE title SET channel_id = ?, nombre = ?, tipo = ?, sinopsis = ?, anio = ?,
 			genero = ?, clasificacion_contenido = ?, clasificacion_audiencia = ?,
-			caratula = ?, fuente_ficha = ?, media_asset_id = ?
+			caratula = ?, fuente_ficha = ?, media_asset_id = ?,
+			pendiente_emparejar = ?, candidatos = ?
 		WHERE id = ?`,
 		nullInt64(t.ChannelID), t.Name, string(t.Kind), t.Synopsis, nullInt(t.Year),
 		t.Genre, t.ContentRating, t.AudienceRating, t.Artwork, t.MetadataSource,
-		nullInt64(t.MediaAssetID), t.ID)
+		nullInt64(t.MediaAssetID), t.PendienteEmparejar, jsonInt64s(t.Candidatos), t.ID)
 	if err != nil {
 		return translate("guardar el título", err)
 	}

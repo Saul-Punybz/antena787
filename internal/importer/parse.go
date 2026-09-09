@@ -180,10 +180,10 @@ func (e RowError) Error() string {
 // Notice es un aviso que no impide importar la fila: se importó, pero hay
 // algo que la persona debe saber.
 type Notice struct {
-	Line    int
-	SheetID string
-	Title   string
-	Text    string
+	Line    int    `json:"fila"`
+	SheetID string `json:"id_hoja"`
+	Title   string `json:"titulo"`
+	Text    string `json:"texto"`
 }
 
 // ── entrada ───────────────────────────────────────────────────────────

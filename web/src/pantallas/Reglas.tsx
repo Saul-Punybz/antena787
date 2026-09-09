@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Caratula } from '../componentes/Caratula'
 import { Panel } from '../componentes/Panel'
 import { PatronDeDias } from '../componentes/PatronDeDias'
@@ -12,7 +12,14 @@ import {
   minutosAHora12,
   textoDiasRestantes,
 } from '../lib/fechas'
-import { ErrorDeApi, type Regla, type ResumenDeImportacion } from '../lib/tipos'
+import {
+  ErrorDeApi,
+  type DecisionDeEmparejar,
+  type Regla,
+  type ResumenDeImportacion,
+  type TituloDelCatalogo,
+  type TituloSinEmparejar,
+} from '../lib/tipos'
 
 type Filtro = 'todas' | 'vencen' | 'vivo'
 
@@ -22,13 +29,34 @@ export function Reglas() {
   const [filtro, setFiltro] = useState<Filtro>('todas')
   const [editando, setEditando] = useState<Regla | 'nueva' | null>(null)
   const [importando, setImportando] = useState(false)
+  const [sinEmparejar, setSinEmparejar] = useState<TituloSinEmparejar[]>([])
 
   const anio = Number((estado?.dia_emision ?? '2026-01-01').slice(0, 4))
 
   function cargar() {
     api.reglas().then(setReglas).catch(() => setReglas([]))
   }
-  useEffect(cargar, [])
+  function cargarSinEmparejar() {
+    api
+      .titulosSinEmparejar()
+      .then((xs) => setSinEmparejar(xs ?? []))
+      .catch(() => setSinEmparejar([]))
+  }
+  useEffect(() => {
+    cargar()
+    cargarSinEmparejar()
+  }, [])
+
+  /**
+   * Ya se decidió uno: sale de la lista, las reglas cambiaron de título y la
+   * parrilla se vuelve a armar aquí mismo, igual que al editar una regla.
+   */
+  async function tituloResuelto(id: number) {
+    setSinEmparejar((xs) => xs.filter((x) => x.id !== id))
+    await api.recalcular().catch(() => {})
+    cargar()
+    cargarSinEmparejar()
+  }
 
   const vencenPronto = useMemo(
     () => (reglas ?? []).filter((r) => r.dias_restantes <= 30),
@@ -67,6 +95,10 @@ export function Reglas() {
           </button>
         </div>
       </div>
+
+      {sinEmparejar.length > 0 && (
+        <SeccionSinEmparejar titulos={sinEmparejar} alResolver={tituloResuelto} />
+      )}
 
       <div className="pastillas">
         <button
@@ -119,9 +151,11 @@ export function Reglas() {
       {importando && (
         <PanelDeImportacion
           alCerrar={() => setImportando(false)}
+          alCambiarTitulos={cargarSinEmparejar}
           alTerminar={() => {
             setImportando(false)
             cargar()
+            cargarSinEmparejar()
           }}
         />
       )}
@@ -219,6 +253,259 @@ function TarjetaDeRegla({
         </div>
       </div>
     </button>
+  )
+}
+
+// ── títulos por emparejar (F1-64 a F1-67) ─────────────────────────────
+
+/**
+ * Lo que la hoja llamó de una manera y el catálogo de otra. Nunca se adivina
+ * (F1-65): la lista se queda ahí hasta que una persona diga cuál es cada uno.
+ */
+function SeccionSinEmparejar({
+  titulos,
+  alResolver,
+}: {
+  titulos: TituloSinEmparejar[]
+  alResolver: (id: number) => void
+}) {
+  return (
+    <section>
+      <div className="rotulo">TÍTULOS POR EMPAREJAR</div>
+      <p className="subtitulo" style={{ marginTop: 5 }}>
+        La hoja los trae con un nombre que el catálogo no usa. Las reglas ya entraron; solo
+        falta decir cuál es cada uno. El nombre del catálogo manda, y lo que decidas queda
+        anotado: la próxima hoja se empareja sola.
+      </p>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+          gap: 14,
+          marginTop: 13,
+        }}
+      >
+        {titulos.map((t) => (
+          <TarjetaSinEmparejar key={t.id} titulo={t} alResolver={alResolver} />
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function cuantasReglas(n: number): string {
+  return `${n} ${n === 1 ? 'regla' : 'reglas'}`
+}
+
+function TarjetaSinEmparejar({
+  titulo,
+  alResolver,
+}: {
+  titulo: TituloSinEmparejar
+  alResolver: (id: number) => void
+}) {
+  const [elegido, setElegido] = useState<{ id: number; nombre: string } | null>(null)
+  const [busqueda, setBusqueda] = useState('')
+  const [resultados, setResultados] = useState<TituloDelCatalogo[]>([])
+  const [buscando, setBuscando] = useState(false)
+  const [confirmandoQuitar, setConfirmandoQuitar] = useState(false)
+  const [trabajando, setTrabajando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [hecho, setHecho] = useState<string | null>(null)
+  // Una lista vacía puede llegar como null desde el servidor: se pinta igual.
+  const candidatos = titulo.candidatos ?? []
+  const franjas = titulo.franjas ?? []
+
+  // La tarjeta se va sola cuando ya se decidió, pero primero se lee lo que dijo
+  // el servidor: que quedó anotado para la próxima hoja es la mitad del asunto.
+  const alResolverRef = useRef(alResolver)
+  alResolverRef.current = alResolver
+  useEffect(() => {
+    if (!hecho) return
+    const t = window.setTimeout(() => alResolverRef.current(titulo.id), 2200)
+    return () => window.clearTimeout(t)
+  }, [hecho, titulo.id])
+
+  // La búsqueda espera a que la persona deje de escribir: una llamada por
+  // pausa, no una por tecla.
+  useEffect(() => {
+    const q = busqueda.trim()
+    if (q.length < 2) {
+      setResultados([])
+      setBuscando(false)
+      return
+    }
+    setBuscando(true)
+    const t = window.setTimeout(() => {
+      api
+        .buscarTitulos(q)
+        .then((r) => setResultados(r ?? []))
+        .catch(() => setResultados([]))
+        .finally(() => setBuscando(false))
+    }, 250)
+    return () => window.clearTimeout(t)
+  }, [busqueda])
+
+  async function decidir(decision: DecisionDeEmparejar) {
+    setTrabajando(true)
+    setError(null)
+    try {
+      const r = await api.emparejarTitulo(titulo.id, decision)
+      setHecho(r.texto)
+    } catch (e) {
+      setError(e instanceof ErrorDeApi ? e.message : 'No se pudo guardar la decisión.')
+      setTrabajando(false)
+    }
+  }
+
+  function escoger(id: number, nombre: string) {
+    setElegido({ id, nombre })
+    setConfirmandoQuitar(false)
+  }
+
+  if (hecho) {
+    return (
+      <div className="tarjeta" style={{ padding: '16px 18px' }}>
+        <div className="fila" style={{ alignItems: 'flex-start', gap: 11 }}>
+          <span className="punto punto--bien" style={{ marginTop: 5 }} />
+          <span style={{ font: '500 14px var(--sans)' }}>{hecho}</span>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="tarjeta tarjeta--aviso" style={{ padding: '16px 18px' }}>
+      <div className="entre" style={{ gap: 10 }}>
+        <span style={{ font: '600 15px var(--sans)' }}>{titulo.nombre}</span>
+        <span className="etiqueta etiqueta--nota">{cuantasReglas(titulo.reglas)}</span>
+      </div>
+      <p className="subtitulo" style={{ marginTop: 5 }}>
+        {titulo.texto}
+      </p>
+      {franjas.length > 0 && (
+        <div className="mono tenue" style={{ fontSize: 12.5, marginTop: 7 }}>
+          va en {franjas.join(' · ')}
+        </div>
+      )}
+
+      {candidatos.length > 0 && (
+        <div style={{ marginTop: 15 }}>
+          <div className="rotulo">¿ES ALGUNO DE ESTOS?</div>
+          <div className="pastillas" style={{ marginTop: 8 }}>
+            {candidatos.map((c) => (
+              <button
+                key={c.id}
+                className={'pastilla' + (elegido?.id === c.id ? ' pastilla--activa' : '')}
+                onClick={() => escoger(c.id, c.nombre)}
+              >
+                {c.nombre}
+                <span className="tenue" style={{ marginLeft: 7, fontSize: 11.5 }}>
+                  {Math.round(c.puntuacion * 100)}%
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="campo" style={{ marginTop: 15 }}>
+        <label htmlFor={`emparejar-${titulo.id}`}>Buscar en el catálogo</label>
+        <input
+          id={`emparejar-${titulo.id}`}
+          type="text"
+          autoComplete="off"
+          value={busqueda}
+          onChange={(e) => {
+            setBusqueda(e.target.value)
+            setElegido(null)
+          }}
+          placeholder="Escribe el nombre de la ficha"
+        />
+      </div>
+
+      {busqueda.trim().length >= 2 && (
+        <div style={{ display: 'grid', gap: 6, marginTop: 9 }}>
+          {buscando && <span className="ayuda">Buscando…</span>}
+          {!buscando && resultados.length === 0 && (
+            <span className="ayuda">
+              Ninguna ficha del catálogo se llama así. Si de verdad es nuevo, dale a «Es un
+              título nuevo».
+            </span>
+          )}
+          {resultados.map((r) => (
+            <button
+              key={r.id}
+              className={'pastilla' + (elegido?.id === r.id ? ' pastilla--activa' : '')}
+              style={{ textAlign: 'left' }}
+              onClick={() => escoger(r.id, r.nombre)}
+            >
+              {r.nombre}
+              <span className="tenue" style={{ marginLeft: 8, fontSize: 11.5 }}>
+                {r.tipo}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {elegido && (
+        <div className="ayuda" style={{ marginTop: 9 }}>
+          Va a quedar como «{elegido.nombre}»: el nombre del catálogo es el que manda.
+        </div>
+      )}
+
+      {error && (
+        <div className="error-en-cristiano" style={{ marginTop: 11 }}>
+          {error}
+        </div>
+      )}
+
+      <div className="fila" style={{ gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+        <button
+          className="boton boton--primario"
+          disabled={!elegido || trabajando}
+          onClick={() => elegido && decidir({ accion: 'usar', title_id: elegido.id })}
+        >
+          Es este
+        </button>
+        <button
+          className="boton"
+          disabled={trabajando}
+          onClick={() => decidir({ accion: 'propio' })}
+        >
+          Es un título nuevo
+        </button>
+        <button
+          className="boton boton--peligro"
+          disabled={trabajando}
+          onClick={() => setConfirmandoQuitar(true)}
+        >
+          No es un programa, quitar
+        </button>
+      </div>
+
+      {confirmandoQuitar && (
+        <div className="tarjeta tarjeta--problema" style={{ padding: '13px 15px', marginTop: 11 }}>
+          <div style={{ font: '500 13.5px var(--sans)' }}>
+            Se van con él {cuantasReglas(titulo.reglas)} de la parrilla
+            {franjas.length > 0 ? ` (${franjas.join(' · ')})` : ''}.
+          </div>
+          <div className="fila" style={{ gap: 8, marginTop: 11 }}>
+            <button
+              className="boton boton--peligro"
+              disabled={trabajando}
+              onClick={() => decidir({ accion: 'quitar' })}
+            >
+              Sí, quitarlo
+            </button>
+            <button className="boton" onClick={() => setConfirmandoQuitar(false)}>
+              Mejor no
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -440,12 +727,15 @@ function EditorDeRegla({
 function PanelDeImportacion({
   alCerrar,
   alTerminar,
+  alCambiarTitulos,
 }: {
   alCerrar: () => void
   alTerminar: () => void
+  alCambiarTitulos: () => void
 }) {
   const [texto, setTexto] = useState('')
   const [resumen, setResumen] = useState<ResumenDeImportacion | null>(null)
+  const [sinEmparejar, setSinEmparejar] = useState<TituloSinEmparejar[]>([])
   const [error, setError] = useState<string | null>(null)
   const [trabajando, setTrabajando] = useState(false)
 
@@ -453,7 +743,10 @@ function PanelDeImportacion({
     setTrabajando(true)
     setError(null)
     try {
-      setResumen(await api.importarHoja(texto))
+      const r = await api.importarHoja(texto)
+      setResumen(r)
+      setSinEmparejar(r.titulos_sin_emparejar ?? [])
+      alCambiarTitulos()
       // La hoja crea reglas: la parrilla se vuelve a armar de una vez.
       await api.recalcular().catch(() => {})
     } catch (e) {
@@ -549,6 +842,52 @@ function PanelDeImportacion({
               </div>
             </div>
           </div>
+
+          {sinEmparejar.length > 0 && (
+            <SeccionSinEmparejar
+              titulos={sinEmparejar}
+              alResolver={(id) => {
+                setSinEmparejar((xs) => xs.filter((x) => x.id !== id))
+                alCambiarTitulos()
+                api.recalcular().catch(() => {})
+              }}
+            />
+          )}
+
+          {(resumen.avisos ?? []).length > 0 && (
+            <div className="tarjeta" style={{ padding: '16px 18px' }}>
+              <div className="rotulo">NOMBRES QUE SE JUNTARON SOLOS</div>
+              <p className="subtitulo" style={{ marginTop: 6 }}>
+                La hoja los escribía de otra manera y el catálogo ya los tenía. No hay nada
+                que hacer: quedaron en un solo título.
+              </p>
+              <ul
+                style={{ margin: '12px 0 0', paddingLeft: 18, fontSize: 13, lineHeight: 1.6 }}
+              >
+                {(resumen.avisos ?? []).map((a, i) => (
+                  <li key={`${a.titulo}-${i}`}>{a.texto}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {(resumen.posibles_duplicados ?? []).length > 0 && (
+            <div className="tarjeta tarjeta--aviso" style={{ padding: '16px 18px' }}>
+              <div className="rotulo">DOS NOMBRES QUE PARECEN EL MISMO</div>
+              <ul
+                style={{ margin: '10px 0 0', padding: 0, listStyle: 'none', display: 'grid', gap: 8 }}
+              >
+                {(resumen.posibles_duplicados ?? []).map((d, i) => (
+                  <li key={`${d.a}-${d.b}-${i}`} style={{ fontSize: 13.5 }}>
+                    <span className="mono tenue">
+                      {d.a} · {d.b}
+                    </span>
+                    <div style={{ marginTop: 2 }}>{d.texto}</div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {resumen.fechas_corridas.length > 0 && (
             <div className="tarjeta tarjeta--aviso" style={{ padding: '16px 18px' }}>

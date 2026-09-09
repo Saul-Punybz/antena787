@@ -9,6 +9,7 @@
 import type {
   Ajustes,
   Alarma,
+  CandidatoDeTitulo,
   DetectadoEnLaMaquina,
   ElementoDelPlan,
   EpisodioDeBiblioteca,
@@ -22,9 +23,12 @@ import type {
   OpcionesDelAsistente,
   Regla,
   RespuestasDelAsistente,
+  ResultadoDeEmparejar,
   ResumenDeImportacion,
   SemanaDelPlan,
   TituloDeBiblioteca,
+  TituloDelCatalogo,
+  TituloSinEmparejar,
 } from '../lib/tipos'
 import {
   AHORA_BASE,
@@ -265,6 +269,15 @@ function alarmasDe(dia: string): Alarma[] {
       accion: { texto: 'llenar', ruta: '/parrilla' },
     })
   }
+  if (pendientes.length) {
+    out.push({
+      tipo: 'emparejar',
+      nivel: 'aviso',
+      texto: `${pendientes.length} ${pendientes.length === 1 ? 'título' : 'títulos'} por emparejar`,
+      detalle: pendientes.map((p) => p.nombre).join(' · '),
+      accion: { texto: 'emparejar', ruta: '/reglas' },
+    })
+  }
   out.push({
     tipo: 'material',
     nivel: 'bien',
@@ -450,6 +463,9 @@ function importarHoja(texto: string): ResumenDeImportacion {
       })
     }
   })
+  // Si la hoja vuelve a traer uno de los nombres que ya se habían decidido,
+  // vuelve a quedar por emparejar: es una hoja nueva.
+  reponerPendientes(texto)
   return {
     reglas_creadas: creadas,
     titulos_creados: nuevosTitulos,
@@ -464,6 +480,243 @@ function importarHoja(texto: string): ResumenDeImportacion {
       : [],
     filas_con_error: errores,
     fechas_corridas: corridas,
+    repeticiones_propuestas: creadas
+      ? [
+          {
+            regla_primaria: 9,
+            regla_que_repite: 18,
+            texto:
+              '«You’re Under Arrest» de las 11:00 PM parece la repetición de la de las 2:00 PM: ¿la marco como segundo pase?',
+          },
+        ]
+      : [],
+    posibles_duplicados: creadas
+      ? [
+          {
+            a: 'SamuraiX',
+            b: 'Samurai X',
+            texto:
+              '«SamuraiX» y «Samurai X» parecen el mismo programa escrito de dos maneras: los junté en uno solo.',
+          },
+        ]
+      : [],
+    avisos: creadas
+      ? [
+          {
+            fila: 0,
+            id_hoja: '',
+            titulo: 'Zorro 57',
+            texto: '«Zorro 57» es «Zorro (1957)» en el catálogo: los junté en un solo título.',
+          },
+        ]
+      : [],
+    titulos_sin_emparejar: listaSinEmparejar(),
+    resumen: `${creadas} reglas importadas, ${nuevosTitulos} títulos${
+      errores.length ? `, ${errores.length} filas no cuadraron` : ''
+    }.`,
+  }
+}
+
+// ── emparejar títulos (F1-64 a F1-67) ─────────────────────────────────
+// Los tres casos de verdad de la hoja de CAtv: «Samurai X» (cuya ficha es
+// «Rurouni Kenshin» y no se parece en nada), «SaberMarionette» (que se parece
+// igual a la J y a la R, así que no se adivina) y «Los Simuladores» (que no
+// tiene ficha ninguna). El servidor de verdad los guarda; aquí se recuerdan
+// mientras la pestaña esté abierta.
+
+interface SemillaSinEmparejar {
+  nombre: string
+  texto: string
+  candidatos: { nombre: string; puntuacion: number }[]
+}
+
+const SEMILLAS_SIN_EMPAREJAR: SemillaSinEmparejar[] = [
+  {
+    nombre: 'Samurai X',
+    texto: '«Samurai X» no tiene ficha en el catálogo con ese nombre.',
+    candidatos: [],
+  },
+  {
+    nombre: 'SaberMarionette',
+    texto: '«SaberMarionette» se parece igual a dos fichas del catálogo: no se adivina cuál es.',
+    candidatos: [
+      { nombre: 'Saber Marionette J', puntuacion: 0.94 },
+      { nombre: 'Saber Marionette R', puntuacion: 0.93 },
+    ],
+  },
+  {
+    nombre: 'Los Simuladores',
+    texto: '«Los Simuladores» no tiene ficha en el catálogo con ese nombre.',
+    candidatos: [],
+  },
+]
+
+function idDeFicha(nombre: string): number {
+  return titulos.find((t) => t.nombre === nombre)?.id ?? 0
+}
+
+interface PendienteDemo {
+  id: number
+  nombre: string
+  texto: string
+  candidatos: CandidatoDeTitulo[]
+}
+
+function semillaAPendiente(s: SemillaSinEmparejar): PendienteDemo {
+  return {
+    id: idDeFicha(s.nombre),
+    nombre: s.nombre,
+    texto: s.texto,
+    candidatos: s.candidatos
+      .map((c) => ({ id: idDeFicha(c.nombre), nombre: c.nombre, puntuacion: c.puntuacion }))
+      .filter((c) => c.id > 0),
+  }
+}
+
+let pendientes: PendienteDemo[] = SEMILLAS_SIN_EMPAREJAR.map(semillaAPendiente)
+
+function reponerPendientes(texto: string) {
+  const pegado = texto.toLowerCase()
+  for (const s of SEMILLAS_SIN_EMPAREJAR) {
+    if (!pegado.includes(s.nombre.toLowerCase())) continue
+    const p = semillaAPendiente(s)
+    if (p.id && !pendientes.some((x) => x.id === p.id)) pendientes = [...pendientes, p]
+  }
+}
+
+const LETRAS_DE_DIAS = 'LMMJVSD'
+
+/** El patrón de días, en cristiano: «L-V», «S-D», «todos los días» o «LMV». */
+function diasEnCristiano(patron: string): string {
+  const puestos = (patron + '_______').slice(0, 7).split('').map((c) => c !== '_' && c !== ' ')
+  if (puestos.every(Boolean)) return 'todos los días'
+  const semana = puestos.slice(0, 5).every(Boolean) && !puestos[5] && !puestos[6]
+  if (semana) return 'L-V'
+  const finDeSemana = !puestos.slice(0, 5).some(Boolean) && puestos[5] && puestos[6]
+  if (finDeSemana) return 'S-D'
+  return puestos.map((v, i) => (v ? LETRAS_DE_DIAS[i] : '')).join('') || 'sin días'
+}
+
+function horaEnCristiano(minutos: number): string {
+  const h = Math.floor(minutos / 60) % 24
+  const m = minutos % 60
+  const s = h < 12 ? 'AM' : 'PM'
+  return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, '0')} ${s}`
+}
+
+function reglasDe(nombre: string): Regla[] {
+  return reglas.filter((r) => r.titulo === nombre)
+}
+
+/** Las franjas donde va el título, para que se vea qué se está decidiendo. */
+function franjasDe(nombre: string): string[] {
+  const vistas = new Set<string>()
+  for (const r of reglasDe(nombre)) {
+    vistas.add(`${diasEnCristiano(r.patron_de_dias)} ${horaEnCristiano(r.hora)}`)
+  }
+  return [...vistas]
+}
+
+function listaSinEmparejar(): TituloSinEmparejar[] {
+  return pendientes.map((p) => ({
+    id: p.id,
+    nombre: p.nombre,
+    texto: p.texto,
+    candidatos: p.candidatos,
+    reglas: reglasDe(p.nombre).length,
+    franjas: franjasDe(p.nombre),
+  }))
+}
+
+/** Las fichas del catálogo, menos las que todavía están por emparejar. */
+function buscarEnElCatalogo(q: string): TituloDelCatalogo[] {
+  const busca = q.trim().toLowerCase()
+  if (!busca) return []
+  const pendiente = new Set(pendientes.map((p) => p.nombre.toLowerCase()))
+  return titulos
+    .filter(
+      (t) => !pendiente.has(t.nombre.toLowerCase()) && t.nombre.toLowerCase().includes(busca),
+    )
+    .slice(0, 20)
+    .map((t) => ({ id: t.id, nombre: t.nombre, tipo: t.tipo }))
+}
+
+/**
+ * Decide un título por emparejar. El nombre del catálogo manda: las reglas
+ * pasan a esa ficha y el nombre de la hoja queda de alias (F1-66).
+ */
+function emparejar(
+  id: number,
+  cuerpo: Record<string, unknown> | undefined,
+): { estado: number; cuerpo: ResultadoDeEmparejar | { error: string; campo?: string } } {
+  const pendiente = pendientes.find((p) => p.id === id)
+  if (!pendiente)
+    return { estado: 404, cuerpo: { error: 'Ese título ya no está por emparejar.' } }
+  const accion = String(cuerpo?.accion ?? '')
+
+  if (accion === 'usar') {
+    const destino = Number(cuerpo?.title_id)
+    if (!destino)
+      return {
+        estado: 400,
+        cuerpo: { error: 'Escoge con cuál ficha del catálogo es.', campo: 'title_id' },
+      }
+    const ficha = titulos.find((t) => t.id === destino)
+    if (!ficha)
+      return { estado: 404, cuerpo: { error: 'Esa ficha ya no está en el catálogo.' } }
+    if (pendientes.some((p) => p.id === destino))
+      return {
+        estado: 409,
+        cuerpo: {
+          error: 'Esa ficha también está por emparejar. Decide primero cuál es.',
+          campo: 'title_id',
+        },
+      }
+    const movidas = reglasDe(pendiente.nombre).length
+    reglas = reglas.map((r) =>
+      r.titulo === pendiente.nombre ? { ...r, titulo: ficha.nombre, title_id: ficha.id } : r,
+    )
+    pendientes = pendientes.filter((p) => p.id !== id)
+    return {
+      estado: 200,
+      cuerpo: {
+        reglas_movidas: movidas,
+        alias: pendiente.nombre,
+        texto: `«${pendiente.nombre}» es «${ficha.nombre}»: ${movidas} ${
+          movidas === 1 ? 'regla pasó' : 'reglas pasaron'
+        } a esa ficha. Queda anotado el nombre de la hoja: la próxima se empareja sola.`,
+      },
+    }
+  }
+
+  if (accion === 'propio') {
+    pendientes = pendientes.filter((p) => p.id !== id)
+    return {
+      estado: 200,
+      cuerpo: {
+        texto: `«${pendiente.nombre}» se queda con ficha propia en el catálogo.`,
+      },
+    }
+  }
+
+  if (accion === 'quitar') {
+    const quitadas = reglasDe(pendiente.nombre).length
+    reglas = reglas.filter((r) => r.titulo !== pendiente.nombre)
+    pendientes = pendientes.filter((p) => p.id !== id)
+    return {
+      estado: 200,
+      cuerpo: {
+        reglas_quitadas: quitadas,
+        texto: `«${pendiente.nombre}» ya no es un título del catálogo. Se fueron con él ${quitadas} ${
+          quitadas === 1 ? 'regla' : 'reglas'
+        }.`,
+      },
+    }
+  }
+
+  return {
+    estado: 400,
+    cuerpo: { error: 'Esa decisión no se entiende.', campo: 'accion' },
   }
 }
 
@@ -1083,6 +1336,13 @@ export async function responder(ruta: string, init?: RequestInit): Promise<Respo
   }
   if (p === '/importar/hoja') return json(importarHoja(String(cuerpo?.texto ?? '')))
   if (p === '/importar/confirmar-relevos') return json({ ok: true })
+  if (p === '/titulos/sin-emparejar') return json(listaSinEmparejar())
+  if (p === '/titulos/buscar') return json(buscarEnElCatalogo(url.searchParams.get('q') ?? ''))
+  const aEmparejar = p.match(/^\/titulos\/(\d+)\/emparejar$/)
+  if (aEmparejar && metodo === 'POST') {
+    const r = emparejar(Number(aEmparejar[1]), cuerpo as Record<string, unknown> | undefined)
+    return json(r.cuerpo, r.estado)
+  }
   if (p === '/relleno')
     return json([{ id: 1, nombre: 'Cartel de la estación con cama musical', duracion_ms: 30_000 }])
   if (p === '/incidentes') return json([])

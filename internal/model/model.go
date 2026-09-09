@@ -264,6 +264,28 @@ type Title struct {
 	Artwork        string    `json:"caratula" db:"caratula"`
 	MetadataSource string    `json:"fuente_ficha" db:"fuente_ficha"`
 	MediaAssetID   *int64    `json:"media_asset_id" db:"media_asset_id"`
+
+	// PendienteEmparejar dice que este título lo creó el importador porque el
+	// nombre de la hoja no cuadró con ninguna ficha del catálogo (F1-64): la
+	// regla se importó igual, pero alguien tiene que decir con qué ficha va.
+	PendienteEmparejar bool `json:"pendiente_emparejar" db:"pendiente_emparejar"`
+
+	// Candidatos son las fichas del catálogo que se le parecían tanto que el
+	// importador no se atrevió a elegir (F1-65). Vacío cuando no se parecía
+	// a ninguna.
+	Candidatos []int64 `json:"candidatos" db:"candidatos"`
+}
+
+// TitleAlias es cómo llama la hoja a una ficha del catálogo: «Samurai X» es
+// la ficha «Rurouni Kenshin». Se aprende cuando una persona empareja los dos
+// (F1-66) y desde entonces la hoja se empareja sola.
+type TitleAlias struct {
+	ID        int64     `json:"id" db:"id"`
+	ChannelID *int64    `json:"channel_id" db:"channel_id"`
+	Alias     string    `json:"alias" db:"alias"` // como lo escribe la hoja
+	Clave     string    `json:"clave" db:"clave"` // ClaveDeNombre(Alias)
+	TitleID   int64     `json:"title_id" db:"title_id"`
+	Creado    time.Time `json:"creado" db:"creado"`
 }
 
 type Episode struct {

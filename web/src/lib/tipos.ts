@@ -89,7 +89,14 @@ export function esHueco(x: FilaDelPlan): x is HuecoDelPlan {
 export type NivelAlarma = 'bien' | 'aviso' | 'problema'
 
 export interface Alarma {
-  tipo?: 'sobrecupo' | 'hueco' | 'vencimiento' | 'sin_relleno' | 'material' | string
+  tipo?:
+    | 'sobrecupo'
+    | 'hueco'
+    | 'vencimiento'
+    | 'sin_relleno'
+    | 'material'
+    | 'emparejar'
+    | string
   nivel: NivelAlarma
   texto: string
   detalle?: string
@@ -300,10 +307,99 @@ export interface RelevoPropuesto {
   texto: string // "¿Zoids releva a Magic Knight?"
 }
 
+/** Una repetición que el importador propone marcar como segundo pase. */
+export interface RepeticionPropuesta {
+  regla_primaria: number
+  regla_que_repite: number
+  texto: string
+}
+
 export interface FilaConError {
   fila: number
   texto: string
   motivo: string
+  id_hoja?: string
+  titulo?: string
+}
+
+export interface FechaCorrida {
+  fila: number
+  texto: string
+  regla?: number
+  titulo?: string
+  hora?: HoraDelDia
+  antes?: string
+  despues?: string
+}
+
+/**
+ * Dos nombres de la hoja que parecen el mismo programa escrito de dos maneras.
+ * El importador los junta y lo dice; aquí solo se pinta lo que hizo.
+ */
+export interface PosibleDuplicado {
+  a: string
+  b: string
+  texto: string
+}
+
+/** Lo que el importador arregló solo, ya en frases: erratas que juntó y demás. */
+export interface AvisoDeImportacion {
+  fila: number
+  id_hoja: string
+  titulo: string
+  texto: string
+}
+
+// ── emparejar títulos (F1-64 a F1-67) ─────────────────────────────────
+
+/** Una ficha del catálogo que se parece al nombre que trajo la hoja. */
+export interface CandidatoDeTitulo {
+  id: number
+  nombre: string
+  /** De 0 a 1: cuánto se parecen los dos nombres. Se enseña como porcentaje. */
+  puntuacion: number
+}
+
+/**
+ * Un nombre de la hoja que no se pudo emparejar solo con una ficha del
+ * catálogo. La regla se importó igual —la hoja nunca se rechaza—, pero el
+ * título queda «por emparejar» hasta que una persona diga cuál es.
+ */
+export interface TituloSinEmparejar {
+  id: number
+  /** El nombre tal como venía en la hoja. */
+  nombre: string
+  /** La frase en cristiano del servidor: por qué quedó pendiente. */
+  texto: string
+  candidatos: CandidatoDeTitulo[]
+  /** Cuántas reglas lo usan: es lo que se pierde si se quita. */
+  reglas: number
+  /** Las franjas donde va, ya en cristiano: «L-V 2:30 PM». */
+  franjas: string[]
+}
+
+/** Un título del catálogo, como lo devuelve la búsqueda del emparejador. */
+export interface TituloDelCatalogo {
+  id: number
+  nombre: string
+  tipo: string
+}
+
+/** Lo que se manda a POST /titulos/{id}/emparejar. */
+export type DecisionDeEmparejar =
+  | { accion: 'usar'; title_id: number }
+  | { accion: 'propio' }
+  | { accion: 'quitar' }
+
+/** Lo que contesta el servidor tras emparejar. Siempre trae `texto`. */
+export interface ResultadoDeEmparejar {
+  texto: string
+  /** Con «usar»: cuántas reglas pasaron a la ficha del catálogo. */
+  reglas_movidas?: number
+  /** Con «usar»: el nombre de la hoja que quedó guardado como alias. */
+  alias?: string
+  /** Con «quitar»: cuántas reglas se fueron con el título. */
+  reglas_quitadas?: number
 }
 
 export interface ResumenDeImportacion {
@@ -311,7 +407,13 @@ export interface ResumenDeImportacion {
   titulos_creados: number
   relevos_propuestos: RelevoPropuesto[]
   filas_con_error: FilaConError[]
-  fechas_corridas: { fila: number; texto: string }[]
+  fechas_corridas: FechaCorrida[]
+  /** Opcionales: una respuesta vieja sin ellos sigue pintando igual. */
+  repeticiones_propuestas?: RepeticionPropuesta[]
+  titulos_sin_emparejar?: TituloSinEmparejar[]
+  posibles_duplicados?: PosibleDuplicado[]
+  avisos?: AvisoDeImportacion[]
+  resumen?: string
 }
 
 // ── ajustes ───────────────────────────────────────────────────────────

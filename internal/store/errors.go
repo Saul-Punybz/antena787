@@ -25,6 +25,17 @@ var (
 	// ErrPistaInexistente es elegir para el aire una pista de sonido que el
 	// archivo no trae (F1-61).
 	ErrPistaInexistente = errors.New("ese archivo no tiene esa pista de sonido")
+
+	// ErrMismoTitulo es emparejar un título consigo mismo (F1-66).
+	ErrMismoTitulo = errors.New("ese título ya es ese mismo: no hay nada que emparejar")
+
+	// ErrDestinoPendiente es emparejar contra una ficha que tampoco está
+	// emparejada todavía: primero hay que resolver esa (F1-66).
+	ErrDestinoPendiente = errors.New("esa ficha también está por emparejar: resuélvela primero")
+
+	// ErrNoPendiente es querer quitar como provisional un título que no está
+	// por emparejar, o sea una ficha del catálogo de verdad (F1-67).
+	ErrNoPendiente = errors.New("ese título no está por emparejar")
 )
 
 // ErrCorrupt dice que la base no pasó PRAGMA integrity_check. Lleva la ruta

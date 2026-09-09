@@ -879,13 +879,15 @@ func TestBaseNuevaYBaseMigradaQuedanIguales(t *testing.T) {
 	}
 
 	// Una base parada en cada versión publicada tiene que llegar al mismo
-	// sitio: la 1 (solo schema.sql) y la 2 (schema.sql más migracion2).
+	// sitio: la 1 (solo schema.sql) y cada escalón posterior.
 	for _, caso := range []struct {
 		version int
 		pasos   []string
 	}{
 		{1, []string{schemaSQL}},
 		{2, []string{schemaSQL, migracion2}},
+		{3, []string{schemaSQL, migracion2, migracion3}},
+		{4, []string{schemaSQL, migracion2, migracion3, migracion4}},
 	} {
 		ruta := filepath.Join(t.TempDir(), "vieja.db")
 		db, err := openDB(ruta)
@@ -918,8 +920,9 @@ func TestBaseNuevaYBaseMigradaQuedanIguales(t *testing.T) {
 			t.Fatalf("una base nueva y una migrada desde la versión %d no quedaron iguales\n--- nueva ---\n%s\n--- migrada ---\n%s",
 				caso.version, a, b)
 		}
-		// Y la migración deja respaldo de la base que ya existía.
-		if LatestBackup(ruta) == "" {
+		// Y la migración deja respaldo de la base que ya existía. Una base que
+		// ya estaba al día no se migra, así que tampoco se respalda.
+		if caso.version < SchemaVersion() && LatestBackup(ruta) == "" {
 			t.Fatalf("migrar una base de la versión %d tiene que dejar un respaldo", caso.version)
 		}
 	}
