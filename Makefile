@@ -43,3 +43,13 @@ arm64:
 ##         Para eso: rm -rf f0/media f0/out
 clean:
 	rm -rf $(BIN) $(DIST)
+
+## ui: compila la interfaz (web/) y la deja donde el binario la embebe
+ui:
+	npm --prefix web ci
+	npm --prefix web run build
+	rm -rf internal/api/ui/dist && cp -R web/dist internal/api/ui/dist
+
+## antena: el binario completo con la interfaz dentro
+antena: ui
+	go build -o bin/antena ./cmd/antena

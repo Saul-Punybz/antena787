@@ -12,3 +12,5 @@
 .DS_Store
 diseno/_plain/
 /dist/
+
+internal/api/ui/dist/

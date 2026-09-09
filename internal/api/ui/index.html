@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Antena787</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    margin: 0; min-height: 100vh;
+    display: grid; place-items: center;
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: #101418; color: #e9edf1;
+  }
+  main { max-width: 34rem; padding: 2rem; }
+  h1 { font-size: 1.4rem; margin: 0 0 .5rem; letter-spacing: .01em; }
+  p { margin: .6rem 0; color: #b9c3cc; }
+  code { background: #1c2530; padding: .1rem .35rem; border-radius: .25rem; color: #e9edf1; }
+  a { color: #7fc4ff; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Antena787 — interfaz en construcción</h1>
+  <p>El servidor está corriendo. La interfaz todavía no se ha compilado en este binario.</p>
+  <p>La API contesta en <a href="/api/v1/estado"><code>/api/v1/estado</code></a>
+     y la guía en <a href="/guia.xml"><code>/guia.xml</code></a>.</p>
+  <p>Para meter la interfaz de verdad: <code>make ui</code> compila <code>web/</code>
+     y la copia a <code>internal/api/ui/dist/</code>; el siguiente
+     <code>go build</code> la embebe. Mientras se desarrolla,
+     <code>antena -web web/dist</code> la sirve del disco.</p>
+</main>
+</body>
+</html>
