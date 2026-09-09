@@ -49,6 +49,8 @@ type Measure struct {
 	AudioTracks []AudioTrack
 
 	DurationMs int64 // duración real al milisegundo (video; si no hay, formato)
+	VideoMs    int64 // lo que dura la imagen según su stream; 0 si no hay o no lo dice
+	AudioMs    int64 // lo que dura el sonido según su stream; 0 si no hay o no lo dice
 	BitRate    int64
 
 	HasCaptions   bool
@@ -320,6 +322,7 @@ func fill(m *Measure, raw probeJSON) {
 		}
 	}
 
+	m.VideoMs, m.AudioMs = videoMs, audioMs
 	switch {
 	case videoMs > 0:
 		m.DurationMs = videoMs

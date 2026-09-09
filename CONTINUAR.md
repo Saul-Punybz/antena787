@@ -1,6 +1,6 @@
 # CONTINUAR — dónde quedamos y qué sigue
 
-_Última sesión: 9 de septiembre de 2026 (cinco tandas). Siguiente: la que venga._
+_Última sesión: 9 de septiembre de 2026 (seis tandas). Siguiente: la que venga._
 
 ## Dónde estamos
 
@@ -111,6 +111,26 @@ go test ./... -count=1           # todo debe estar verde
    frase, 409 al intentar soltarlo. Verde.
    Pendiente menor: las filas de `incidente` anteriores a esta tanda siguen
    con `fin` nulo (en una base de pruebas, nada que migrar).
+   **Sexta tanda (9 sept):** un agente con sonnet comparó nuestra cuarentena y
+   bitácora con ffplayout, nebula, Rivendell, LibreTime y PlayoutAutomation
+   (`docs/investigacion/CUARENTENA-Y-BITACORA-COMPARADAS-2026-09-09.md`).
+   Nadie tiene cuarentena con motivo+código+quién autorizó ni bitácora en
+   tabla; Saul aceptó las dos recomendaciones chicas y están hechas
+   (criterios F1-70 y F1-71, esquema **v5** con `media_asset.motivo_codigo`):
+   - **Desfase imagen/sonido** > 4 s (`ingest.DesfaseAVMaximo`, como
+     ffplayout) → cuarentena con `duracion_av_no_coincide`; el motivo dice las
+     dos duraciones. `Measure` ahora trae `VideoMs` y `AudioMs`.
+   - **Normalización colgada**: plazo `max(15 min, 4 × duración)`
+     (`App.normalizeDeadline`, `Options.NormalizeTimeout` para pruebas); al
+     pasarse cuenta como intento fallido «se quedó colgada». Y toda
+     normalización que la cola da por perdida **va a cuarentena** con
+     `normalizacion_fallida` en vez de quedarse «aún no listo para aire» para
+     siempre; dejarla pasar saca el original tal cual (Biblioteca lo dice).
+   Del informe quedan sin hacer, por fase: as-run con datos comerciales
+   (F4), exportación CSV/PDF de as-run y bitácora (F2/F4), y la advertencia de
+   no añadir un QC manual sin regla ni auditoría. Dos recomendaciones del
+   agente ya estaban hechas (decode real además de ffprobe; negro en cabeza y
+   cola).
 5. **Modo sombra con archivos de verdad** (y firma de los tres criterios
    manuales F1-32, F1-43, F1-53 con Rolando): videos reales en la carpeta
    vigilada, ver que el ingest mide, normaliza y el resolver programa.

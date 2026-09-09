@@ -169,6 +169,7 @@ type MediaAsset struct {
 	Thumbnail        string     `json:"cuadro_miniatura" db:"cuadro_miniatura"`
 	State            AssetState `json:"estado" db:"estado"`
 	PlainReason      string     `json:"motivo_en_cristiano" db:"motivo_en_cristiano"`
+	MotivoCodigo     string     `json:"motivo_codigo" db:"motivo_codigo"`               // por qué se paró, en clave: sin_audio, duracion_av_no_coincide, normalizacion_fallida; vacío en lo demás
 	NormalizeState   string     `json:"estado_normalizacion" db:"estado_normalizacion"` // pendiente | en_curso | listo | fallido
 	NormalizedPath   string     `json:"ruta_normalizada" db:"ruta_normalizada"`
 	IntentionalBlack bool       `json:"negro_intencional" db:"negro_intencional"`

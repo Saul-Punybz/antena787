@@ -559,8 +559,19 @@ func (a *App) normalizeOne(ctx context.Context, j ingest.Job) (string, error) {
 	dst := ingest.NormalizedPathFor(dir, asset.Path, ".mkv")
 	lufs, peak := a.loudnessTarget(ctx)
 	opts := ingest.NormalizeOptionsFor(asset, m, a.preferenciasDe(ctx, asset))
-	reporte, err := ingest.Normalize(ctx, a.FFmpeg, asset.Path, dst, FormatOf(ch.FormatProfile), lufs, peak, opts)
+	// Una preparación que no termina nunca no puede dejar el archivo en el
+	// limbo de «aún no listo para aire» para siempre (F1-71): se le da un
+	// plazo proporcional al archivo y, si se pasa, cuenta como un intento
+	// fallido con su motivo.
+	plazo := a.normalizeDeadline(asset.DurationMs)
+	nctx, cancel := context.WithTimeout(ctx, plazo)
+	defer cancel()
+	reporte, err := ingest.Normalize(nctx, a.FFmpeg, asset.Path, dst, FormatOf(ch.FormatProfile), lufs, peak, opts)
 	if err != nil {
+		if errors.Is(nctx.Err(), context.DeadlineExceeded) && ctx.Err() == nil {
+			return "", ingest.Plainf(err, "la preparación de «%s» se quedó colgada más de %s y se canceló",
+				filepath.Base(asset.Path), plazoEnCristiano(plazo))
+		}
 		return "", err
 	}
 	// F1-03 pide que quede constancia de las dos pasadas de volumen: aquí es
@@ -570,6 +581,42 @@ func (a *App) normalizeOne(ctx context.Context, j ingest.Job) (string, error) {
 			"no se pudo anotar cómo quedó el sonido de "+filepath.Base(asset.Path)+": "+err.Error())
 	}
 	return dst, nil
+}
+
+// Plazo de la normalización: nunca menos de NormalizeMinTimeout y, para
+// archivos largos, NormalizeTimeoutFactor veces lo que dura el archivo (dos
+// pasadas de ffmpeg en una máquina lenta caben de sobra; una que no termina
+// en eso está colgada).
+const (
+	NormalizeMinTimeout    = 15 * time.Minute
+	NormalizeTimeoutFactor = 4
+)
+
+// normalizeDeadline es cuánto se espera por la normalización de un archivo
+// que dura durationMs.
+func (a *App) normalizeDeadline(durationMs int64) time.Duration {
+	if a.opts.NormalizeTimeout > 0 {
+		return a.opts.NormalizeTimeout
+	}
+	plazo := time.Duration(durationMs) * time.Millisecond * NormalizeTimeoutFactor
+	if plazo < NormalizeMinTimeout {
+		plazo = NormalizeMinTimeout
+	}
+	return plazo
+}
+
+// plazoEnCristiano escribe un plazo como lo lee una persona: «15 min», «2 h 40 min».
+func plazoEnCristiano(d time.Duration) string {
+	min := int(d.Round(time.Minute) / time.Minute)
+	switch {
+	case min < 1:
+		return fmt.Sprintf("%d s", int(d.Round(time.Second)/time.Second))
+	case min < 60:
+		return fmt.Sprintf("%d min", min)
+	case min%60 == 0:
+		return fmt.Sprintf("%d h", min/60)
+	}
+	return fmt.Sprintf("%d h %d min", min/60, min%60)
 }
 
 // preferenciasDe arma lo que la normalización no puede adivinar de un
@@ -667,6 +714,13 @@ func (p *persist) SetNormalizeState(ctx context.Context, assetID int64, state, n
 	if plainReason != "" {
 		asset.PlainReason = plainReason
 	}
+	// Un archivo que no se pudo preparar no se queda «aún no listo para aire»
+	// para siempre, invisible: va a cuarentena con su motivo, donde se ve y
+	// donde alguien puede dejarlo pasar tal cual (F1-71).
+	if state == ingest.NormalizeFailed {
+		asset.State = model.AssetQuarantine
+		asset.MotivoCodigo = ingest.MotivoNormalizacion
+	}
 	asset.UpdatedAt = p.a.Now()
 	if err := p.a.Store.Media.Update(ctx, &asset); err != nil {
 		return err
@@ -677,6 +731,8 @@ func (p *persist) SetNormalizeState(ctx context.Context, assetID int64, state, n
 		p.a.Recalc()
 	case ingest.NormalizeFailed:
 		p.a.Incident("normalizacion_fallida", filepath.Base(asset.Path)+": "+plainReason)
+		p.a.RefreshCuarentena(ctx)
+		p.a.Recalc()
 	}
 	return nil
 }

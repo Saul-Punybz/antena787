@@ -292,9 +292,12 @@ export interface EnCuarentena {
   motivo_en_cristiano: string
   creado: Instante
   /**
-   * Por qué quedó parado, en clave: "sin_audio" y los demás. "sin_audio" no
-   * tiene salida por la vía de dejarlo pasar (F1-59): se arregla poniendo el
-   * audio al lado.
+   * Por qué quedó parado, en clave. "sin_audio" no tiene salida por la vía
+   * de dejarlo pasar (F1-59): se arregla poniendo el audio al lado.
+   * "duracion_av_no_coincide" (imagen y sonido de distinta duración, F1-70)
+   * y "normalizacion_fallida" (no se pudo preparar o se quedó colgado, F1-71)
+   * sí se pueden dejar pasar; en el segundo caso sale el original tal cual.
+   * Vacío en lo demás.
    */
   motivo_codigo?: string
 }

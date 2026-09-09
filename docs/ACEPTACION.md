@@ -481,6 +481,25 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   ADR 0008) con 7, 30 o 90 días, agrupada por día y con la duración de lo que
   ya cerró; se refresca sola con cada evento del WebSocket.
 
+### Lo aprendido de los proyectos comparables (`docs/investigacion/CUARENTENA-Y-BITACORA-COMPARADAS-2026-09-09.md`; §9 paso 1)
+
+- **F1-70** [AUTO] — Dado un archivo cuya imagen dura más de 4 s que su sonido
+  (o al revés), y otro con un desfase de 1 s · Cuando el ingest los procesa ·
+  Entonces el primero queda en `cuarentena` con `motivo_codigo` =
+  `duracion_av_no_coincide` y un motivo que dice las dos duraciones (*«imagen
+  0:10, sonido 0:02»*) y que se puede dejar pasar; el segundo entra normal. El
+  umbral es `ingest.DesfaseAVMaximo` (4 s, como ffplayout); sin medida de
+  alguna de las dos no se afirma nada. El código se guarda en su columna
+  (`media_asset.motivo_codigo`, esquema **versión 5**, con relleno hacia atrás
+  del único código que existía).
+- **F1-71** [AUTO] — Dado una normalización que no termina · Cuando pasa su
+  plazo (`max(15 min, 4 × duración del archivo)`, `App.normalizeDeadline`) ·
+  Entonces se cancela y cuenta como intento fallido con un motivo que dice que
+  se quedó colgada; y cuando la cola la da por perdida, el archivo **no** se
+  queda «aún no listo para aire» para siempre: pasa a `cuarentena` con
+  `motivo_codigo` = `normalizacion_fallida`, Al aire lo cuenta en el aviso,
+  queda el incidente, y dejarlo pasar lo saca al aire tal cual.
+
 ---
 
 ## F2 · Playout (motor, decks, fuentes en vivo, manual, diferido, grabación, salidas)
@@ -1062,9 +1081,9 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
 ## Resumen
 
 - **F0:** 9 criterios (F0-01 a F0-09).
-- **F1:** 69 criterios (F1-01 a F1-69; del 9 de septiembre de 2026: F1-58 a F1-63 audio de todo el material, F1-64 a F1-67 emparejar títulos, F1-68 y F1-69 cuarentena e incidentes en pantalla).
+- **F1:** 71 criterios (F1-01 a F1-71; del 9 de septiembre de 2026: F1-58 a F1-63 audio de todo el material, F1-64 a F1-67 emparejar títulos, F1-68 y F1-69 cuarentena e incidentes en pantalla, F1-70 y F1-71 lo aprendido de los proyectos comparables).
 - **F2:** 110 criterios (F2-01 a F2-110).
-- **Total: 182 criterios de aceptación**, de los cuales **156 son [AUTO]** y
+- **Total: 184 criterios de aceptación**, de los cuales **158 son [AUTO]** y
   **26 son [MANUAL]**.
 
 **Qué cambió en la revisión del 8 de septiembre de 2026** (contra el PRD

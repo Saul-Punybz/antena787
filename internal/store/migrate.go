@@ -28,6 +28,7 @@ var migrations = []Migration{
 	{Version: 2, SQL: migracion2},
 	{Version: 3, SQL: migracion3},
 	{Version: 4, SQL: migracion4},
+	{Version: 5, SQL: migracion5},
 }
 
 // migracion2 cierra tres huecos de integridad del plan (F1-12, F1-22, F1-26
@@ -145,6 +146,26 @@ CREATE TABLE title_alias (
   UNIQUE (channel_id, clave)
 );
 CREATE INDEX title_alias_titulo ON title_alias(title_id);
+`
+
+// migracion5 le da al archivo parado su código de motivo (F1-68, F1-70,
+// F1-71). Hasta aquí la base guardaba solo el motivo escrito para una
+// persona y el código se adivinaba del texto; con más de un código eso ya no
+// aguanta. El único que existía se rellena hacia atrás por su texto.
+//
+// Como las de arriba, no va en schema.sql: ese archivo es la foto de la
+// versión 1 y todas las bases —nuevas y viejas— suben por estos mismos
+// escalones, que es lo que hace que terminen idénticas.
+const migracion5 = `
+-- Por qué se paró el archivo, en clave: sin_audio, duracion_av_no_coincide,
+-- normalizacion_fallida. Vacío en todo lo demás.
+ALTER TABLE media_asset ADD COLUMN motivo_codigo TEXT NOT NULL DEFAULT '';
+
+-- Lo que ya estaba parado por mudo se reconoce por su texto.
+UPDATE media_asset SET motivo_codigo = 'sin_audio'
+WHERE estado = 'cuarentena'
+  AND motivo_en_cristiano LIKE '%no trae sonido%'
+  AND motivo_en_cristiano LIKE '%pon a su lado%';
 `
 
 // SchemaVersion es la versión a la que lleva este binario.

@@ -77,11 +77,21 @@ trae","campo":"pista_audio_aire"}` si el índice no existe —no se cambia nada�
 y `404` si el archivo no está. El cambio queda en `audit_log`. El cuerpo
 admite a la vez los demás campos de `PUT /material/{id}`.
 
-`GET /cuarentena` añade `motivo_codigo` a cada archivo parado: hoy
-`"sin_audio"` cuando el archivo no trae sonido, y `""` en todo lo demás. La
-base guarda el motivo escrito para una persona y no el código, así que el
-código se deduce de ese texto (`ingest.TextoSinAudio`); cuando haya más de un
-código valdrá la pena guardarlo en su propia columna.
+`GET /cuarentena` añade `motivo_codigo` a cada archivo parado. Desde el
+esquema 5 vive en su columna (`media_asset.motivo_codigo`); una fila anterior
+solo tiene el texto y el único código que existía entonces se reconoce por él
+(`ingest.TextoSinAudio`). Los códigos:
+
+| `motivo_codigo` | Qué pasó | ¿Se puede dejar pasar? |
+|---|---|---|
+| `sin_audio` | El archivo no trae sonido (F1-59). | **No**: se pone el audio al lado y se reprocesa solo. |
+| `duracion_av_no_coincide` | La imagen y el sonido duran distinto más de 4 s (`ingest.DesfaseAVMaximo`, F1-70): el archivo llegó incompleto o se cortó al copiarlo. El motivo dice las dos duraciones. | Sí: hay material así a propósito. |
+| `normalizacion_fallida` | No se pudo dejar el archivo en el formato de casa tras los intentos de la cola, o la preparación se pasó de su plazo y se canceló (F1-71). El plazo es `max(15 min, 4 × duración del archivo)`. | Sí: sale el original tal cual, sin ajustar el volumen. |
+| `""` | Todo lo demás (no se pudo leer, dura cero, sin imagen ni sonido…). | Sí. |
+
+Un archivo cuya normalización falla **no se queda «aún no listo para aire»
+para siempre**: pasa a `cuarentena` con ese código, aparece en la lista, Al
+aire lo cuenta en el aviso y queda el incidente `normalizacion_fallida`.
 
 Un archivo con `motivo_codigo` `"sin_audio"` **no** se puede dejar pasar:
 `POST /cuarentena/{id}/dejar-pasar` contesta `409` con

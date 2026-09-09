@@ -2,6 +2,7 @@ package ingest
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -710,5 +711,80 @@ func TestCheckDurationHablaComoUnaPersona(t *testing.T) {
 	}
 	if err := CheckDuration(Measure{DurationMs: 30_200}, 30*time.Second); err != nil {
 		t.Errorf("200 ms de diferencia entran en la tolerancia: %v", err)
+	}
+}
+
+// ── imagen y sonido de distinta duración (F1-70) ──────────────────────
+
+// clipDesfasado fabrica un archivo cuya imagen dura más que su sonido, como
+// queda uno que se cortó al copiarlo por la pista de audio.
+func clipDesfasado(t *testing.T, ffmpeg, dst string, videoS, audioS float64) string {
+	t.Helper()
+	out, err := exec.Command(ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
+		"-f", "lavfi", "-t", fmt.Sprintf("%.3f", videoS), "-i", "testsrc2=s=320x240:r=30",
+		"-f", "lavfi", "-t", fmt.Sprintf("%.3f", audioS), "-i", "sine=f=440:r=48000",
+		"-map", "0:v", "-map", "1:a",
+		"-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+		"-c:a", "aac", "-ar", "48000", "-ac", "2", dst).CombinedOutput()
+	if err != nil {
+		t.Fatalf("no se pudo fabricar el clip desfasado: %v\n%s", err, out)
+	}
+	return dst
+}
+
+func TestDesfaseAV(t *testing.T) {
+	casos := []struct {
+		video, audio int64
+		quiere       time.Duration
+	}{
+		{60_000, 60_000, 0},
+		{60_000, 57_500, 2500 * time.Millisecond},
+		{57_500, 60_000, 2500 * time.Millisecond},
+		{60_000, 0, 0}, // sin medida de audio no se afirma nada
+		{0, 60_000, 0},
+	}
+	for _, c := range casos {
+		if got := DesfaseAV(c.video, c.audio); got != c.quiere {
+			t.Errorf("DesfaseAV(%d, %d) = %s, se esperaba %s", c.video, c.audio, got, c.quiere)
+		}
+	}
+	if mmss(21*60_000+41_000) != "21:41" || mmss(3_723_000) != "1:02:03" {
+		t.Errorf("mmss no escribe como una persona: %q %q", mmss(21*60_000+41_000), mmss(3_723_000))
+	}
+}
+
+// TestIngestImagenYSonidoDeDistintaDuracionVaACuarentena: un archivo con la
+// imagen 8 s más larga que el sonido se para con su código y una frase que
+// dice las dos duraciones; uno con un desfase chico entra normal.
+func TestIngestImagenYSonidoDeDistintaDuracionVaACuarentena(t *testing.T) {
+	ffmpeg, ffprobe := tools(t)
+	dir := t.TempDir()
+	deps := Deps{FFmpeg: ffmpeg, FFprobe: ffprobe}
+
+	cortado := clipDesfasado(t, ffmpeg, filepath.Join(dir, "Cortado.mp4"), 10, 2)
+	asset, _, _, err := Ingest(context.Background(), deps, cortado)
+	if err == nil {
+		t.Fatal("un archivo con 8 s de desfase entre imagen y sonido tenía que pararse")
+	}
+	if asset.State != model.AssetQuarantine {
+		t.Errorf("estado = %q, se esperaba cuarentena", asset.State)
+	}
+	if Motivo(err) != MotivoDesfaseAV || asset.MotivoCodigo != MotivoDesfaseAV {
+		t.Errorf("código = %q / %q, se esperaba %q", Motivo(err), asset.MotivoCodigo, MotivoDesfaseAV)
+	}
+	for _, frase := range []string{"distinta duración", "imagen 0:10", "sonido 0:02", "dejar pasar"} {
+		if !strings.Contains(asset.PlainReason, frase) {
+			t.Errorf("el motivo no dice %q: %q", frase, asset.PlainReason)
+		}
+	}
+
+	// Un desfase de un segundo es normal en material bien hecho: no se para.
+	casi := clipDesfasado(t, ffmpeg, filepath.Join(dir, "Casi.mp4"), 4, 3)
+	asset, _, _, err = Ingest(context.Background(), deps, casi)
+	if err != nil {
+		t.Fatalf("un desfase de 1 s no debía parar el archivo: %v", err)
+	}
+	if asset.State == model.AssetQuarantine || asset.MotivoCodigo != "" {
+		t.Errorf("el archivo con desfase chico quedó %q con código %q", asset.State, asset.MotivoCodigo)
 	}
 }

@@ -30,10 +30,49 @@ import (
 
 // Los códigos de motivo. El motivo en cristiano es para la persona; el
 // código es para el programa, que a veces tiene que hacer algo distinto
-// según por qué se paró un archivo. Hoy hay uno solo: el material sin
-// sonido, que no tiene botón de «dejarlo pasar» porque todo lo que sale al
-// aire lleva audio (F1-59).
-const MotivoSinAudio = "sin_audio"
+// según por qué se paró un archivo. Se guardan en media_asset.motivo_codigo.
+const (
+	// MotivoSinAudio: el material no trae sonido. No tiene botón de «dejarlo
+	// pasar» porque todo lo que sale al aire lleva audio (F1-59).
+	MotivoSinAudio = "sin_audio"
+	// MotivoDesfaseAV: la imagen y el sonido duran distinto más allá de
+	// DesfaseAVMaximo; el archivo llegó incompleto o se cortó al copiarlo
+	// (F1-70). Se puede dejar pasar: hay material que es así a propósito.
+	MotivoDesfaseAV = "duracion_av_no_coincide"
+	// MotivoNormalizacion: no se pudo dejar el archivo en el formato de casa
+	// (o la preparación se quedó colgada y se canceló) (F1-71). Se puede
+	// dejar pasar: entonces sale el original tal cual.
+	MotivoNormalizacion = "normalizacion_fallida"
+)
+
+// DesfaseAVMaximo es cuánto pueden diferir la duración de la imagen y la del
+// sonido antes de parar el archivo. Cuatro segundos, como ffplayout: un
+// desfase menor es normal en material bien hecho (cebado del audio, cierre
+// del contenedor); uno mayor es un archivo cortado.
+const DesfaseAVMaximo = 4 * time.Second
+
+// DesfaseAV es cuánto difieren imagen y sonido. Cero si falta cualquiera de
+// las dos medidas: no se puede afirmar nada de lo que no se midió.
+func DesfaseAV(videoMs, audioMs int64) time.Duration {
+	if videoMs <= 0 || audioMs <= 0 {
+		return 0
+	}
+	d := videoMs - audioMs
+	if d < 0 {
+		d = -d
+	}
+	return time.Duration(d) * time.Millisecond
+}
+
+// mmss escribe una duración como la lee una persona: «21:41», «1:02:03».
+func mmss(ms int64) string {
+	s := ms / 1000
+	h, m, sec := s/3600, (s%3600)/60, s%60
+	if h > 0 {
+		return fmt.Sprintf("%d:%02d:%02d", h, m, sec)
+	}
+	return fmt.Sprintf("%d:%02d", m, sec)
+}
 
 // PlainError es un error con su motivo escrito para una persona que no es
 // técnica. Reason es lo que se muestra en pantalla y lo que se guarda en

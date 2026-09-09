@@ -184,6 +184,10 @@ type Options struct {
 	// NoMaintenance apaga respaldo, disco y reloj (las pruebas no los
 	// quieren). El resolver y el ingest siguen.
 	NoMaintenance bool
+	// NormalizeTimeout es lo máximo que se espera por una normalización
+	// antes de darla por colgada; 0 = se calcula del archivo
+	// (normalizeDeadline).
+	NormalizeTimeout time.Duration
 }
 
 // App es el proceso: la base abierta, las rutas de ffmpeg y las goroutines.

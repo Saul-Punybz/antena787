@@ -230,6 +230,12 @@ export function Biblioteca() {
                     .aac, .mp3 o .flac) y se procesa solo.
                   </div>
                 )}
+                {c.motivo_codigo === 'normalizacion_fallida' && (
+                  <div className="tenue" style={{ fontSize: 12.5, marginTop: 4, maxWidth: 520 }}>
+                    Si lo dejas pasar, sale el archivo original tal cual, sin ajustar el
+                    volumen. Vuelve a copiarlo a la carpeta para intentarlo de nuevo.
+                  </div>
+                )}
                 <div className="mono tenue" style={{ fontSize: 11.5, marginTop: 4 }}>
                   {c.ruta}
                 </div>

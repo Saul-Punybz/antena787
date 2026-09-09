@@ -61,12 +61,14 @@ func (s *Server) audioDe(ctx context.Context, assetID *int64) audioOut {
 	}
 }
 
-// motivoCodigo traduce el motivo en cristiano de un archivo parado a su
-// código. La base guarda el texto y no el código, así que se reconoce por el
-// texto: hoy el único que hace falta es el del material sin sonido, que no
-// tiene botón de dejarlo pasar (F1-59).
-func motivoCodigo(motivo string) string {
-	if ingest.TextoSinAudio(motivo) {
+// motivoCodigo es por qué se paró un archivo, en clave. Desde el esquema 5
+// viene en su columna; una fila anterior solo tiene el texto, y el único
+// código que existía entonces —material sin sonido— se reconoce por él.
+func motivoCodigo(a model.MediaAsset) string {
+	if a.MotivoCodigo != "" {
+		return a.MotivoCodigo
+	}
+	if ingest.TextoSinAudio(a.PlainReason) {
 		return ingest.MotivoSinAudio
 	}
 	return ""
@@ -440,7 +442,7 @@ func (s *Server) cuarentenaList(w http.ResponseWriter, r *http.Request) {
 		out = append(out, enCuarentenaOut{
 			MediaAsset:   a,
 			Titulo:       s.App.TituloDelArchivo(r.Context(), a),
-			MotivoCodigo: motivoCodigo(a.PlainReason),
+			MotivoCodigo: motivoCodigo(a),
 		})
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -467,7 +469,7 @@ func (s *Server) dejarPasar(w http.ResponseWriter, r *http.Request) {
 	}
 	// Todo lo que sale al aire lleva sonido: un archivo mudo no se deja
 	// pasar, se arregla poniéndole el audio al lado (F1-59).
-	if motivoCodigo(old.PlainReason) == ingest.MotivoSinAudio {
+	if motivoCodigo(old) == ingest.MotivoSinAudio {
 		fail(w, http.StatusConflict,
 			"Este archivo no trae sonido y todo lo que sale al aire lleva audio: pon a su lado un archivo de audio con el mismo nombre y se procesa solo.",
 			"")

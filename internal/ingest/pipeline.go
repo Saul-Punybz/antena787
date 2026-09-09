@@ -126,6 +126,7 @@ func Ingest(ctx context.Context, d Deps, path string) (model.MediaAsset, model.T
 	fail := func(err error) (model.MediaAsset, model.Title, []model.Episode, error) {
 		asset.State = model.AssetQuarantine
 		asset.PlainReason = Plain(err)
+		asset.MotivoCodigo = Motivo(err)
 		asset.UpdatedAt = d.now()
 		anota()
 		return asset, title, nil, err
@@ -184,6 +185,7 @@ func Ingest(ctx context.Context, d Deps, path string) (model.MediaAsset, model.T
 	// eso es lo normal en el material que llega con la imagen y el audio
 	// por separado, y en ese caso se muxea y el archivo sigue su camino
 	// (F1-58).
+	audioMs := m.AudioMs
 	if !m.HasAudio {
 		hallado, hay := FindAudioSidecar(path)
 		switch {
@@ -204,6 +206,15 @@ func Ingest(ctx context.Context, d Deps, path string) (model.MediaAsset, model.T
 		}
 		audioSidecar = hallado
 		asset.AudioChannels = sm.AudioChannels
+		audioMs = sm.DurationMs
+	}
+	// Imagen y sonido de distinta duración: el archivo llegó incompleto o se
+	// cortó al copiarlo (F1-70). Se puede dejar pasar —hay material así a
+	// propósito—, pero no sin que alguien lo vea.
+	if desfase := DesfaseAV(m.VideoMs, audioMs); desfase > DesfaseAVMaximo {
+		return fail(Plainc(nil, MotivoDesfaseAV,
+			"«%s» tiene la imagen y el sonido de distinta duración (imagen %s, sonido %s): el archivo llegó incompleto o se cortó al copiarlo. Si es así a propósito, se puede dejar pasar bajo tu responsabilidad",
+			trimName(path), mmss(m.VideoMs), mmss(audioMs)))
 	}
 
 	if d.ComputeHash {

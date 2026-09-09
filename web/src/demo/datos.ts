@@ -393,8 +393,8 @@ export const cuarentena: EnCuarentena[] = [
     ruta: 'D:\\Contenido\\Promos\\promo-verano.mov',
     titulo: 'Promo de verano',
     motivo_en_cristiano:
-      'El video se corta a los 12 segundos: el archivo llegó incompleto.',
-    motivo_codigo: 'incompleto',
+      '«promo-verano.mov» tiene la imagen y el sonido de distinta duración (imagen 0:30, sonido 0:12): el archivo llegó incompleto o se cortó al copiarlo. Si es así a propósito, se puede dejar pasar bajo tu responsabilidad',
+    motivo_codigo: 'duracion_av_no_coincide',
     creado: '2026-09-02T19:40:00Z',
   },
   {
@@ -402,8 +402,8 @@ export const cuarentena: EnCuarentena[] = [
     ruta: 'D:\\Contenido\\Kojak\\kojak-t2e07.mp4',
     titulo: 'Kojak · T2 E7',
     motivo_en_cristiano:
-      'Falló dos veces al aire con más de cinco minutos de diferencia.',
-    motivo_codigo: 'fallo_al_aire',
+      'no se pudo dejar el archivo en el formato de casa después de 2 intentos: la preparación de «kojak-t2e07.mp4» se quedó colgada más de 2 h 40 min y se canceló',
+    motivo_codigo: 'normalizacion_fallida',
     creado: '2026-08-30T02:05:00Z',
   },
 ]
