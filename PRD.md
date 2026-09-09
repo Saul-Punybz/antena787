@@ -858,6 +858,17 @@ acepta el multiplexor de CAtv) · `internet` (RTMP/HLS/SRT) ·
 Varias por canal, simultáneas, cada una con su propio objetivo de volumen y
 su reconexión con espera progresiva.
 
+> **Paridad con VLC (Saul, 9 de septiembre de 2026).** CAtv emite hoy con
+> VLC. Todo lo que Rolando hace con el *stream output* de VLC tiene que
+> poder hacerse aquí: UDP unicast y multicast con TTL, RTP, PIDs y programa
+> del TS, transcodificación a MPEG-2/H.264 con MPEG L2/AC-3/AAC, varias
+> salidas a la vez, grabación, HTTP TS, HLS, SRT, RTMP, logo y marquesina,
+> y como entrada tirar de una URL (`udp://`, `rtsp://`, `http://`) además
+> de recibir SRT/RTMP. La lista completa, función por función, con lo que
+> falta (`http-ts`, multicast/TTL explícitos, entrada `url`, ventana local)
+> está en `docs/VLC-PARIDAD.md`, y la firma es el criterio F2-113: sin ella,
+> VLC no se apaga.
+
 **Entrada en vivo:** `srt-listen` (**el preferido, por latencia**) ·
 `rtmp-listen` · `ninguna`. NDI queda fuera: su SDK obliga a enlazar C, y SRT
 resuelve la latencia sin esa deuda.

@@ -198,6 +198,11 @@ go test ./... -count=1           # todo debe estar verde
 
 ## Reglas que no cambian
 
+- **Paridad con VLC** (Saul, 9 sept 2026): todo lo que Rolando hace con el
+  stream output de VLC se tiene que poder hacer aquí; lista y huecos en
+  `docs/VLC-PARIDAD.md`, firma en F2-113. Pedirle a Rolando su cadena `sout`
+  exacta antes de F2.
+
 - Commits limpios, sin atribución a herramientas. Autor: Saul A. González Alonso.
 - Agentes con `opus` solo para lo esencial; `sonnet`/`haiku` para lo demás.
   Nunca el modelo de la sesión.

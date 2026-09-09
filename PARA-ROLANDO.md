@@ -107,6 +107,8 @@ Cada pregunta la puedes contestar en una frase. Te explico por qué importa cada
 
 **6. ¿Qué protocolo o interfaz de entrada usa ese equipo hoy?** — *Ya contestaste: UDP y RTP.* De eso depende cómo Antena787 le entrega la señal.
 
+**7b. Tu VLC, tal cual.** — *Mándanos la cadena exacta con la que emites hoy: el `sout` de VLC, o el archivo `.vlm`/`.xspf` guardado, o el atajo de Windows con los parámetros, y la versión de VLC. Con eso comprobamos, opción por opción, que Antena787 hace todo lo que hoy haces con VLC (destino, multicast, PIDs, códecs, grabación) antes de pedirte que lo apagues.* También: ¿MistServer te empuja la señal o VLC tira de él? ¿Usas la ventana de VLC para ver la salida en el monitor de la torre? ¿Alguien más tira de tu señal por HTTP?
+
 **7. ✅ No hace falta.** — *El sistema trae los dos modelos de Sage (1822 y 3644), DASDEC, Gorman-Redlich y TFT, y al instalar pregunta por dónde está conectado —serial, relés, red— y prueba cada uno. Con el bloque verde de relés ya alcanza.* Si tu ingeniero sabe el modelo, mejor, pero no lo esperamos. El 1822 se habla por el puerto serial del frente y por relés; el 3644 también por red. Eso decide cuál pieza de conexión ("driver") hay que escribir primero para que el sistema sepa cuándo tu equipo interrumpió el aire.
 
 **8. ✅ 720p a 59.94.** — Define el formato único al que se convierte todo al entrar.

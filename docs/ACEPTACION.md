@@ -1003,6 +1003,15 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   `salto_de_reloj` lo dice como posible sueño de la máquina y recalcula. Viene
   del modo sombra del 9 sept 2026: la Mac durmió 19 min en dos ratos y nada lo
   impidió (`docs/f1/SOMBRA-2026-09-09.md`, S-8).
+- **F2-113** [MANUAL] — Dado la configuración real de VLC con la que CAtv
+  emite hoy (la cadena `sout`, o el `.vlm`/`.xspf` que usa Rolando) · Cuando
+  se configura la salida de Antena787 en el asistente · Entonces cada opción
+  de esa cadena tiene su equivalente en pantalla, en lenguaje llano (destino,
+  unicast o multicast y TTL, PIDs y número de programa, códecs y bitrate,
+  salidas simultáneas, grabación, HTTP TS si alguien tira de la señal), el
+  TP1000 recibe el TS sin cambiar nada de su lado, y Rolando confirma que no
+  le falta nada de lo que hacía con VLC. Sin esa firma, VLC no se apaga
+  (`docs/VLC-PARIDAD.md`; regla de Saul, 9 sept 2026).
 
 ### Que un fallo interno no tumbe el aire (§14.1)
 
