@@ -1,0 +1,5 @@
+# Antena787 es Go. Lo demás es diseño y documentación, no producto.
+diseno/**            linguist-documentation
+diseno/*.py          linguist-generated
+docs/**              linguist-documentation
+*.md                 linguist-documentation
