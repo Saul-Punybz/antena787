@@ -12,6 +12,7 @@ import type {
   Canal,
   EnCuarentena,
   EpisodioDeBiblioteca,
+  Incidente,
   PistaDeAudio,
   Regla,
   Salida,
@@ -455,3 +456,63 @@ export const ajustes: Ajustes = {
   // Audio: con qué idioma se queda cuando el archivo trae varias pistas.
   idioma_audio_preferido: 'es',
 }
+
+/**
+ * La bitácora de la semana de la demo: lo que el sistema hizo solo. Los
+ * instantes van relativos al reloj del canal (AHORA_BASE) para que «hace 6
+ * minutos» siga siendo verdad cada vez que se abre.
+ */
+function hace(min: number): string {
+  return new Date(AHORA_BASE - min * 60_000).toISOString()
+}
+export const incidentes: Incidente[] = [
+  {
+    id: 7001,
+    tipo: 'cuarentena',
+    inicio: hace(6),
+    fin: hace(6),
+    detalle: 'space-cobra-e04.mp4: Este video no trae sonido.',
+    texto: 'Un archivo quedó en cuarentena',
+  },
+  {
+    id: 7002,
+    tipo: 'vencimiento',
+    inicio: hace(41),
+    fin: hace(41),
+    detalle: 'Kojak se acaba en 6 días (lunes a viernes, 8:00 AM)',
+    texto: 'Una regla se acerca a su fin',
+  },
+  {
+    id: 7003,
+    tipo: 'relleno_por_defecto',
+    inicio: hace(60 * 26),
+    fin: hace(60 * 26),
+    detalle:
+      'la biblioteca de relleno estaba vacía: se creó el cartel de la estación con cama musical, 60 s',
+    texto: 'Se creó el cartel de la estación como relleno',
+  },
+  {
+    id: 7004,
+    tipo: 'salto_de_reloj',
+    inicio: hace(60 * 26 + 12),
+    fin: hace(60 * 26 + 11),
+    detalle: 'la hora de la máquina saltó 3 min 40 s hacia adelante; el plan se rehizo desde la hora real',
+    texto: 'El reloj de la máquina saltó y el plan se rehizo',
+  },
+  {
+    id: 7005,
+    tipo: 'cuarentena',
+    inicio: hace(60 * 46),
+    fin: hace(60 * 46),
+    detalle: 'promo-verano.mov: El video se corta a los 12 segundos: el archivo llegó incompleto.',
+    texto: 'Un archivo quedó en cuarentena',
+  },
+  {
+    id: 7006,
+    tipo: 'propuesta_del_asistente',
+    inicio: hace(60 * 24 * 5 + 30),
+    fin: hace(60 * 24 * 5 + 30),
+    detalle: 'con 14 títulos de la biblioteca: series a diario desde las 6:00 AM, películas a las 7:00 PM, 30 días',
+    texto: 'El asistente propuso una parrilla',
+  },
+]

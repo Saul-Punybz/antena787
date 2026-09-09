@@ -132,7 +132,7 @@ type Alarma struct {
 
 // fuentesDeAlarma es el orden en que se enseñan las alarmas vivas. Cada
 // fuente manda sobre las suyas y no pisa las de las demás.
-var fuentesDeAlarma = []string{"guia", "disco", "vencimiento", "emparejar", "avisos"}
+var fuentesDeAlarma = []string{"guia", "disco", "cuarentena", "vencimiento", "emparejar", "avisos"}
 
 // DBName es el nombre del archivo de la base dentro de la carpeta de datos.
 const DBName = "antena.db"
@@ -349,6 +349,8 @@ func (a *App) Start(parent context.Context) {
 	// Los títulos por emparejar que quedaron de la última vez siguen ahí:
 	// el aviso se enciende al arrancar, no en la siguiente importación.
 	a.RefreshPendientes(a.ctx)
+	// Igual con los archivos en cuarentena: el aviso no espera al próximo ingest.
+	a.RefreshCuarentena(a.ctx)
 
 	a.guard("resolver", a.resolverLoop)
 	a.guard("ingest", a.ingestLoop)
@@ -440,11 +442,20 @@ func oneScreen(stack []byte) string {
 
 // Incident deja un incidente en la bitácora y lo empuja por el WebSocket.
 // Nunca devuelve error: si no se puede escribir, el aire sigue igual.
+//
+// Lo que entra por aquí es un suceso puntual —un archivo que fue a
+// cuarentena, una guía rechazada— y queda cerrado en el mismo instante
+// (`fin` = `inicio`). Un incidente que dura (vivo ausente, apagón, F2) se
+// inserta abierto con Store.Incident.Insert y se cierra con Close: la
+// bitácora de una semana no debe arrastrar para siempre los sucesos viejos
+// como si siguieran pasando.
 func (a *App) Incident(kind, detail string) {
+	now := a.Now()
 	inc := model.Incident{
 		ChannelID: a.ChannelID,
 		Kind:      kind,
-		Start:     a.Now(),
+		Start:     now,
+		End:       &now,
 		Detail:    detail,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

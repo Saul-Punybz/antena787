@@ -21,6 +21,7 @@ import type {
   FichaDeTitulo,
   FilaDelPlan,
   Guia,
+  Incidente,
   Instalacion,
   MaterialDeAudio,
   MesDelPlan,
@@ -178,6 +179,18 @@ export const api = {
   dejarPasar: (id: number, quien: string) =>
     pedir<{ ok: true }>(`/cuarentena/${id}/dejar-pasar`, conCuerpo('POST', { quien })),
 
+  /**
+   * La bitácora de lo que el sistema hizo solo (PRD §15). Sin fechas, el
+   * servidor manda la última semana; `desde`/`hasta` van en RFC 3339.
+   */
+  incidentes: (desde?: string, hasta?: string) => {
+    const q = new URLSearchParams()
+    if (desde) q.set('desde', desde)
+    if (hasta) q.set('hasta', hasta)
+    const sufijo = q.toString()
+    return pedir<Incidente[]>('/incidentes' + (sufijo ? '?' + sufijo : ''))
+  },
+
   importarHoja: (texto: string) =>
     pedir<ResumenDeImportacion>('/importar/hoja', conCuerpo('POST', { texto })),
   confirmarRelevos: (relevos: { regla: number; releva_a: number }[]) =>
@@ -228,6 +241,29 @@ export const api = {
 
 // ── el estado en vivo ─────────────────────────────────────────────────
 
+/** Un `{"tipo":"evento"}` del WebSocket: algo pasó (un incidente, un cambio de plan). */
+export interface EventoDelServidor {
+  tipo: 'evento'
+  /** De qué familia es: "incidente", "plan", "ingest", "material"… */
+  clase: string
+  /** El tipo de incidente, el nombre de la goroutine… */
+  nombre: string
+  detalle: string
+  instante: string
+}
+
+const oyentesDeEventos = new Set<(e: EventoDelServidor) => void>()
+
+/**
+ * Avisa cada vez que el servidor empuja un evento. Es lo que hace que la
+ * bitácora de Al aire se actualice sola cuando el sistema anota algo. En
+ * modo demo no llega ninguno: la pantalla se refresca por su cuenta.
+ */
+export function suscribirseAEventos(f: (e: EventoDelServidor) => void): () => void {
+  oyentesDeEventos.add(f)
+  return () => oyentesDeEventos.delete(f)
+}
+
 /**
  * WS /ws empuja {"tipo":"estado", ...} cada segundo. Se reconecta solo, con
  * espera creciente, y cae al modo demo si nunca llega a conectarse.
@@ -252,6 +288,10 @@ export function suscribirseAlEstado(alRecibir: (e: Estado) => void): () => void 
     socket.onmessage = (ev) => {
       try {
         const dato = JSON.parse(ev.data as string) as { tipo?: string } & Estado
+        if (dato.tipo === 'evento') {
+          for (const f of oyentesDeEventos) f(dato as unknown as EventoDelServidor)
+          return
+        }
         if (dato.tipo === 'estado' || dato.canal) alRecibir(dato)
       } catch {
         // Un mensaje roto no tumba la vista de aire.

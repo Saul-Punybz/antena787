@@ -548,3 +548,172 @@ func TestElEmparejadorMandaLoQueLaPantallaPinta(t *testing.T) {
 	}
 	exigeTodas(t, "POST /titulos/{id}/emparejar", w.Body.Bytes(), "ResultadoDeEmparejar", "reglas_quitadas")
 }
+
+// ── la cuarentena y la bitácora en pantalla (issues #6 y #7) ──────────
+
+// TestLaCuarentenaDiceComoSeLlamaElArchivo: la lista de cuarentena de
+// Biblioteca pinta `titulo` como nombre de persona —el título o el episodio
+// que usa el archivo—, y si nadie lo fichó, el nombre del archivo. Antes el
+// servidor no lo mandaba y la fila salía sin nombre (F1-68).
+func TestLaCuarentenaDiceComoSeLlamaElArchivo(t *testing.T) {
+	c := nuevo(t).conClave().entrar()
+	ctx := context.Background()
+
+	// Un episodio parado, con ficha.
+	parado := model.MediaAsset{
+		Path:        "/medios/space-cobra-e04.mp4",
+		DurationMs:  22 * 60 * 1000,
+		State:       model.AssetQuarantine,
+		PlainReason: "El video se corta a los 12 segundos: el archivo llegó incompleto.",
+		CreatedAt:   time.Now().UTC(),
+		UpdatedAt:   time.Now().UTC(),
+	}
+	if err := c.a.Store.Media.Insert(ctx, &parado); err != nil {
+		t.Fatalf("no pude guardar el archivo: %v", err)
+	}
+	title := model.Title{Name: "Space Cobra", Kind: model.TitleSeries}
+	if err := c.a.Store.Title.Insert(ctx, &title); err != nil {
+		t.Fatalf("no pude guardar el título: %v", err)
+	}
+	ep := model.Episode{TitleID: title.ID, Season: 1, Number: 4, Name: "La joya", MediaAssetID: &parado.ID}
+	if err := c.a.Store.Episode.Insert(ctx, &ep); err != nil {
+		t.Fatalf("no pude guardar el episodio: %v", err)
+	}
+	// Y uno parado que nadie llegó a fichar.
+	suelto := model.MediaAsset{
+		Path:        "/medios/Promos/promo-verano.mov",
+		State:       model.AssetQuarantine,
+		PlainReason: "No se pudo leer el archivo.",
+		CreatedAt:   time.Now().UTC(),
+		UpdatedAt:   time.Now().UTC(),
+	}
+	if err := c.a.Store.Media.Insert(ctx, &suelto); err != nil {
+		t.Fatalf("no pude guardar el archivo: %v", err)
+	}
+
+	w := c.do("GET", "/api/v1/cuarentena", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("/cuarentena dio %d: %s", w.Code, w.Body.String())
+	}
+	exige(t, "GET /cuarentena", primero(t, w.Body.Bytes()), "EnCuarentena")
+
+	var lista []map[string]any
+	c.json(w, &lista)
+	titulos := map[string]string{}
+	for _, fila := range lista {
+		titulos[fila["ruta"].(string)] = fila["titulo"].(string)
+	}
+	if got := titulos[parado.Path]; got != "Space Cobra · T1E4 La joya" {
+		t.Errorf("el episodio parado se llama %q; tenía que ser «Space Cobra · T1E4 La joya»", got)
+	}
+	if got := titulos[suelto.Path]; got != "promo-verano" {
+		t.Errorf("el archivo sin ficha se llama %q; tenía que ser el nombre del archivo, «promo-verano»", got)
+	}
+
+	// Y mientras haya algo parado, Al aire lo avisa con camino a Biblioteca.
+	c.a.RefreshCuarentena(ctx)
+	w = c.do("GET", "/api/v1/estado", nil)
+	var estado struct {
+		Alarmas []struct {
+			Tipo   string `json:"tipo"`
+			Nivel  string `json:"nivel"`
+			Texto  string `json:"texto"`
+			Accion *struct {
+				Ruta string `json:"ruta"`
+			} `json:"accion"`
+		} `json:"alarmas"`
+	}
+	c.json(w, &estado)
+	hay := false
+	for _, al := range estado.Alarmas {
+		if al.Texto == "2 archivos en cuarentena" {
+			hay = true
+			if al.Nivel != "aviso" {
+				t.Errorf("la cuarentena es un aviso, no %q: el sistema no regaña", al.Nivel)
+			}
+			if al.Accion == nil || al.Accion.Ruta != "/biblioteca" {
+				t.Errorf("la alarma de cuarentena tiene que llevar a /biblioteca: %+v", al.Accion)
+			}
+		}
+	}
+	if !hay {
+		t.Errorf("/estado no avisa de los 2 archivos en cuarentena: %s", w.Body.String())
+	}
+
+	// Al dejar pasar uno, el aviso baja a 1; al dejar pasar el otro, se apaga.
+	if w := c.do("POST", "/api/v1/cuarentena/"+itoa(suelto.ID)+"/dejar-pasar", map[string]string{"quien": "Rolando"}); w.Code != http.StatusOK {
+		t.Fatalf("dejar pasar dio %d: %s", w.Code, w.Body.String())
+	}
+	if !tieneAlarma(c, "1 archivo en cuarentena") {
+		t.Error("después de dejar pasar uno, el aviso tenía que decir «1 archivo en cuarentena»")
+	}
+	if w := c.do("POST", "/api/v1/cuarentena/"+itoa(parado.ID)+"/dejar-pasar", map[string]string{"quien": "Rolando"}); w.Code != http.StatusOK {
+		t.Fatalf("dejar pasar dio %d: %s", w.Code, w.Body.String())
+	}
+	if tieneAlarma(c, "1 archivo en cuarentena") || tieneAlarma(c, "2 archivos en cuarentena") {
+		t.Error("sin nada en cuarentena, el aviso tenía que apagarse")
+	}
+}
+
+func tieneAlarma(c *cliente, texto string) bool {
+	w := c.do("GET", "/api/v1/estado", nil)
+	var estado struct {
+		Alarmas []struct {
+			Texto string `json:"texto"`
+		} `json:"alarmas"`
+	}
+	c.json(w, &estado)
+	for _, al := range estado.Alarmas {
+		if al.Texto == texto {
+			return true
+		}
+	}
+	return false
+}
+
+// TestLaBitacoraMandaLoQueLaPantallaPinta: GET /incidentes trae cada fila con
+// lo que `Incidente` declara y, además, la frase en cristiano de su tipo,
+// para que Al aire no tenga que saber qué es un `salto_de_reloj` (F1-69).
+func TestLaBitacoraMandaLoQueLaPantallaPinta(t *testing.T) {
+	c := nuevo(t).conClave().entrar()
+
+	c.a.Incident("cuarentena", "space-cobra-e04.mp4: Este video no trae sonido.")
+	c.a.Incident("panico_ingest", "se cayó leyendo la carpeta")
+	c.a.Incident("algo_nuevo_de_f2", "un tipo que la lista todavía no conoce")
+
+	w := c.do("GET", "/api/v1/incidentes", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("/incidentes dio %d: %s", w.Code, w.Body.String())
+	}
+	exige(t, "GET /incidentes", primero(t, w.Body.Bytes()), "Incidente")
+
+	var lista []map[string]any
+	c.json(w, &lista)
+	if len(lista) != 3 {
+		t.Fatalf("la bitácora tenía 3 incidentes y devolvió %d: %s", len(lista), w.Body.String())
+	}
+	textos := map[string]string{}
+	for _, fila := range lista {
+		textos[fila["tipo"].(string)] = fila["texto"].(string)
+	}
+	casos := map[string]string{
+		"cuarentena":       "Un archivo quedó en cuarentena",
+		"panico_ingest":    "Una parte del sistema falló y se relanzó sola (ingest)",
+		"algo_nuevo_de_f2": "algo nuevo de f2",
+	}
+	for tipo, quiere := range casos {
+		if textos[tipo] != quiere {
+			t.Errorf("el incidente %q se enseña como %q; tenía que ser %q", tipo, textos[tipo], quiere)
+		}
+	}
+
+	// El rango: pedir solo el futuro no trae nada; un rango mal escrito es 400.
+	desde := time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
+	w = c.do("GET", "/api/v1/incidentes?desde="+desde, nil)
+	if w.Code != http.StatusOK || strings.TrimSpace(w.Body.String()) != "[]" {
+		t.Errorf("pedir la bitácora del futuro tenía que dar una lista vacía: %d %s", w.Code, w.Body.String())
+	}
+	if w := c.do("GET", "/api/v1/incidentes?desde=ayer", nil); w.Code != http.StatusBadRequest {
+		t.Errorf("una fecha mal escrita tenía que ser 400 con frase en cristiano: %d %s", w.Code, w.Body.String())
+	}
+}

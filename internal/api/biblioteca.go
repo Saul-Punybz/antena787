@@ -423,6 +423,9 @@ func (s *Server) materialOut(ctx context.Context, a model.MediaAsset) any {
 // dejarlo pasar.
 type enCuarentenaOut struct {
 	model.MediaAsset
+	// Titulo es cómo se llama el archivo para una persona: el título o el
+	// episodio que lo usa; si nadie lo fichó, el nombre del archivo.
+	Titulo       string `json:"titulo"`
 	MotivoCodigo string `json:"motivo_codigo"`
 }
 
@@ -434,7 +437,11 @@ func (s *Server) cuarentenaList(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]enCuarentenaOut, 0, len(list))
 	for _, a := range list {
-		out = append(out, enCuarentenaOut{MediaAsset: a, MotivoCodigo: motivoCodigo(a.PlainReason)})
+		out = append(out, enCuarentenaOut{
+			MediaAsset:   a,
+			Titulo:       s.App.TituloDelArchivo(r.Context(), a),
+			MotivoCodigo: motivoCodigo(a.PlainReason),
+		})
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -486,6 +493,7 @@ func (s *Server) dejarPasar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "media_asset", &nuevo.ID, "dejado_pasar_por", old.PlainReason, quien)
+	s.App.RefreshCuarentena(ctx)
 	s.App.Recalc()
 	writeJSON(w, http.StatusOK, nuevo)
 }

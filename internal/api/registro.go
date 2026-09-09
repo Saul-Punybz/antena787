@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"antena787/internal/app"
 	"antena787/internal/model"
 )
 
@@ -28,10 +29,20 @@ func (s *Server) incidentes(w http.ResponseWriter, r *http.Request) {
 		failStore(w, err, "leer los incidentes")
 		return
 	}
-	if list == nil {
-		list = []model.Incident{}
+	out := make([]incidenteOut, 0, len(list))
+	for _, inc := range list {
+		out = append(out, incidenteOut{Incident: inc, Texto: app.TextoDeIncidente(inc.Kind)})
 	}
-	writeJSON(w, http.StatusOK, list)
+	writeJSON(w, http.StatusOK, out)
+}
+
+// incidenteOut es un incidente tal como lo pinta la bitácora de Al aire
+// (web/src/lib/tipos.ts, `Incidente`): la fila entera más la frase en
+// cristiano de su tipo, para que la pantalla no tenga que saber qué es un
+// `salto_de_reloj`.
+type incidenteOut struct {
+	model.Incident
+	Texto string `json:"texto"`
 }
 
 // DefaultAuditLimit es cuántas entradas devuelve la auditoría si nadie dice

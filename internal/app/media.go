@@ -143,6 +143,7 @@ func (a *App) IngestFile(ctx context.Context, path string) {
 		a.Publish("ingest", "material", "no se pudo guardar "+filepath.Base(path)+": "+err.Error())
 		return
 	}
+	a.RefreshCuarentena(ctx)
 	if ingestErr != nil {
 		a.Incident("cuarentena", fmt.Sprintf("%s: %s", filepath.Base(path), asset.PlainReason))
 		return
@@ -185,6 +186,7 @@ func (a *App) ReingestSidecar(ctx context.Context, sidecar string) {
 		a.Publish("ingest", "material", "no se pudo guardar "+filepath.Base(asset.Path)+": "+err.Error())
 		return
 	}
+	a.RefreshCuarentena(ctx)
 	if ingestErr != nil {
 		a.Incident("cuarentena", fmt.Sprintf("%s: %s", filepath.Base(asset.Path), asset.PlainReason))
 		return

@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { EncabezadoDeAire } from '../componentes/EncabezadoDeAire'
 import { Caratula } from '../componentes/Caratula'
 import { Panel } from '../componentes/Panel'
+import { Bitacora } from '../componentes/Bitacora'
 import { IconoMano } from '../componentes/Iconos'
 import { useEstado } from '../lib/estado'
 import { api } from '../lib/api'
@@ -301,6 +302,9 @@ export function AlAire() {
                 : 'Vuelve solo cuando sueltes o al terminar el bloque'}
             </p>
           </div>
+
+          {/* Lo que el sistema hizo solo (PRD §15, issue #7) */}
+          <Bitacora zona={zona} ahora={ahora} />
         </aside>
       </div>
 

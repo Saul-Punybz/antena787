@@ -299,6 +299,23 @@ export interface EnCuarentena {
   motivo_codigo?: string
 }
 
+// ── la bitácora: lo que el sistema hizo solo ──────────────────────────
+
+/**
+ * Un incidente es algo que el sistema hizo solo para proteger el aire, o
+ * algo que le pasó y anotó (PRD §15, `incidente`). Cuándo, qué, cuánto duró.
+ * `fin` es nulo mientras sigue abierto. `texto` es la frase en cristiano del
+ * tipo; si un servidor viejo no la manda, la pantalla enseña el tipo legible.
+ */
+export interface Incidente {
+  id: number
+  tipo: string
+  inicio: Instante
+  fin: Instante | null
+  detalle: string
+  texto?: string
+}
+
 // ── importar desde la hoja ────────────────────────────────────────────
 
 export interface RelevoPropuesto {

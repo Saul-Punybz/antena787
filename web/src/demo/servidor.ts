@@ -38,6 +38,7 @@ import {
   EN_VIVO,
   episodiosDe,
   FRANJAS,
+  incidentes,
   programaEn,
   reglas as reglasDemo,
   salidas,
@@ -1345,7 +1346,17 @@ export async function responder(ruta: string, init?: RequestInit): Promise<Respo
   }
   if (p === '/relleno')
     return json([{ id: 1, nombre: 'Cartel de la estación con cama musical', duracion_ms: 30_000 }])
-  if (p === '/incidentes') return json([])
+  if (p === '/incidentes') {
+    const desde = Date.parse(url.searchParams.get('desde') ?? '') || ahoraDemo().getTime() - 7 * 86_400_000
+    const hasta = Date.parse(url.searchParams.get('hasta') ?? '') || ahoraDemo().getTime() + 60_000
+    return json(
+      incidentes.filter((i) => {
+        const ini = Date.parse(i.inicio)
+        const fin = i.fin ? Date.parse(i.fin) : null
+        return ini < hasta && (fin === null || fin >= desde)
+      }),
+    )
+  }
   return json({ error: `El modo demo no tiene esta ruta todavía: ${p}` }, 404)
 }
 

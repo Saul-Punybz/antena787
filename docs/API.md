@@ -47,7 +47,7 @@ asistente está abierto.
 | `GET /biblioteca/{id}` · `PUT /biblioteca/{id}` | Ficha del título: los mismos campos de la lista más `lista_de_episodios[]`, cada episodio con su `duracion_ms`, su `estado_material` y el sonido de su archivo. `PUT` edita nombre, sinopsis, tipo, carátula. |
 | `GET /material` · `GET /material/{id}` | `media_asset` con medidas. |
 | `PUT /material/{id}` | `negro_intencional`, `sin_logo`, `subtitulos_externos`, `marcas_de_corte_ms` (confirmar marcas candidatas) y `pista_audio_aire` (ver abajo). |
-| `GET /cuarentena` | Los assets en cuarentena con `motivo_en_cristiano` y `motivo_codigo`. |
+| `GET /cuarentena` | Los assets en cuarentena con `titulo` (cómo se llama para una persona: el título o el episodio que lo usa, o el nombre del archivo si nadie lo fichó), `motivo_en_cristiano` y `motivo_codigo`. Mientras haya alguno, `/estado` lleva la alarma «N archivos en cuarentena» (nivel aviso, acción → `/biblioteca`). |
 | `POST /cuarentena/{id}/dejar-pasar` | `{"quien":"Rolando"}` → estado `listo`, `dejado_pasar_por`, entrada en `audit_log`. `409` si el archivo no trae sonido (ver abajo). |
 | `POST /material/subir` | multipart; cae en la carpeta vigilada. |
 | `GET /relleno` | La biblioteca de relleno; vacía → aviso. |
@@ -175,7 +175,7 @@ aparece en esta lista.
 
 | | |
 |---|---|
-| `GET /incidentes?desde=&hasta=` | Bitácora de incidentes. |
+| `GET /incidentes?desde=&hasta=` | Bitácora de incidentes: lo que el sistema hizo solo (PRD §15). Cada fila trae `id`, `tipo`, `inicio`, `fin` (nulo si sigue abierto), `detalle` y **`texto`**, la frase en cristiano del tipo (`app.TextoDeIncidente`: *«Un archivo quedó en cuarentena»*, *«El reloj de la máquina saltó y el plan se rehizo»*…; un `panico_<x>` sale como *«Una parte del sistema falló y se relanzó sola (x)»*; un tipo desconocido, legible con espacios). Sin fechas, la última semana. Fechas en RFC 3339; una mal escrita es `400`. Al aire la pinta como tarjeta con lo último y un panel al lado con 7/30/90 días. |
 | `GET /auditoria?entidad=&id=` | `audit_log`, con la cadena de hash verificable (`GET /auditoria/verificar`). |
 
 ## Asistente de instalación (sin clave hasta terminar)

@@ -459,6 +459,30 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
 
 ---
 
+### Cuarentena e incidentes en pantalla (issues #6 y #7, 9 de septiembre de 2026; §13, §15)
+
+- **F1-68** [AUTO] — Dado un archivo en `cuarentena` que un título o un
+  episodio ya fichó, y otro que nadie fichó · Cuando Biblioteca pide la
+  cuarentena · Entonces cada fila trae `titulo` con nombre de persona
+  (*«Space Cobra · T1E4 La joya»*; el nombre del archivo sin extensión si no
+  hay ficha), su `motivo_en_cristiano` y el botón de dejarlo pasar bajo un
+  nombre que queda en `audit_log`. Y mientras quede alguno, **Al aire** enseña
+  el aviso *«N archivos en cuarentena»* con camino a Biblioteca; se recalcula
+  al arrancar, tras cada ingest y al dejar pasar uno, y se apaga solo cuando
+  no queda ninguno. Es un aviso, no un problema: el sistema no regaña.
+- **F1-69** [AUTO] — Dado incidentes de varios tipos en la tabla `incidente`
+  (uno conocido, un `panico_<goroutine>`, uno que la lista aún no conoce) ·
+  Cuando se pide `GET /incidentes` · Entonces cada fila trae lo que la
+  pantalla pinta (`id`, `tipo`, `inicio`, `fin`, `detalle`) **más `texto`**,
+  la frase en cristiano de su tipo, en un solo sitio del servidor; el pánico
+  dice qué parte se relanzó y el desconocido sale legible. Un rango sin
+  incidentes es una lista vacía y una fecha mal escrita es `400`. Al aire
+  la enseña como tarjeta con lo último y un panel al lado (nunca un modal,
+  ADR 0008) con 7, 30 o 90 días, agrupada por día y con la duración de lo que
+  ya cerró; se refresca sola con cada evento del WebSocket.
+
+---
+
 ## F2 · Playout (motor, decks, fuentes en vivo, manual, diferido, grabación, salidas)
 
 ### Motor: cambio de clip, conformado, decks y prioridad (§9 paso 4, §14.1)
@@ -1038,9 +1062,9 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
 ## Resumen
 
 - **F0:** 9 criterios (F0-01 a F0-09).
-- **F1:** 63 criterios (F1-01 a F1-63; los seis últimos, del 9 de septiembre de 2026, audio de todo el material).
+- **F1:** 69 criterios (F1-01 a F1-69; del 9 de septiembre de 2026: F1-58 a F1-63 audio de todo el material, F1-64 a F1-67 emparejar títulos, F1-68 y F1-69 cuarentena e incidentes en pantalla).
 - **F2:** 110 criterios (F2-01 a F2-110).
-- **Total: 176 criterios de aceptación**, de los cuales **150 son [AUTO]** y
+- **Total: 182 criterios de aceptación**, de los cuales **156 son [AUTO]** y
   **26 son [MANUAL]**.
 
 **Qué cambió en la revisión del 8 de septiembre de 2026** (contra el PRD

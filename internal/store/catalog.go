@@ -393,3 +393,34 @@ func (r *LiveSourceRepo) Upsert(ctx context.Context, l *model.LiveSource) error 
 	}
 	return nil
 }
+
+// NombreDelArchivo dice cómo se llama, para una persona, el archivo con ese
+// id: el nombre del título que lo usa o, si es un episodio, «Título ·
+// T1E4 Nombre del episodio». Devuelve ErrNotFound si ningún título ni
+// episodio lo tiene fichado —un archivo en cuarentena que no llegó a
+// catalogarse—, y quien pregunta se queda con el nombre del archivo.
+func (r *TitleRepo) NombreDelArchivo(ctx context.Context, assetID int64) (string, error) {
+	row := r.db.QueryRowContext(ctx, `
+		SELECT t.nombre, COALESCE(e.temporada, 0), COALESCE(e.numero, 0), COALESCE(e.nombre, '')
+		FROM title t
+		LEFT JOIN episode e ON e.title_id = t.id AND e.media_asset_id = ?
+		WHERE t.media_asset_id = ? OR e.media_asset_id = ?
+		ORDER BY t.id LIMIT 1`, assetID, assetID, assetID)
+	var titulo, epNombre string
+	var temporada, numero int
+	err := row.Scan(&titulo, &temporada, &numero, &epNombre)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", fmt.Errorf("archivo %d: %w", assetID, ErrNotFound)
+	}
+	if err != nil {
+		return "", translate("buscar el nombre del archivo", err)
+	}
+	if numero == 0 {
+		return titulo, nil
+	}
+	out := fmt.Sprintf("%s · T%dE%d", titulo, temporada, numero)
+	if epNombre != "" {
+		out += " " + epNombre
+	}
+	return out, nil
+}

@@ -1,6 +1,6 @@
 # CONTINUAR — dónde quedamos y qué sigue
 
-_Última sesión: 9 de septiembre de 2026 (cuatro tandas). Siguiente: la que venga._
+_Última sesión: 9 de septiembre de 2026 (cinco tandas). Siguiente: la que venga._
 
 ## Dónde estamos
 
@@ -55,8 +55,8 @@ go test ./... -count=1           # todo debe estar verde
    F2), reingesta sola cuando el audio llega tarde, selector de pista en
    Biblioteca (default por `idioma_audio_preferido`, Ajustes → Audio), y un
    archivo mudo **no se puede soltar**: todo lo que sale al aire lleva audio.
-   Pendiente menor: `GET /cuarentena` no manda `titulo` (la interfaz lo declara
-   obligatorio); arreglo sugerido en `docs/API.md`.
+   ~~Pendiente menor: `GET /cuarentena` no manda `titulo`.~~ Resuelto en la
+   quinta tanda (punto 4).
 2. ~~Asistente de instalación~~ **Hecho (9 sept, tercera tanda; cierra el issue
    #5):** los nueve pasos con lógica real en `web/src/pantallas/Asistente.tsx`
    (riel de progreso, reanudar desde `paso`, respuestas precargadas, barras
@@ -91,10 +91,29 @@ go test ./... -count=1           # todo debe estar verde
    ya no pregunta («lo recordaba de otra hoja»).
    Nota: si la hoja pegada no trae su catálogo, el alias se aplica por la API
    al crear la regla (enlaza bien, pero sin el aviso de «lo recordaba»).
-4. **Modo sombra con archivos de verdad** (y firma de los tres criterios
+4. ~~Cuarentena e incidentes en pantalla~~ **Hecho (9 sept, quinta tanda;
+   cierra los issues #6 y #7):** criterios F1-68 y F1-69. `GET /cuarentena`
+   ya manda `titulo` con nombre de persona (título o «Serie · T1E4 Nombre»,
+   o el nombre del archivo si nadie lo fichó: `TitleRepo.NombreDelArchivo`),
+   y mientras quede algo parado Al aire enseña el aviso «N archivos en
+   cuarentena» → Biblioteca (`App.RefreshCuarentena`: al arrancar, tras cada
+   ingest y al dejar pasar). La **bitácora** vive en Al aire
+   (`componentes/Bitacora.tsx`): tarjeta con lo último y panel al lado con
+   7/30/90 días agrupado por día; `GET /incidentes` manda `texto`, la frase
+   en cristiano de cada tipo (`app.TextoDeIncidente`, con los tipos de F2
+   ya escritos), y la pantalla se refresca con cada `{"tipo":"evento"}` del
+   WebSocket (`suscribirseAEventos` en `lib/api.ts`). Cambio de semántica:
+   **`App.Incident` cierra el suceso en el mismo instante** (`fin` =
+   `inicio`); antes quedaban abiertos y «la última semana» arrastraba todo
+   lo viejo. Lo que dura (vivo ausente, apagón, F2) se inserta abierto y se
+   cierra con `Store.Incident.Close`. Humo con el binario real y un video
+   mudo hecho con ffmpeg: cuarentena con nombre, alarma, incidente con
+   frase, 409 al intentar soltarlo. Verde.
+   Pendiente menor: las filas de `incidente` anteriores a esta tanda siguen
+   con `fin` nulo (en una base de pruebas, nada que migrar).
+5. **Modo sombra con archivos de verdad** (y firma de los tres criterios
    manuales F1-32, F1-43, F1-53 con Rolando): videos reales en la carpeta
    vigilada, ver que el ingest mide, normaliza y el resolver programa.
-5. **Cuarentena e incidentes en pantalla** (issues #6, #7): la API ya las sirve.
 6. Después, **F2 · Playout** (PRD §22.3), donde además se cierran F1-04
    (CEA-608 con detección propia, ffprobe ≥ 9 ya no emite `closed_captions`),
    el fundido de 1 s del clip recortado (`fundido_salida_ms` ya viene en el
@@ -111,6 +130,9 @@ go test ./... -count=1           # todo debe estar verde
   emisión, es un cambio pequeño en `internal/api/plan.go`.
 - Cuándo hacer público el repo: cuando el asistente y el modo sombra con
   archivos reales funcionen de punta a punta.
+- Los incidentes se pintan con la frase del servidor; si un servidor viejo no
+  manda `texto`, la interfaz enseña el tipo legible (`textoDe` en
+  `Bitacora.tsx`).
 
 ## Reglas que no cambian
 
