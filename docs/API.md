@@ -95,8 +95,81 @@ sobre la misma ficha, sin que nadie tenga que apretar nada.
 
 | | |
 |---|---|
-| `POST /importar/hoja` | `{"texto": "<pegado desde Sheets/Excel>"}` → `{"reglas_creadas": n, "titulos_creados": n, "relevos_propuestos": [...], "filas_con_error": [{"fila": 12, "texto": "...", "motivo": "fin antes que inicio"}], "fechas_corridas": [...]}`. Nunca rechaza la hoja entera. |
+| `POST /importar/hoja` | `{"texto": "<pegado desde Sheets/Excel>"}` → `{"reglas_creadas": n, "titulos_creados": n, "relevos_propuestos": [...], "repeticiones_propuestas": [...], "filas_con_error": [{"fila": 12, "texto": "...", "motivo": "fin antes que inicio"}], "fechas_corridas": [...], "posibles_duplicados": [...], "avisos": [...], "titulos_sin_emparejar": [...], "resumen": "..."}`. Nunca rechaza la hoja entera. |
 | `POST /importar/confirmar-relevos` | `[{"regla": id, "releva_a": id}]`. |
+
+`titulos_creados` cuenta solo fichas de verdad: un título que quedó **por
+emparejar** no es una ficha del catálogo todavía y no se cuenta ahí, sino en
+`titulos_sin_emparejar`. Todas las listas de la respuesta llegan siempre como
+lista, nunca `null`.
+
+## Emparejar títulos (F1-64 a F1-67)
+
+Una hoja hecha a mano llama a las cosas como quiere: la ficha se llama
+«Rurouni Kenshin» y la hoja dice «Samurai X». El importador empareja solo lo
+que puede decidir sin dudar; lo demás **no lo adivina y no lo crea callado**:
+la regla se importa igual —la hoja nunca se rechaza—, el título queda marcado
+«por emparejar» y sale en esta lista hasta que una persona diga cuál es.
+
+| | |
+|---|---|
+| `GET /titulos/sin-emparejar` | `[{"id": 42, "nombre": "Samurai X", "texto": "«Samurai X» no tiene ficha en el catálogo", "candidatos": [{"id": 7, "nombre": "Saber Marionette J", "puntuacion": 0.93}], "reglas": 2, "franjas": ["lunes a viernes a las 2:30 PM"]}]`. Siempre una lista. |
+| `GET /titulos/buscar?q=` | `[{"id": 7, "nombre": "Rurouni Kenshin", "tipo": "serie"}]`, 20 como mucho, para elegir la ficha buena. Solo fichas del canal, y nunca las que también están por emparejar. Sin `q` devuelve las primeras por orden alfabético. |
+| `POST /titulos/{id}/emparejar` | La decisión: `{"accion": "usar", "title_id": n}`, `{"accion": "propio"}` o `{"accion": "quitar"}`. |
+
+`titulos_sin_emparejar` de `POST /importar/hoja` trae exactamente estos mismos
+objetos, ya con el identificador guardado: la pantalla de Reglas puede
+emparejar de un clic sin volver a pedir la lista.
+
+**`usar`** — es esta ficha del catálogo (F1-66). Las reglas que usaban el
+título provisional pasan a la ficha, el provisional desaparece, el plan se
+recalcula y la guía se vuelve a publicar. El nombre de la hoja queda guardado
+como **alias** de la ficha: la próxima hoja que traiga ese nombre se empareja
+sola, sin preguntar y sin que el parecido tenga que acertarlo (el alias se
+busca por la clave del nombre, así que «Samurai X», «SAMURAIX» y «samurai-x»
+son el mismo). Responde `200`:
+
+```json
+{
+  "reglas_movidas": 2,
+  "alias": "Samurai X",
+  "texto": "«Samurai X» ahora es «Rurouni Kenshin»: 2 reglas pasaron a esa ficha y la próxima hoja que diga «Samurai X» se empareja sola"
+}
+```
+
+**`propio`** — es un título nuevo de verdad (F1-67). La ficha se queda como
+propia del canal y deja de estar por emparejar; las reglas no se tocan.
+Responde `200` con `{"texto": "«Los Simuladores» se queda como título propio
+del canal: ya no está por emparejar"}`.
+
+**`quitar`** — no es un programa (F1-67): el nombre de una fuente en vivo, por
+ejemplo. Se van el título y las reglas que lo usaban, diciendo cuántas.
+Responde `200` con `{"reglas_quitadas": 2, "texto": "«SaberMarionette» ya no
+está en la parrilla: se fueron con él 2 reglas que lo usaban"}`.
+
+Los peros: `404` si el título no existe; `400` si falta `title_id` (campo
+`title_id`), si la acción no es una de las tres (campo `accion`) o si se
+empareja un título consigo mismo; `409` si la ficha destino también está por
+emparejar —hay que resolver esa primero— o si se quiere quitar como
+provisional una ficha del catálogo. Las tres rutas piden la clave de estación
+como cualquier otra, y las tres decisiones quedan en la auditoría.
+
+Mientras quede algún título por emparejar, `GET /estado` trae la alarma:
+
+```json
+{
+  "tipo": "emparejar",
+  "nivel": "aviso",
+  "texto": "3 títulos por emparejar",
+  "detalle": "«Los Simuladores», «SaberMarionette» y «Samurai X»",
+  "accion": {"texto": "emparejar", "ruta": "/reglas"}
+}
+```
+
+Se recalcula al arrancar, después de cada importación y después de cada
+decisión, y se apaga sola cuando no queda ninguno. El nombre de una fuente en
+vivo (`RadioOnce Live!`) nunca entra al catálogo como título, así que nunca
+aparece en esta lista.
 
 ## Lo que el sistema hizo solo
 

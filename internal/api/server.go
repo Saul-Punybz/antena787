@@ -125,6 +125,11 @@ func (s *Server) routes() {
 	api("POST /api/v1/importar/hoja", s.importarHoja)
 	api("POST /api/v1/importar/confirmar-relevos", s.confirmarRelevos)
 
+	// Emparejar títulos (F1-64 a F1-67)
+	api("GET /api/v1/titulos/sin-emparejar", s.titulosSinEmparejar)
+	api("GET /api/v1/titulos/buscar", s.titulosBuscar)
+	api("POST /api/v1/titulos/{id}/emparejar", s.titulosEmparejar)
+
 	// Lo que el sistema hizo solo
 	api("GET /api/v1/incidentes", s.incidentes)
 	api("GET /api/v1/auditoria", s.auditoria)

@@ -498,3 +498,53 @@ func declaraLaInterfaz(t *testing.T, nombres ...string) bool {
 	}
 	return true
 }
+
+// ── emparejar títulos (F1-64 a F1-67) ─────────────────────────────────
+
+// TestElEmparejadorMandaLoQueLaPantallaPinta compara las respuestas nuevas
+// con lo que declara web/src/lib/tipos.ts.
+func TestElEmparejadorMandaLoQueLaPantallaPinta(t *testing.T) {
+	if !declaraLaInterfaz(t, "TituloSinEmparejar", "CandidatoDeTitulo", "ResultadoDeEmparejar") {
+		t.Skip("web/src/lib/tipos.ts todavía no declara los tipos del emparejador")
+	}
+	c := nuevo(t).conClave().entrar()
+	out := importarLaHoja(t, c)
+	if len(out.SinEmparejar) == 0 {
+		t.Fatal("la hoja no dejó nada por emparejar")
+	}
+
+	w := c.do("GET", "/api/v1/titulos/sin-emparejar", nil)
+	uno := primero(t, w.Body.Bytes())
+	exige(t, "GET /titulos/sin-emparejar", uno, "TituloSinEmparejar")
+
+	var lista []tituloSinEmparejar
+	c.json(w, &lista)
+	var conCandidatos []byte
+	var todos []json.RawMessage
+	c.json(w, &todos)
+	for i := range lista {
+		if len(lista[i].Candidatos) > 0 {
+			conCandidatos = todos[i]
+		}
+	}
+	if conCandidatos == nil {
+		t.Fatal("ninguno de los títulos por emparejar trae candidatos")
+	}
+	exige(t, "GET /titulos/sin-emparejar (un candidato)",
+		primero(t, campo(t, conCandidatos, "candidatos")), "CandidatoDeTitulo")
+
+	if declaraLaInterfaz(t, "TituloDelCatalogo") {
+		w = c.do("GET", "/api/v1/titulos/buscar?q=kenshin", nil)
+		exige(t, "GET /titulos/buscar", primero(t, w.Body.Bytes()), "TituloDelCatalogo")
+	}
+
+	// Y la respuesta de la decisión.
+	kenshin := fichaLlamada(t, c, "Rurouni Kenshin")
+	samurai := porNombre(out.SinEmparejar)["Samurai X"]
+	w = c.do("POST", "/api/v1/titulos/"+itoa(samurai.ID)+"/emparejar",
+		map[string]any{"accion": "usar", "title_id": kenshin.ID})
+	if w.Code != http.StatusOK {
+		t.Fatalf("emparejar dio %d: %s", w.Code, w.Body.String())
+	}
+	exigeTodas(t, "POST /titulos/{id}/emparejar", w.Body.Bytes(), "ResultadoDeEmparejar", "reglas_quitadas")
+}
