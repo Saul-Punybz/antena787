@@ -151,6 +151,22 @@ func (a *App) deleteFrom(ctx context.Context, now time.Time) time.Time {
 // resolverInput junta todo lo que el resolver necesita. Él no busca nada:
 // se lo damos hecho.
 func (a *App) resolverInput(ctx context.Context) (resolver.Input, error) {
+	return a.ResolverInputAt(ctx, a.Now(), a.Horizon())
+}
+
+// Horizon es cuánto plan se escribe por delante (48 h por defecto).
+func (a *App) Horizon() time.Duration {
+	if a.opts.Horizon > 0 {
+		return a.opts.Horizon
+	}
+	return resolver.DefaultHorizon
+}
+
+// ResolverInputAt arma la entrada del resolver como si fuera ese instante,
+// con ese horizonte. Es lo que usan la semana y el mes para proyectar, con
+// el mismo resolver y sin escribir nada, lo que las reglas pondrán en los
+// días que todavía no están en el plan.
+func (a *App) ResolverInputAt(ctx context.Context, now time.Time, horizon time.Duration) (resolver.Input, error) {
 	var in resolver.Input
 
 	ch, err := a.Store.Channel.Get(ctx, a.ChannelID)
@@ -174,8 +190,6 @@ func (a *App) resolverInput(ctx context.Context) (resolver.Input, error) {
 		return in, err
 	}
 
-	now := a.Now()
-	horizon := a.opts.Horizon
 	if horizon <= 0 {
 		horizon = resolver.DefaultHorizon
 	}

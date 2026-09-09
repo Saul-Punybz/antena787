@@ -186,9 +186,9 @@ export function Ajustes() {
         {/* Hora */}
         <Tarjeta rotulo="HORA">
           <Linea nombre="Sincronizada con" valor={ajustes.hora_servidor} aqua />
-          <Linea nombre="Desvío" valor={`${ajustes.hora_desvio_s} s`} verde />
+          <Linea nombre="Desvío" valor={segundos(ajustes.hora_desvio_s)} verde />
           <p className="ayuda" style={{ marginTop: 12 }}>
-            Avisa si pasa de {ajustes.hora_aviso_si_pasa_de_s} s.
+            Avisa si pasa de {segundos(ajustes.hora_aviso_si_pasa_de_s)}.
           </p>
         </Tarjeta>
 
@@ -239,7 +239,7 @@ export function Ajustes() {
             <div>
               <div style={{ font: '500 14.5px var(--sans)' }}>Avisa y devuelve el control</div>
               <div className="tenue" style={{ fontSize: 12.5, marginTop: 3 }}>
-                Si no sale señal más de {ajustes.silencio_umbral_s} s
+                Si no sale señal más de {segundos(ajustes.silencio_umbral_s)}
               </div>
             </div>
             <button
@@ -536,4 +536,10 @@ function Linea({
       </span>
     </div>
   )
+}
+
+/** «12 s», o «—» cuando el servidor todavía no manda ese dato (los de la
+ * hora y el detector de silencio llegan con el motor, F2). */
+function segundos(v: unknown): string {
+  return v === undefined || v === null || v === '' ? '—' : `${v} s`
 }

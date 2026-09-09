@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Clip es un archivo que va a salir al aire.
@@ -67,6 +68,10 @@ func StartDecoder(parent context.Context, ffmpeg, ffprobe string, f Format, clip
 		"-i", clip.Path, "-an", "-sn", "-dn",
 		"-vf", videoFilter(f), "-f", "rawvideo", "pipe:1")
 	d.vcmd.Stderr = &d.verr
+	// En Windows, Wait se quedaba esperando a que ffmpeg soltara sus tuberías
+	// después de matarlo (issue #14): con WaitDelay, Wait cierra las tuberías
+	// él mismo y sigue.
+	d.vcmd.WaitDelay = 3 * time.Second
 	vout, err := d.vcmd.StdoutPipe()
 	if err != nil {
 		cancel()
@@ -76,6 +81,7 @@ func StartDecoder(parent context.Context, ffmpeg, ffprobe string, f Format, clip
 		"-i", clip.Path, "-vn", "-sn", "-dn",
 		"-af", audioFilter(f), "-f", "s16le", "-ar", strconv.Itoa(f.SampleRate), "-ac", strconv.Itoa(f.Channels), "pipe:1")
 	d.acmd.Stderr = &d.aerr
+	d.acmd.WaitDelay = 3 * time.Second
 	aout, err := d.acmd.StdoutPipe()
 	if err != nil {
 		cancel()
@@ -133,6 +139,13 @@ func (d *Decoder) ReadSamples(n int) ([]byte, int) { return d.audio.read(n) }
 // escribió en stderr, que es el "por qué" de un clip corrupto.
 func (d *Decoder) Close() (stderr string) {
 	d.cancel()
+	// Matar a mano además de cancelar el contexto: en Windows el proceso
+	// seguía vivo después de la cancelación (issue #14).
+	for _, c := range []*exec.Cmd{d.vcmd, d.acmd} {
+		if c.Process != nil {
+			_ = c.Process.Kill()
+		}
+	}
 	d.vcmd.Wait()
 	d.acmd.Wait()
 	d.wg.Wait()

@@ -231,6 +231,46 @@ const FranjasPorDia = 48
 // franjaMs es lo que dura una franja de la tira semanal.
 const franjaMs int64 = 30 * 60 * 1000
 
+// EstadoProyectado es el `estado` de una franja que todavía no está escrita
+// en el plan: es lo que el resolver pondrá cuando le toque. Sin plan_id, no
+// se arrastra ni se suelta.
+const EstadoProyectado = "proyectado"
+
+// itemsDelDia devuelve lo que hay en el plan para ese día natural y, si el
+// día se sale de la ventana ya resuelta, lo que el resolver pondría con las
+// reglas de hoy: la tira semanal y el mes enseñan la parrilla entera, no
+// solo las 48 h escritas (modo sombra, 9 sept 2026). El segundo valor dice
+// qué elementos son proyección.
+func (s *Server) itemsDelDia(ctx context.Context, in *resolver.Input, medianoche time.Time) ([]model.PlanItem, []bool, error) {
+	fin := medianoche.AddDate(0, 0, 1)
+	items, err := s.App.Store.Plan.ListRange(ctx, s.App.ChannelID, medianoche, fin)
+	if err != nil {
+		return nil, nil, err
+	}
+	proyectado := make([]bool, len(items))
+	if in == nil || !fin.After(s.Now().Add(s.App.Horizon())) {
+		return items, proyectado, nil
+	}
+	cp := *in
+	cp.Now = medianoche
+	if resuelto := s.Now().Add(s.App.Horizon()); resuelto.After(medianoche) {
+		cp.Now = resuelto
+	}
+	cp.Horizon = fin.Sub(cp.Now)
+	cp.Existing = items
+	out := resolver.Resolve(cp)
+	for i := range out.Items {
+		it := out.Items[i]
+		if !it.PlannedAt.Before(fin) || !it.End().After(medianoche) {
+			continue
+		}
+		it.State = model.PlanState(EstadoProyectado)
+		items = append(items, it)
+		proyectado = append(proyectado, true)
+	}
+	return items, proyectado, nil
+}
+
 func (s *Server) planSemana(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ch, err := s.App.Store.Channel.Get(ctx, s.App.ChannelID)
@@ -257,6 +297,11 @@ func (s *Server) planSemana(w http.ResponseWriter, r *http.Request) {
 	}
 	dias := []diaSemana{}
 	vaciasSemana := 0.0
+	entrada, err := s.App.ResolverInputAt(ctx, s.Now(), s.App.Horizon())
+	if err != nil {
+		failStore(w, err, "leer las reglas")
+		return
+	}
 	for n := 0; n < 7; n++ {
 		day := from.Add(n)
 		// La tira se dibuja sobre el reloj del día natural —la interfaz la
@@ -264,8 +309,7 @@ func (s *Server) planSemana(w http.ResponseWriter, r *http.Request) {
 		// ese calendario completo, no el del día de emisión, que empieza y
 		// termina desplazado.
 		medianoche := day.Time(loc)
-		items, err := s.App.Store.Plan.ListRange(ctx, s.App.ChannelID,
-			medianoche, medianoche.AddDate(0, 0, 1))
+		items, _, err := s.itemsDelDia(ctx, &entrada, medianoche)
 		if err != nil {
 			failStore(w, err, "leer el plan de la semana")
 			return
@@ -286,9 +330,11 @@ func (s *Server) planSemana(w http.ResponseWriter, r *http.Request) {
 				}
 				name, _ := cat.name(it)
 				titulo := name
-				id := it.ID
 				slot.Title = &titulo
-				slot.PlanID = &id
+				if it.ID != 0 {
+					id := it.ID
+					slot.PlanID = &id
+				}
 				slot.Fijado = it.Fijado
 				slot.State = string(it.State)
 				slot.Live = it.Origin == model.OriginLiveSource
@@ -400,11 +446,15 @@ func (s *Server) planMes(w http.ResponseWriter, r *http.Request) {
 	loc := ch.Location()
 	days := []diaMes{}
 	vaciasMes := 0.0
+	entrada, err := s.App.ResolverInputAt(ctx, s.Now(), s.App.Horizon())
+	if err != nil {
+		failStore(w, err, "leer las reglas")
+		return
+	}
 	for d := first; d.Month() == first.Month(); d = d.AddDate(0, 0, 1) {
 		day := model.Day(d.Format("2006-01-02"))
 		medianoche := day.Time(loc)
-		items, err := s.App.Store.Plan.ListRange(ctx, s.App.ChannelID,
-			medianoche, medianoche.AddDate(0, 0, 1))
+		items, _, err := s.itemsDelDia(ctx, &entrada, medianoche)
 		if err != nil {
 			failStore(w, err, "leer el plan del mes")
 			return

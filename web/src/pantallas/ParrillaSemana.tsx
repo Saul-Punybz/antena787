@@ -89,7 +89,7 @@ export function ParrillaSemana() {
   const inicio = useMemo(() => {
     if (desde) return desde
     const d = new Date(hoy + 'T00:00:00Z')
-    return sumarDias(hoy, -d.getUTCDay() + 7) // la semana que viene, la del 6 de septiembre
+    return sumarDias(hoy, -d.getUTCDay())
   }, [desde, hoy])
 
   const recargar = useCallback(async () => {

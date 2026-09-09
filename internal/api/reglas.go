@@ -61,7 +61,10 @@ func (s *Server) reglasList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) reglasPost(w http.ResponseWriter, r *http.Request) {
-	var rule model.ScheduleRule
+	// Una regla nueva nace encendida salvo que quien la manda diga
+	// `activa: false`: sin este valor previo, omitir el campo la dejaba
+	// apagada en silencio y el plan la ignoraba (modo sombra, 9 sept 2026).
+	rule := model.ScheduleRule{Active: true}
 	if !decode(w, r, &rule) {
 		return
 	}
