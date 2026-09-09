@@ -395,3 +395,32 @@ func FromMsPtr(ms *int64) *time.Time {
 	t := FromMs(*ms)
 	return &t
 }
+
+// ── vocabularios que el esquema fija en CHECK y aquí en constantes ────
+// (para que tres paquetes no escriban la misma cadena de tres formas)
+
+// Origen de un plan_item.
+const (
+	OriginAsset      = "asset"
+	OriginLiveSource = "live_source"
+	OriginFiller     = "relleno"
+	OriginSlate      = "cartel"
+)
+
+// Estado de normalización de un media_asset.
+const (
+	NormalizePending = "pendiente"
+	NormalizeRunning = "en_curso"
+	NormalizeReady   = "listo"
+	NormalizeFailed  = "fallido"
+)
+
+// Avisos de vencimiento de una regla (ultimo_aviso_enviado): el umbral en días.
+const (
+	Notice30 = "30"
+	Notice14 = "14"
+	Notice7  = "7"
+)
+
+// Ready dice si un asset puede salir al aire: ingerido y normalizado.
+func (a MediaAsset) Ready() bool { return a.State == AssetReady && a.NormalizeState == NormalizeReady }
