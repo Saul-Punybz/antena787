@@ -198,6 +198,13 @@ go test ./... -count=1           # todo debe estar verde
 
 ## Cosas pequeñas pendientes
 
+- **Decisión pendiente de Saul (10 sept):** página pública «ver en vivo» servida
+  por el propio Antena787 (reproductor HLS con el nombre del canal y la guía
+  al lado, para el celular del televidente, sin depender de YouTube). Sacar
+  la señal a HLS/RTMP ya está en el diseño (modo `internet`, T7 de F2); lo
+  que no está es el reproductor público. Salió de comparar con PlayCamTV
+  (playcam.tv: biblioteca web gratuita sin app + YouTube/Facebook).
+
 - `MarkAired` ya escribe el contador en la regla dueña; el motor (F2) es quien
   lo llamará.
 - `media_asset` no tiene columna para el número de pasadas de volumen; hoy el
