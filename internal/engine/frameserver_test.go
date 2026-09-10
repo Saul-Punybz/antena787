@@ -305,7 +305,10 @@ func TestElClipQueNoExisteLoCubreElRelleno(t *testing.T) {
 	relleno := Clip{Path: clipAV(t, ffmpeg, filepath.Join(dir, "relleno.mkv"), "white", 320, 180, 1, 1), Name: "relleno"}
 	fantasma := Clip{Path: filepath.Join(dir, "no-existe.mkv"), Name: "fantasma"}
 
-	rec, eventos := corre(t, []Clip{fantasma, relleno}, time.Second)
+	// Tres segundos, no uno: en el runner de Windows del CI arrancar el ffmpeg
+	// que falla, el ffprobe y los dos ffmpeg del relleno se come más de un
+	// segundo, y con uno salían cero cuadros sin que el motor tuviera culpa.
+	rec, eventos := corre(t, []Clip{fantasma, relleno}, 3*time.Second)
 	if len(rec.cuadros) < 20 {
 		t.Fatalf("salieron %d cuadros: el aire se paró con el clip que falta", len(rec.cuadros))
 	}
