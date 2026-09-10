@@ -384,6 +384,12 @@ export function Ajustes() {
                 ayuda="opcional; sin clave se usa TVmaze"
                 alGuardar={(v) => cambiar('clave_tmdb', v)}
               />
+              <p className="ayuda" style={{ marginTop: 10 }}>
+                TMDB es gratis para uso no comercial; si esta estación vende
+                publicidad, TMDB pide un acuerdo comercial aparte (ver
+                COMPLIANCE.md). TVmaze no tiene esa restricción —solo pide
+                atribución— y es el que se usa cuando no hay clave.
+              </p>
             </div>
           )}
         </Tarjeta>

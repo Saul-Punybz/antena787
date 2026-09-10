@@ -65,7 +65,7 @@ lado no salen cuando no hubo ninguna.
 | `pistas_audio` | Las pistas de sonido que trae el archivo: `[{"indice":0,"idioma":"en","canales":2,"titulo":"Original en inglés"}]`. `indice` empieza en cero y es el que entiende quien arma la copia de casa. `idioma` viene del propio archivo, ya unificado (`spa` y `esp` salen como `es`); vacío si el archivo no lo dice. |
 | `pista_audio_aire` | El `indice` de la que sale al aire. De fábrica, la primera en el idioma de `idioma_audio_preferido`; si el archivo no trae ninguna en ese idioma, la primera que trae. |
 | `audio_sidecar` | Ruta del archivo de sonido que estaba al lado del video y se metió en la copia de casa. Vacío cuando el video ya traía su sonido. |
-| `subtitulos_sidecar` | Ruta del archivo de subtítulos que estaba al lado. Los `.srt` y `.vtt` entran en la copia de casa; los `.scc` se guardan tal cual. |
+| `subtitulos_sidecar` | Ruta del archivo de subtítulos que estaba al lado. Los `.srt` y `.vtt` entran en la copia de casa; los `.scc` y los `.mcc` (608/708 nativos) se guardan tal cual. |
 
 `PUT /material/{id}` con `{"pista_audio_aire": 1}` cambia la pista que se va a
 oír. Devuelve `200` con el archivo entero más `material_id` y

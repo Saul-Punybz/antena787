@@ -523,6 +523,22 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   `cuarentena` en una sola escritura que ya lleva sus archivos de al lado, y
   un archivo que ni se puede medir nunca se queda en `ingiriendo`.
 
+### Lo señalado en la investigación de subtítulos y metadata (`docs/investigacion/SUBTITULOS-Y-METADATA-2026-09-09.md`; §12)
+
+- **F1-74** [DOC] — Dado el motivo de exención por ingresos del ajuste de
+  subtítulos de tres estados del perfil `us-fcc` (`COMPLIANCE.md`) · Cuando el
+  operador lo lee · Entonces dice que un canal con ingresos brutos anuales de
+  menos de $3,000,000 el año anterior está exento de gastar en subtitular sin
+  pedirle nada a la FCC (47 CFR 79.1(d)(12), exención autoaplicable). El
+  control de la interfaz para este ajuste todavía no existe; queda anotado en
+  `COMPLIANCE.md` mientras se construye.
+- **F1-75** [AUTO] — Dado un archivo con un `.mcc` (MacCaption, 608 y 708
+  nativos) al lado con el mismo nombre · Cuando el ingest lo encuentra ·
+  Entonces se reconoce como sidecar válido igual que un `.scc` —se valida su
+  cabecera, se guarda la ruta en `subtitulos_externos`— y **no** se muxea
+  como pista de texto: `SubtituloMuxeable` dice que no, y F2 es quien lo
+  reinserta.
+
 ---
 
 ## F2 · Playout (motor, decks, fuentes en vivo, manual, diferido, grabación, salidas)

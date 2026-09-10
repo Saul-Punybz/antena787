@@ -90,6 +90,47 @@ func TestSubtitulosRotosSeRechazan(t *testing.T) {
 	}
 }
 
+// TestF1_75_MCCSoloSeGuarda: un .mcc (MacCaption, 608 y 708 nativos) se
+// reconoce como sidecar válido y se trata igual que un .scc: se guarda tal
+// cual, nunca se muxea (F1-75).
+func TestF1_75_MCCSoloSeGuarda(t *testing.T) {
+	dir := t.TempDir()
+	video := filepath.Join(dir, "documental.mp4")
+	if err := os.WriteFile(video, []byte("no importa"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mcc := filepath.Join(dir, "documental.mcc")
+	if err := os.WriteFile(mcc, []byte("File Format=MacCaption_MCC V1.0\n\n00:00:01:00\t942c 942c\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, ok := FindSidecar(video); !ok || got != mcc {
+		t.Fatalf("FindSidecar = %q, %v; se esperaba %q", got, ok, mcc)
+	}
+	if f, err := ValidateSidecar(mcc); err != nil || f != "mcc" {
+		t.Errorf("ValidateSidecar(mcc) = %q, %v", f, err)
+	}
+	if SubtituloMuxeable(mcc) {
+		t.Error("SubtituloMuxeable dijo que un .mcc se puede meter como pista de texto")
+	}
+
+	var asset model.MediaAsset
+	if err := AttachCaptions(&asset, mcc); err != nil {
+		t.Fatalf("AttachCaptions: %v", err)
+	}
+	if !asset.HasCaptions || asset.CaptionFormat != "mcc" {
+		t.Errorf("tiene_subtitulos=%v formato=%q", asset.HasCaptions, asset.CaptionFormat)
+	}
+
+	falso := filepath.Join(dir, "falso.mcc")
+	if err := os.WriteFile(falso, []byte("esto no es MacCaption\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ValidateSidecar(falso); err == nil {
+		t.Error("un .mcc sin la cabecera de MacCaption pasó la validación")
+	}
+}
+
 func TestNFODeKodi(t *testing.T) {
 	dir := t.TempDir()
 	nfo := filepath.Join(dir, "pelicula.nfo")

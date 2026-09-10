@@ -368,8 +368,8 @@ func NormalizeOptionsFor(a model.MediaAsset, m Measure, prefs ...Preferencias) N
 	}
 
 	// Subtítulos de al lado: los .srt y los .vtt se meten en la copia de
-	// casa como pista de texto; los .scc se quedan guardados tal cual para
-	// que F2 los reinserte como CEA-608 (F1-62).
+	// casa como pista de texto; los .scc y los .mcc se quedan guardados tal
+	// cual para que F2 los reinserte como CEA-608/708 (F1-62, F1-75).
 	sub := p.SubtitulosSidecar
 	if sub == "" && a.ExternalCaptions != nil {
 		sub = *a.ExternalCaptions

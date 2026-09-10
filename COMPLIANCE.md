@@ -114,6 +114,23 @@ siempre se pueden subir. Lo único que cambia el ajuste es **si el sistema avisa
 cuando un programa sale sin subtítulos. "No sé" no bloquea nada y nadie tiene
 que resolverlo antes de salir al aire.
 
+**El motivo de exención más común, en números.** Un canal con **ingresos
+brutos anuales de menos de $3,000,000** el año anterior está exento de
+gastar en subtitular su programación — **47 CFR 79.1(d)(12)**. Es una
+exención **autoaplicable**: no hace falta pedirle permiso a la FCC ni
+presentar nada, a diferencia de la carga económica excesiva (§79.1(f)), que sí
+requiere una petición formal. Otros motivos de exención con el mismo trato —
+red nueva en sus primeros 4 años (§(d)(9)), programación local sin valor de
+repetición y que no sea noticias (§(d)(8)), o el horario 2 a.m.–6 a.m.
+(§(d)(5))— caben igual en "Exenta", con su propio motivo anotado.
+
+*Nota de implementación (9 sept 2026): este ajuste de tres estados está
+descrito arriba y en el perfil `us-fcc` del PRD (§12), pero **todavía no
+existe como un control en la interfaz** — hoy "Subtítulos" en Ajustes →
+Cumplimiento solo enseña un valor fijo ("se conservan"), sin selector ni texto
+de ayuda. El umbral de $3M queda documentado aquí mientras se construye esa
+pantalla.*
+
 ### Archivo de anuncios políticos — 47 CFR 73.1942 / 73.1943
 
 Aplica **solo si la clase de licencia lo pide** (Class A y potencia completa).
@@ -140,6 +157,50 @@ este archivo que el perfil `us-fcc` no deja apagar.
 Una exportación lista para subir, **solo si la licencia lo pide** — Class A y
 potencia completa. **Un LPTV no la ve**: no aparece en el menú, no hay un aviso
 pendiente, no existe.
+
+### Fichas de programas — la licencia es de terceros, no de la FCC
+
+Cuando "Buscarlas en internet" está encendido (Ajustes → Fichas de programas),
+Antena787 busca sinopsis y carátulas en **TVmaze** por defecto, y en **TMDB**
+si se pone una clave.
+
+Esto no es un asunto de la FCC, sino de la licencia del proveedor: **TMDB es
+gratis para uso no comercial, con atribución; el uso comercial —una estación
+que vende publicidad, que es el caso normal de una estación de referencia—
+exige un acuerdo comercial aparte con TMDB**, negociado por separado
+([themoviedb.org/api-terms-of-use](https://www.themoviedb.org/api-terms-of-use)).
+**TVmaze no tiene esa restricción**: es gratis bajo CC BY-SA 4.0, con
+atribución y enlace de vuelta, sin distinguir uso comercial de no comercial
+([tvmaze.com/api](https://www.tvmaze.com/api)).
+
+Antena787 es software libre; quien lo instala y vende anuncios es el
+**operador**, y es el operador quien decide si necesita ese acuerdo con TMDB
+antes de poner la clave. Por eso TVmaze, sin clave, sigue siendo el proveedor
+de menor riesgo legal por defecto.
+
+### PSIP (A/65) y programación infantil E/I — de la clase de licencia, no de este software
+
+Dos obligaciones reales de Class A y potencia completa **que Antena787 no
+construye hoy**, y que dependen de la misma `clase_licencia` que ya decide el
+resto de esta sección:
+
+- **PSIP completo** (ATSC A/65, con el Anexo B de canal virtual) es
+  obligación de Class A y potencia completa; un LPTV solo tiene la *opción*
+  de llevarlo, no la obligación. Hoy lo genera —o no— el equipo aguas abajo
+  (el multiplexor o el transmisor, según el fabricante); Antena787 no genera
+  tablas PSIP.
+- **Programación infantil educativa/informativa (E/I)**, del Children's
+  Television Act: Class A y potencia completa deben emitir 156 horas al año
+  (≥26 h por trimestre) de programación "core" para menores de 16 años, y lo
+  reportan en el **FCC Form 2100, Schedule H**. **No aplica a un LPTV
+  simple.** No hay hoy un campo para marcar un programa "core" E/I ni un
+  contador de horas.
+
+Ninguna de las dos bloquea nada ni se vende como resuelta: quedan anotadas
+aquí porque son del tipo de obligación que este archivo existe para no
+esconder. Ver
+[`docs/investigacion/SUBTITULOS-Y-METADATA-2026-09-09.md`](docs/investigacion/SUBTITULOS-Y-METADATA-2026-09-09.md)
+para el detalle y las fuentes.
 
 ---
 

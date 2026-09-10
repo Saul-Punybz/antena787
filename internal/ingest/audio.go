@@ -84,8 +84,8 @@ func FindSubtitleSidecar(path string) (string, bool) { return FindSidecar(path) 
 
 // SubtituloMuxeable dice si un archivo de subtítulos de al lado se puede
 // meter en la copia de casa como pista de texto: los .srt y los .vtt sí. Los
-// .scc no —son CEA-608, que va dentro de la imagen— y se guardan tal cual
-// para que F2 los reinserte (F1-62).
+// .scc y los .mcc no —son CEA-608/708, que van dentro de la imagen— y se
+// guardan tal cual para que F2 los reinserte (F1-62, F1-75).
 func SubtituloMuxeable(path string) bool {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".srt", ".vtt":

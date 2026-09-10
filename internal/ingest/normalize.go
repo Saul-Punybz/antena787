@@ -48,8 +48,9 @@ type NormalizeOptions struct {
 	AudioSidecar string
 
 	// SubtitleSidecar es el archivo de subtítulos que vino al lado, ya en un
-	// formato que el contenedor de casa sabe llevar (.srt o .vtt). Los .scc
-	// no se ponen aquí: se guardan sin tocar y los reinserta F2 (F1-62).
+	// formato que el contenedor de casa sabe llevar (.srt o .vtt). Los .scc y
+	// los .mcc no se ponen aquí: se guardan sin tocar y los reinserta F2
+	// (F1-62, F1-75).
 	SubtitleSidecar string
 
 	SkipVerify bool // no medir el resultado (más rápido, menos comprobado)

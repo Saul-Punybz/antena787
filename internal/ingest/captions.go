@@ -13,8 +13,10 @@ import (
 
 // SidecarExtensions son los archivos de subtítulos que se aceptan al lado
 // del video, en orden de preferencia: .scc ya es CEA-608 y entra tal cual;
-// .srt y .vtt hay que convertirlos, y eso es F2 (PRD §9 paso 1.3).
-var SidecarExtensions = []string{".scc", ".srt", ".vtt"}
+// .mcc es su primo con 708 nativo además de 608 (MacCaption, propietario de
+// Telestream) y se trata igual: se guarda, no se muxea (F1-75); .srt y .vtt
+// hay que convertirlos, y eso es F2 (PRD §9 paso 1.3).
+var SidecarExtensions = []string{".scc", ".mcc", ".srt", ".vtt"}
 
 // Cue es una línea de subtítulo con su ventana de tiempo.
 type Cue struct {
@@ -80,7 +82,7 @@ func AttachCaptions(asset *model.MediaAsset, sidecar string) error {
 }
 
 // ValidateSidecar comprueba que el archivo de subtítulos se puede leer y
-// devuelve su formato: "scc", "srt" o "vtt".
+// devuelve su formato: "scc", "mcc", "srt" o "vtt".
 func ValidateSidecar(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -94,6 +96,11 @@ func ValidateSidecar(path string) (string, error) {
 			return "", err
 		}
 		return "scc", nil
+	case ".mcc":
+		if err := CheckMCC(f); err != nil {
+			return "", err
+		}
+		return "mcc", nil
 	case ".srt":
 		cues, err := ParseSRT(f)
 		if err != nil {
@@ -113,7 +120,7 @@ func ValidateSidecar(path string) (string, error) {
 		}
 		return "vtt", nil
 	default:
-		return "", Plainf(nil, "%q no es un archivo de subtítulos que sepamos leer (.scc, .srt o .vtt)", trimName(path))
+		return "", Plainf(nil, "%q no es un archivo de subtítulos que sepamos leer (.scc, .mcc, .srt o .vtt)", trimName(path))
 	}
 }
 
@@ -131,6 +138,28 @@ func CheckSCC(r io.Reader) error {
 			return nil
 		}
 		return Plainf(nil, "este .scc no empieza por «Scenarist_SCC V1.0»: no es un archivo de subtítulos 608")
+	}
+	if err := sc.Err(); err != nil {
+		return Plainf(err, "no se pudo leer el archivo de subtítulos")
+	}
+	return Plainf(nil, "el archivo de subtítulos está vacío")
+}
+
+// CheckMCC comprueba la cabecera de un archivo MacCaption, el formato que
+// guarda 608 y 708 nativos (a diferencia del .scc, que solo tiene 608). El
+// contenido son paquetes ancilares en hexadecimal y, igual que el .scc, no
+// se toca en F1 (F1-75).
+func CheckMCC(r io.Reader) error {
+	sc := bufio.NewScanner(r)
+	for sc.Scan() {
+		line := strings.TrimSpace(stripBOM(sc.Text()))
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "File Format=MacCaption") {
+			return nil
+		}
+		return Plainf(nil, "este .mcc no empieza por «File Format=MacCaption»: no es un archivo de subtítulos MacCaption")
 	}
 	if err := sc.Err(); err != nil {
 		return Plainf(err, "no se pudo leer el archivo de subtítulos")
