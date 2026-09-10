@@ -180,15 +180,12 @@ go test ./... -count=1           # todo debe estar verde
    $3M vive en `COMPLIANCE.md` hasta entonces). Las preguntas para el
    ingeniero de CAtv y la cadena `sout` de VLC siguen en `PARA-ROLANDO.md`.
 7. **F2 · Playout**, por las tandas de `docs/f2/PLAN-F2.md`. **Al volver,
-   lo primero:** revisar las dos ramas de agentes que quedaron en marcha al
+   lo primero:** revisar la rama de agente que quedó en marcha al
    guardar (9 sept, 15:30 aprox.) y que pueden tener commit o no:
    - `agente/t1-motor` (worktree `../antena787-wt/t1-motor`, opus): **T1**,
      el motor dentro de `antena` (`ClipSource`, `internal/app/motor.go`,
      `a.guard("motor", …)` en `Start()`). Al integrar, revisar `app.go` a
      mano (regla de fusión del plan) y correr la F0 corta.
-   - `agente/despierto-vigila` (worktree `../antena787-wt/despierto-vigila`,
-     sonnet): si el guardián de «no dormir» cae, se levanta solo
-     (incidente `guardian_caido`).
    `git worktree list` dice qué hay; si una rama no tiene commit, se
    relanza el agente con el mismo encargo (está en el historial de la
    sesión y resumido arriba). Integración: `git -C <worktree> rebase main`,
