@@ -20,7 +20,7 @@ type TitleRepo struct {
 
 const titleCols = `id, channel_id, nombre, tipo, sinopsis, anio, genero,
 	clasificacion_contenido, clasificacion_audiencia, caratula, fuente_ficha,
-	media_asset_id, pendiente_emparejar, candidatos`
+	media_asset_id, pendiente_emparejar, candidatos, infantil_core`
 
 // titleColsDe es titleCols con cada columna precedida del alias de tabla,
 // para las consultas que juntan title con otra tabla.
@@ -39,7 +39,7 @@ func scanTitle(sc interface{ Scan(...any) error }) (model.Title, error) {
 	var candidatos string
 	err := sc.Scan(&t.ID, &canal, &t.Name, &t.Kind, &t.Synopsis, &anio, &t.Genre,
 		&t.ContentRating, &t.AudienceRating, &t.Artwork, &t.MetadataSource, &asset,
-		&t.PendienteEmparejar, &candidatos)
+		&t.PendienteEmparejar, &candidatos, &t.InfantilCore)
 	if err != nil {
 		return model.Title{}, err
 	}
@@ -58,11 +58,13 @@ func (r *TitleRepo) Insert(ctx context.Context, t *model.Title) error {
 	res, err := r.db.ExecContext(ctx, `
 		INSERT INTO title (channel_id, nombre, tipo, sinopsis, anio, genero,
 			clasificacion_contenido, clasificacion_audiencia, caratula,
-			fuente_ficha, media_asset_id, pendiente_emparejar, candidatos)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			fuente_ficha, media_asset_id, pendiente_emparejar, candidatos,
+			infantil_core)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		nullInt64(t.ChannelID), t.Name, string(t.Kind), t.Synopsis, nullInt(t.Year),
 		t.Genre, t.ContentRating, t.AudienceRating, t.Artwork, t.MetadataSource,
-		nullInt64(t.MediaAssetID), t.PendienteEmparejar, jsonInt64s(t.Candidatos))
+		nullInt64(t.MediaAssetID), t.PendienteEmparejar, jsonInt64s(t.Candidatos),
+		t.InfantilCore)
 	if err != nil {
 		return translate("guardar el título", err)
 	}
@@ -83,11 +85,12 @@ func (r *TitleRepo) Update(ctx context.Context, t *model.Title) error {
 		UPDATE title SET channel_id = ?, nombre = ?, tipo = ?, sinopsis = ?, anio = ?,
 			genero = ?, clasificacion_contenido = ?, clasificacion_audiencia = ?,
 			caratula = ?, fuente_ficha = ?, media_asset_id = ?,
-			pendiente_emparejar = ?, candidatos = ?
+			pendiente_emparejar = ?, candidatos = ?, infantil_core = ?
 		WHERE id = ?`,
 		nullInt64(t.ChannelID), t.Name, string(t.Kind), t.Synopsis, nullInt(t.Year),
 		t.Genre, t.ContentRating, t.AudienceRating, t.Artwork, t.MetadataSource,
-		nullInt64(t.MediaAssetID), t.PendienteEmparejar, jsonInt64s(t.Candidatos), t.ID)
+		nullInt64(t.MediaAssetID), t.PendienteEmparejar, jsonInt64s(t.Candidatos),
+		t.InfantilCore, t.ID)
 	if err != nil {
 		return translate("guardar el título", err)
 	}

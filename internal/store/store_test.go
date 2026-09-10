@@ -888,6 +888,7 @@ func TestBaseNuevaYBaseMigradaQuedanIguales(t *testing.T) {
 		{2, []string{schemaSQL, migracion2}},
 		{3, []string{schemaSQL, migracion2, migracion3}},
 		{4, []string{schemaSQL, migracion2, migracion3, migracion4}},
+		{5, []string{schemaSQL, migracion2, migracion3, migracion4, migracion5}},
 	} {
 		ruta := filepath.Join(t.TempDir(), "vieja.db")
 		db, err := openDB(ruta)

@@ -347,6 +347,9 @@ export const titulos: TituloDeBiblioteca[] = [
       : sinNormalizar
         ? 'aún no listo para aire'
         : 'listo',
+    // «Carmen Sandiego» es el ejemplo de programa infantil educativo (E/I,
+    // F1-76): el resto queda sin marcar, que es como llega todo.
+    infantil_core: nombre === 'Carmen Sandiego',
     en_la_parrilla: Boolean(regla),
     hora: regla ? `${String(Math.floor(regla.hora / 60)).padStart(2, '0')}:${String(regla.hora % 60).padStart(2, '0')}` : null,
     regla_hasta: regla?.fecha_fin ?? null,

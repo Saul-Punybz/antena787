@@ -42,12 +42,13 @@ import {
   programaEn,
   reglas as reglasDemo,
   salidas,
-  titulos,
+  titulos as titulosDemo,
 } from './datos'
 
 const DESFASE_H = -4 // America/Puerto_Rico, sin horario de verano
 
 let reglas: Regla[] = reglasDemo.map((r) => ({ ...r }))
+const titulos: TituloDeBiblioteca[] = titulosDemo.map((t) => ({ ...t }))
 let ajustes: Ajustes = { ...ajustesDemo }
 const dejadosPasar = new Set<number>()
 let siguienteId = 1000
@@ -1300,6 +1301,18 @@ export async function responder(ruta: string, init?: RequestInit): Promise<Respo
   if (tituloId) {
     const t = titulos.find((x) => x.id === Number(tituloId[1]))
     if (!t) return json({ error: 'Ese título no está en la biblioteca.' }, 404)
+    // Cambiar la ficha: hoy, la marca de programa infantil educativo (F1-76).
+    // Lo que no venga en el cuerpo se queda como estaba.
+    if (metodo === 'PUT') {
+      if (typeof cuerpo?.nombre === 'string' && !cuerpo.nombre.trim())
+        return json(
+          { error: 'El título tiene que llamarse de alguna forma.', campo: 'nombre' },
+          400,
+        )
+      if (typeof cuerpo?.nombre === 'string') t.nombre = cuerpo.nombre.trim()
+      if (typeof cuerpo?.sinopsis === 'string') t.sinopsis = cuerpo.sinopsis
+      if (typeof cuerpo?.infantil_core === 'boolean') t.infantil_core = cuerpo.infantil_core
+    }
     return json({
       ...conPistaElegida(t),
       lista_de_episodios: episodiosDe(t).map(conPistaElegida),

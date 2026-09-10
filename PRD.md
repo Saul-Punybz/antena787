@@ -1109,6 +1109,7 @@ cada una enciende solo lo que le toca; se cambia cuando se quiera:
 | **Identificación de patrocinio** | Todo clasificado sale con el prefijo *"Anuncio pagado por ‹nombre›"* (73.1212). En este perfil el prefijo no se quita — es una línea de texto y evita el único lío que sí es fácil de evitar. |
 | **Registro del medidor de volumen** | Una anotación diaria automática: *"medidor activo, N archivos normalizados, 0 fallos"* (73.682(e)). Exportable. |
 | **Archivo público en línea** | Exportación lista para subir, **solo si la licencia lo pide** (Class A y potencia completa). Un LPTV no lo ve. |
+| **Programación infantil (E/I)** | La ficha del título tiene un interruptor «programa infantil educativo (E/I)» **desde F1**; el conteo de las 156 horas al año (Class A, Children's Television Act) y el reporte para el **FCC Form 2100 Schedule H** llegan con el reporte de emisión (F4). |
 
 > **El as-run no está en esta tabla a propósito.** La FCC eliminó los
 > registros de programación; la bitácora de estación (73.1820) cubre otras

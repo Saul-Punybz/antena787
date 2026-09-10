@@ -12,6 +12,7 @@ import type {
   Ajustes,
   CambioDeMaterial,
   CambioDePlan,
+  CambioDeTitulo,
   Canal,
   CuerposDePaso,
   DecisionDeEmparejar,
@@ -176,6 +177,12 @@ export const api = {
 
   biblioteca: () => pedir<TituloDeBiblioteca[]>('/biblioteca'),
   titulo: (id: number) => pedir<FichaDeTitulo>(`/biblioteca/${id}`),
+  /**
+   * Cambia algo de la ficha del título. Hoy: si es un programa infantil
+   * educativo (F1-76). Lo que no se manda se queda como estaba.
+   */
+  cambiarTitulo: (id: number, cambio: CambioDeTitulo) =>
+    pedir<FichaDeTitulo>(`/biblioteca/${id}`, conCuerpo('PUT', cambio)),
   cuarentena: () => pedir<EnCuarentena[]>('/cuarentena'),
   /** Los archivos que se están midiendo ahora mismo: se ven desde el primer segundo. */
   entrando: () => pedir<ArchivoEntrando[]>('/material?estado=ingiriendo'),

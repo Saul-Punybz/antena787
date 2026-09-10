@@ -264,6 +264,14 @@ export interface TituloDeBiblioteca extends AudioDelMaterial {
   en_la_parrilla: boolean
   hora?: HoraDelDia | null
   regla_hasta?: DiaEmision | null
+  /**
+   * El programa es de educación o información para niños («core» del
+   * Children's Television Act): cuenta para las horas de programación
+   * infantil que una estación Class A tiene que emitir (F1-76). Lo marca una
+   * persona en la ficha; el conteo de las 156 horas al año y el reporte del
+   * Form 2100 Schedule H llegan con el reporte de emisión (F4).
+   */
+  infantil_core: boolean
 }
 
 export interface EpisodioDeBiblioteca extends AudioDelMaterial {
@@ -291,6 +299,16 @@ export interface MaterialDeAudio extends AudioDelMaterial {
 
 export interface FichaDeTitulo extends TituloDeBiblioteca {
   lista_de_episodios: EpisodioDeBiblioteca[]
+}
+
+/**
+ * Cuerpo de PUT /biblioteca/{id}: lo que se cambia de la ficha del título. Lo
+ * que no se manda se queda como estaba.
+ */
+export interface CambioDeTitulo {
+  nombre?: string
+  sinopsis?: string
+  infantil_core?: boolean
 }
 
 export interface EnCuarentena {

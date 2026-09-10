@@ -43,8 +43,8 @@ asistente está abierto.
 
 | | |
 |---|---|
-| `GET /biblioteca` | Títulos con carátula, tipo, `episodios` (cuántos), `duracion_ms`, `estado_material` (`listo` / `aún no listo para aire` / `cuarentena`), `en_la_parrilla`, y `hora` / `regla_hasta` de la regla que lo programa. `material` y `duracion` son los mismos dos primeros en texto, y se mantienen por compatibilidad. Si el título tiene archivo propio, lleva además el sonido de ese archivo (ver abajo). |
-| `GET /biblioteca/{id}` · `PUT /biblioteca/{id}` | Ficha del título: los mismos campos de la lista más `lista_de_episodios[]`, cada episodio con su `duracion_ms`, su `estado_material` y el sonido de su archivo. `PUT` edita nombre, sinopsis, tipo, carátula. |
+| `GET /biblioteca` | Títulos con carátula, tipo, `episodios` (cuántos), `duracion_ms`, `estado_material` (`listo` / `aún no listo para aire` / `cuarentena`), `en_la_parrilla`, `hora` / `regla_hasta` de la regla que lo programa, e `infantil_core`. `material` y `duracion` son los mismos dos primeros en texto, y se mantienen por compatibilidad. Si el título tiene archivo propio, lleva además el sonido de ese archivo (ver abajo). |
+| `GET /biblioteca/{id}` · `PUT /biblioteca/{id}` | Ficha del título: los mismos campos de la lista más `lista_de_episodios[]`, cada episodio con su `duracion_ms`, su `estado_material` y el sonido de su archivo. `PUT` edita nombre, sinopsis, tipo, carátula y `infantil_core` (programa de educación o información para niños; cuenta para las horas de programación infantil de una estación Class A, F1-76). |
 | `GET /material` · `GET /material/{id}` | `media_asset` con medidas. |
 | `PUT /material/{id}` | `negro_intencional`, `sin_logo`, `subtitulos_externos`, `marcas_de_corte_ms` (confirmar marcas candidatas) y `pista_audio_aire` (ver abajo). |
 | `GET /cuarentena` | Los assets en cuarentena con `titulo` (cómo se llama para una persona: el título o el episodio que lo usa, o el nombre del archivo si nadie lo fichó), `motivo_en_cristiano` y `motivo_codigo`. Mientras haya alguno, `/estado` lleva la alarma «N archivos en cuarentena» (nivel aviso, acción → `/biblioteca`). |

@@ -444,6 +444,8 @@ function FichaLateral({
         alCambiar={(cambio) => alActualizar({ ...ficha, ...cambio })}
       />
 
+      <ProgramaInfantil ficha={ficha} alActualizar={alActualizar} />
+
       {ficha.lista_de_episodios.length > 0 && (
         <div>
           <div className="rotulo" style={{ marginBottom: 10 }}>
@@ -499,6 +501,64 @@ function FichaLateral({
         </div>
       )}
     </Panel>
+  )
+}
+
+/**
+ * La marca de programa infantil educativo (E/I, F1-76). Cuenta para las horas
+ * de programación infantil de una estación Class A. Se ofrece, no se exige: el
+ * interruptor está apagado hasta que una persona lo enciende, y la ayuda dice
+ * en llano qué es sin dar por sentado que alguien está en falta.
+ */
+function ProgramaInfantil({
+  ficha,
+  alActualizar,
+}: {
+  ficha: FichaDeTitulo
+  alActualizar: (f: FichaDeTitulo) => void
+}) {
+  const [error, setError] = useState('')
+  const [guardando, setGuardando] = useState(false)
+
+  async function cambiar(valor: boolean) {
+    setError('')
+    setGuardando(true)
+    alActualizar({ ...ficha, infantil_core: valor })
+    try {
+      const guardado = await api.cambiarTitulo(ficha.id, { infantil_core: valor })
+      alActualizar({ ...ficha, infantil_core: guardado.infantil_core })
+    } catch (e) {
+      setError((e as Error).message)
+      alActualizar({ ...ficha, infantil_core: !valor })
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <div style={{ display: 'grid', gap: 8 }}>
+      <div className="entre">
+        <div>
+          <div style={{ font: '500 14.5px var(--sans)' }}>
+            Programa infantil educativo (E/I)
+          </div>
+          <div className="tenue" style={{ fontSize: 12.5, marginTop: 3, maxWidth: 420 }}>
+            Cuenta para las horas de programación infantil que una estación Class A tiene
+            que emitir. Solo márcalo si el programa es de educación o información para
+            niños.
+          </div>
+        </div>
+        <button
+          className="interruptor"
+          role="switch"
+          aria-checked={ficha.infantil_core}
+          aria-label="Programa infantil educativo (E/I)"
+          disabled={guardando}
+          onClick={() => void cambiar(!ficha.infantil_core)}
+        />
+      </div>
+      {error && <div className="error-en-cristiano">{error}</div>}
+    </div>
   )
 }
 

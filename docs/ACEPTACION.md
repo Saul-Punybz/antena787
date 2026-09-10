@@ -539,6 +539,18 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   como pista de texto: `SubtituloMuxeable` dice que no, y F2 es quien lo
   reinserta.
 
+### Programación infantil (E/I) en la ficha (`docs/investigacion/SUBTITULOS-Y-METADATA-2026-09-09.md`; §12)
+
+- **F1-76** [AUTO] — Dado un título marcado `infantil_core` —programa de
+  educación o información para niños, «core» en el sentido del Children's
+  Television Act— · Cuando se publica la guía · Entonces sale con la categoría
+  Infantil/Children (`<category lang="es">Infantil</category>` y
+  `<category lang="en">Children</category>`, formato XMLTV) y un título sin
+  marcar no, y el campo viaja por la API (`PUT /biblioteca/{id}` lo acepta;
+  `GET /biblioteca` y la ficha lo devuelven) y persiste en el esquema **v6**,
+  apagado en todo lo que ya existía. El conteo de las 156 horas al año y el
+  reporte del FCC Form 2100 Schedule H llegan con el reporte de emisión (F4).
+
 ---
 
 ## F2 · Playout (motor, decks, fuentes en vivo, manual, diferido, grabación, salidas)

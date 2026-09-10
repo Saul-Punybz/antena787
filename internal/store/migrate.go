@@ -29,6 +29,7 @@ var migrations = []Migration{
 	{Version: 3, SQL: migracion3},
 	{Version: 4, SQL: migracion4},
 	{Version: 5, SQL: migracion5},
+	{Version: 6, SQL: migracion6},
 }
 
 // migracion2 cierra tres huecos de integridad del plan (F1-12, F1-22, F1-26
@@ -166,6 +167,22 @@ UPDATE media_asset SET motivo_codigo = 'sin_audio'
 WHERE estado = 'cuarentena'
   AND motivo_en_cristiano LIKE '%no trae sonido%'
   AND motivo_en_cristiano LIKE '%pon a su lado%';
+`
+
+// migracion6 le da a la ficha la marca de programación infantil (F1-76): si
+// el programa es de educación o información para niños —"core" en el sentido
+// del Children's Television Act—. Una estación Class A tiene que emitir 156
+// horas al año de esa programación; la marca existe desde F1, y el conteo de
+// las horas y el reporte del FCC Form 2100 Schedule H llegan con el reporte
+// de emisión (F4).
+//
+// Como las de arriba, no va en schema.sql: ese archivo es la foto de la
+// versión 1 y todas las bases —nuevas y viejas— suben por estos mismos
+// escalones, que es lo que hace que terminen idénticas.
+const migracion6 = `
+-- Programa de educación o información para niños. Apagado en todo lo demás:
+-- nadie queda marcado sin que una persona lo diga.
+ALTER TABLE title ADD COLUMN infantil_core INTEGER NOT NULL DEFAULT 0;
 `
 
 // SchemaVersion es la versión a la que lleva este binario.

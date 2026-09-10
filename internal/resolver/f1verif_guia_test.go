@@ -131,3 +131,45 @@ func TestF1Verif55BloqueArrendadoEnLaParrilla(t *testing.T) {
 		t.Fatal("el bloque arrendado no salió en la guía")
 	}
 }
+
+// F1-76 — Un título marcado como programa infantil educativo (E/I) sale en la
+// guía con la categoría Infantil/Children; el que no lo está, no. Es lo que
+// deja ver desde fuera la programación infantil de una estación Class A.
+func TestF1Verif76LaGuiaAnunciaElProgramaInfantil(t *testing.T) {
+	f := newCAtv()
+	f.serie(1, "Carmen Sandiego", 26, 24*time.Minute)
+	f.serie(2, "Kojak", 26, 24*time.Minute)
+	infantil := f.titles[1]
+	infantil.InfantilCore = true
+	f.titles[1] = infantil
+	f.filler(1, time.Minute)
+	f.rule(1, 1, "LMMJV__", "07:30", "2026-09-01", "2026-12-31", 1)
+	f.rule(2, 2, "LMMJV__", "08:00", "2026-09-01", "2026-12-31", 1)
+
+	out := Resolve(f.in(f.local(t, "2026-09-08 06:00"), 6*time.Hour))
+	data, err := XMLTV(f.ch, out.Items, f.titles, f.episodeIndex())
+	if err != nil {
+		t.Fatalf("no se pudo escribir la guía: %v", err)
+	}
+	s := string(data)
+
+	bloque := programaQueEmpieza(t, s, "20260908073000 -0400")
+	if !strings.Contains(bloque, `<category lang="es">Infantil</category>`) {
+		t.Fatalf("el programa marcado infantil tiene que salir con la categoría en español:\n%s", bloque)
+	}
+	if !strings.Contains(bloque, `<category lang="en">Children</category>`) {
+		t.Fatalf("y con la categoría en inglés, que es la que leen las guías de fuera:\n%s", bloque)
+	}
+	if !strings.Contains(bloque, `<category lang="es">Animación</category>`) {
+		t.Fatalf("la marca no puede llevarse por delante el género de siempre:\n%s", bloque)
+	}
+
+	otro := programaQueEmpieza(t, s, "20260908080000 -0400")
+	if strings.Contains(otro, "Infantil") || strings.Contains(otro, "Children") {
+		t.Fatalf("un título sin marcar no puede salir como programación infantil:\n%s", otro)
+	}
+
+	if problemas := ValidateXMLTV(data); len(problemas) != 0 {
+		t.Fatalf("la guía con la categoría infantil tiene que pasar el validador: %v", problemas)
+	}
+}

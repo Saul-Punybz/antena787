@@ -275,6 +275,14 @@ type Title struct {
 	// importador no se atrevió a elegir (F1-65). Vacío cuando no se parecía
 	// a ninguna.
 	Candidatos []int64 `json:"candidatos" db:"candidatos"`
+
+	// InfantilCore dice que el programa es de educación o información para
+	// niños —"core" en el sentido del Children's Television Act— y por eso
+	// cuenta para las horas de programación infantil que una estación Class A
+	// tiene que emitir (F1-76). Lo marca una persona en la ficha; el conteo de
+	// las 156 horas al año y el reporte del Form 2100 Schedule H llegan con el
+	// reporte de emisión (F4).
+	InfantilCore bool `json:"infantil_core" db:"infantil_core"`
 }
 
 // TitleAlias es cómo llama la hoja a una ficha del catálogo: «Samurai X» es

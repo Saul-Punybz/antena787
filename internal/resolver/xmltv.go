@@ -182,7 +182,15 @@ func XMLTV(ch model.Channel, items []model.PlanItem, titles map[int64]model.Titl
 			prog.Desc = []xmlText{{Lang: "es", Value: title.Synopsis}}
 		}
 		if title.Genre != "" {
-			prog.Category = []xmlText{{Lang: "es", Value: title.Genre}}
+			prog.Category = append(prog.Category, xmlText{Lang: "es", Value: title.Genre})
+		}
+		// Un programa de educación o información para niños se anuncia como tal
+		// en las dos lenguas que leen las guías (F1-76): así la programación
+		// infantil de la estación se ve desde fuera, sin que nadie la busque.
+		if title.InfantilCore {
+			prog.Category = append(prog.Category,
+				xmlText{Lang: "es", Value: "Infantil"},
+				xmlText{Lang: "en", Value: "Children"})
 		}
 		doc.Programmes = append(doc.Programmes, prog)
 	}
