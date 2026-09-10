@@ -1,6 +1,6 @@
 # CONTINUAR — dónde quedamos y qué sigue
 
-_Última sesión: 9 de septiembre de 2026 (ocho tandas; la octava con agentes en paralelo). Siguiente: integrar las tres ramas de agentes y seguir F2 por tandas._
+_Última sesión: 9 de septiembre de 2026 (ocho tandas; la octava con agentes en paralelo). Siguiente: T2 y T3 de F2 en paralelo._
 
 ## Dónde estamos
 
@@ -179,19 +179,18 @@ go test ./... -count=1           # todo debe estar verde
    tres estados del perfil `us-fcc` no existe en la interfaz (el texto del
    $3M vive en `COMPLIANCE.md` hasta entonces). Las preguntas para el
    ingeniero de CAtv y la cadena `sout` de VLC siguen en `PARA-ROLANDO.md`.
-7. **F2 · Playout**, por las tandas de `docs/f2/PLAN-F2.md`. **Al volver,
-   lo primero:** revisar la rama de agente que quedó en marcha al
-   guardar (9 sept, 15:30 aprox.) y que pueden tener commit o no:
-   - `agente/t1-motor` (worktree `../antena787-wt/t1-motor`, opus): **T1**,
-     el motor dentro de `antena` (`ClipSource`, `internal/app/motor.go`,
-     `a.guard("motor", …)` en `Start()`). Al integrar, revisar `app.go` a
-     mano (regla de fusión del plan) y correr la F0 corta.
-   `git worktree list` dice qué hay; si una rama no tiene commit, se
-   relanza el agente con el mismo encargo (está en el historial de la
-   sesión y resumido arriba). Integración: `git -C <worktree> rebase main`,
-   `git merge --ff-only`, suite completa, push. Después: T2 y T3 en
-   paralelo. Antes de T2, contestar las preguntas 1, 3 y 10 del plan (F2.5,
-   multicast, varias salidas desde el principio).
+7. **F2 · Playout**, por las tandas de `docs/f2/PLAN-F2.md`. **T1 hecha
+   (9 sept, rama `agente/t1-motor` integrada):** el motor corre dentro de
+   `antena` cuando `channel.modo == "aire"` (`internal/app/motor.go`,
+   `engine.ClipSource`, `engine.NuevaLista` para F0, catálogo
+   `internal/model/incidentes.go`, `a.guard("motor", …)`); F2-03 (sostener
+   el último cuadro) se construyó de paso; en sombra nada cambia. F0 corta
+   en `main` tras la fusión: 0 FALLA. Decisiones del agente en el commit
+   `14cef5e` (rebasado) y en el plan. **Siguiente: T2 (decks + `udp-ts` con
+   PIDs/PCR/multicast) y T3 (detector de silencio/negro) en paralelo, cada
+   una en su worktree.** Antes de T2, contestar las preguntas 1, 3 y 10 del
+   plan (F2.5, unicast/multicast al TP1000, varias salidas desde el
+   principio) y pedir a Rolando su cadena `sout` de VLC.
 8. Después de F2 (PRD §22.3), donde además se cierran F1-04
    (CEA-608 con detección propia, ffprobe ≥ 9 ya no emite `closed_captions`),
    el fundido de 1 s del clip recortado (`fundido_salida_ms` ya viene en el
