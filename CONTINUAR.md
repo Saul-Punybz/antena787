@@ -204,6 +204,11 @@ go test ./... -count=1           # todo debe estar verde
   la señal a HLS/RTMP ya está en el diseño (modo `internet`, T7 de F2); lo
   que no está es el reproductor público. Salió de comparar con PlayCamTV
   (playcam.tv: biblioteca web gratuita sin app + YouTube/Facebook).
+  Criterio de Saul (10 sept): PlayCamTV no es referencia para Antena787; lo
+  único con valor propio ahí es el marcador sobre el video, y lo demás
+  (teléfono como cámara, YouTube/Facebook, biblioteca, highlights) ya existe
+  gratis o lo cubre el diseño (T7, `rtmp-listen`/`srt-listen`). No se copia
+  nada de deporte.
 
 - `MarkAired` ya escribe el contador en la regla dueña; el motor (F2) es quien
   lo llamará.
