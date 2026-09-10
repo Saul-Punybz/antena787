@@ -116,6 +116,13 @@ func (s *Server) pushStatus(ws *wsConn, r *http.Request) error {
 		return err
 	}
 	now := s.Now()
+	alarmas := s.App.Alarms()
+	// La alarma de cumplimiento de subtítulos no vive en el caché de
+	// a.Alarms() (no la enciende ningún evento, solo un ajuste): se calcula
+	// aparte para que este empujón no la borre de golpe cada segundo.
+	if al := s.App.AlarmaSubtitulos(ctx); al != nil {
+		alarmas = append(alarmas, *al)
+	}
 	msg := map[string]any{
 		"tipo": "estado",
 		// El mismo contrato que GET /estado: la interfaz sustituye su estado
@@ -125,7 +132,7 @@ func (s *Server) pushStatus(ws *wsConn, r *http.Request) error {
 		"ahora":       now,
 		"modo":        ch.Mode,
 		"dia_emision": ch.BroadcastDay(now),
-		"alarmas":     s.App.Alarms(),
+		"alarmas":     alarmas,
 		"version":     s.App.Version,
 		// El menú lee esto en cada empujón, no solo en el primer /estado: si
 		// no fuera, la sexta entrada aparecería y desaparecería sola.

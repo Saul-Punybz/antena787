@@ -288,6 +288,16 @@ function alarmasDe(dia: string): Alarma[] {
       .reduce((a, t) => a + Math.max(1, t.episodios), 0)} videos listos`,
     detalle: '890 GB libres · sitio para unas 400 horas más',
   })
+  // Perfil us-fcc con el ajuste de subtítulos todavía en "no_se" (F1-77):
+  // se va sola en cuanto Ajustes → Cumplimiento guarda otra respuesta.
+  if (canal.perfil_regulatorio === 'us-fcc' && (ajustes.subtitulos_estado ?? 'no_se') === 'no_se') {
+    out.push({
+      tipo: 'subtitulos_sin_decidir',
+      nivel: 'aviso',
+      texto: 'Todavía no dijiste si el canal está obligado a subtitular: dilo en Ajustes → Cumplimiento',
+      accion: { texto: 'ir a Ajustes', ruta: '/ajustes' },
+    })
+  }
   return out
 }
 

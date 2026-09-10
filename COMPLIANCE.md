@@ -124,12 +124,11 @@ red nueva en sus primeros 4 años (§(d)(9)), programación local sin valor de
 repetición y que no sea noticias (§(d)(8)), o el horario 2 a.m.–6 a.m.
 (§(d)(5))— caben igual en "Exenta", con su propio motivo anotado.
 
-*Nota de implementación (9 sept 2026): este ajuste de tres estados está
-descrito arriba y en el perfil `us-fcc` del PRD (§12), pero **todavía no
-existe como un control en la interfaz** — hoy "Subtítulos" en Ajustes →
-Cumplimiento solo enseña un valor fijo ("se conservan"), sin selector ni texto
-de ayuda. El umbral de $3M queda documentado aquí mientras se construye esa
-pantalla.*
+*El selector de tres estados vive en Ajustes → Cumplimiento, solo con el
+perfil `us-fcc` (`subtitulos_estado`, F1-77): «Estamos obligados a
+subtitular», «Estamos exentos» o «No lo sé todavía» (el default), con esta
+misma ayuda del umbral de $3M debajo. Mientras el ajuste siga en "no sé",
+`GET /estado` avisa —una vez, en cristiano— y se apaga solo al decidir.*
 
 ### Archivo de anuncios políticos — 47 CFR 73.1942 / 73.1943
 

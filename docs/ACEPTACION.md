@@ -550,6 +550,19 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   `GET /biblioteca` y la ficha lo devuelven) y persiste en el esquema **v6**,
   apagado en todo lo que ya existía. El conteo de las 156 horas al año y el
   reporte del FCC Form 2100 Schedule H llegan con el reporte de emisión (F4).
+- **F1-77** [AUTO] — Dado el perfil `us-fcc` y el ajuste de tres estados de
+  subtítulos (`subtitulos_estado`, PRD §12, `COMPLIANCE.md`) · Cuando alguien
+  entra a Ajustes → Cumplimiento · Entonces ve un selector con las tres
+  respuestas en lenguaje llano —«Estamos obligados a subtitular», «Estamos
+  exentos», «No lo sé todavía»— y, debajo, la ayuda del umbral de $3,000,000
+  de ingresos brutos anuales (47 CFR 79.1(d)(12)) con la referencia a
+  `COMPLIANCE.md`; fuera de ese perfil el selector no aparece. `PUT /ajustes`
+  guarda `obligada`, `exenta` o `no_se` (el default) y rechaza en cristiano
+  cualquier otro valor sin tocar lo que ya había. Mientras el ajuste siga en
+  `no_se`, `GET /estado` trae una alarma de nivel **aviso**, tipo
+  `subtitulos_sin_decidir`, con acción a `/ajustes`; decidir `obligada` o
+  `exenta` la apaga sola, y ninguna de las tres respuestas cambia que los
+  subtítulos que traiga un archivo se conserven y se puedan subir siempre.
 
 ---
 

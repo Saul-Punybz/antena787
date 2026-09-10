@@ -441,6 +441,9 @@ export const ajustes: Ajustes = {
   perfil: 'FCC · ATSC',
   volumen: 'volumen de televisión de EE. UU.',
   subtitulos: 'se conservan',
+  // El ajuste de tres estados del perfil us-fcc (COMPLIANCE.md): "no_se" es
+  // el default, y mientras esté así /estado avisa (F1-77).
+  subtitulos_estado: 'no_se',
   equipo_de_alertas: 'Sage ENDEC · por red',
   asistente_ia: 'apagado',
   // Avisos: por dónde sale el aviso de que una regla se vence sin relevo.

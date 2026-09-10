@@ -171,6 +171,28 @@ export function Ajustes() {
           <Linea nombre="Volumen" valor={ajustes.volumen} verde />
           <Linea nombre="Subtítulos" valor={ajustes.subtitulos} verde />
           <Linea nombre="Equipo de alertas" valor={ajustes.equipo_de_alertas} verde />
+          {estado?.canal.perfil_regulatorio === 'us-fcc' && (
+            <div className="campo" style={{ marginTop: 16 }}>
+              <label htmlFor="subtitulos-estado">¿El canal está obligado a subtitular?</label>
+              <select
+                id="subtitulos-estado"
+                value={ajustes.subtitulos_estado || 'no_se'}
+                onChange={(e) => cambiar('subtitulos_estado', e.target.value)}
+              >
+                <option value="obligada">Estamos obligados a subtitular</option>
+                <option value="exenta">Estamos exentos</option>
+                <option value="no_se">No lo sé todavía</option>
+              </select>
+              <span className="ayuda">
+                Un canal con ingresos brutos anuales de menos de $3,000,000 el año
+                anterior está exento sin pedirle nada a la FCC (47 CFR 79.1(d)(12)).
+                Las tres respuestas funcionan igual —los subtítulos que traiga un
+                archivo se conservan y se pueden subir siempre— y solo cambian si
+                el sistema avisa cuando un programa sale sin subtítulos (ver
+                COMPLIANCE.md). "No lo sé todavía" no bloquea nada.
+              </span>
+            </div>
+          )}
         </Tarjeta>
 
         {/* Acceso remoto */}

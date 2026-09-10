@@ -97,6 +97,7 @@ export interface Alarma {
     | 'sin_relleno'
     | 'material'
     | 'emparejar'
+    | 'subtitulos_sin_decidir'
     | string
   nivel: NivelAlarma
   texto: string
@@ -465,6 +466,14 @@ export interface ResumenDeImportacion {
 // ── ajustes ───────────────────────────────────────────────────────────
 
 export type Ajustes = Record<string, string>
+
+/**
+ * Los tres estados del ajuste `subtitulos_estado` (perfil us-fcc,
+ * PRD §12 · COMPLIANCE.md). "no_se" es el default; los tres funcionan
+ * igual —los subtítulos se conservan y se pueden subir siempre— y solo
+ * cambian si /estado avisa cuando el canal sigue sin decidir.
+ */
+export type EstadoSubtitulos = 'obligada' | 'exenta' | 'no_se'
 
 // ── instalación ───────────────────────────────────────────────────────
 

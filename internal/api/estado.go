@@ -58,6 +58,9 @@ func (s *Server) estado(w http.ResponseWriter, r *http.Request) {
 		FFmpeg:      s.App.FFmpeg != "" && s.App.FFprobe != "",
 	}
 	body.HayAnunciantes = s.hayAnunciantes(ctx)
+	if al := s.App.AlarmaSubtitulos(ctx); al != nil {
+		body.Alarmas = append(body.Alarmas, *al)
+	}
 	if body.Alarmas == nil {
 		body.Alarmas = []app.Alarma{}
 	}
@@ -248,6 +251,12 @@ func (s *Server) ajustesPut(w http.ResponseWriter, r *http.Request) {
 	for k, v := range body {
 		if strings.HasPrefix(strings.ToLower(k), "clave_estacion.") || strings.Contains(strings.ToLower(k), "secreto") {
 			failf(w, http.StatusBadRequest, k, "el ajuste %q no se cambia desde aquí", k)
+			return
+		}
+		if k == app.KeySubtitulosEstado && !app.SubtitulosEstadoValido(v) {
+			failf(w, http.StatusBadRequest, k,
+				"el ajuste de subtítulos solo entiende %q, %q o %q",
+				app.SubtitulosObligada, app.SubtitulosExenta, app.SubtitulosNoSe)
 			return
 		}
 		// Devolver tal cual lo que se enseñó tapado no es cambiarlo.
