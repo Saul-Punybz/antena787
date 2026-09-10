@@ -831,8 +831,13 @@ entregar un papel.
 > prueba.
 
 **Salida:** `red` (**UDP-TS y RTP — el primero que se construye**, es lo que
-acepta el multiplexor de CAtv) · `internet` (RTMP/HLS/SRT) ·
+acepta el multiplexor de CAtv) · `http-ts` · `internet` (RTMP/HLS/SRT) ·
 `route-dash` (ATSC 3.0, futuro) · `archivo` · `ninguna`.
+
+> **`http-ts` es de paridad con VLC.** Es el mismo TS que ya arma `udp-ts`,
+> servido por HTTP en un puerto para que otro equipo lo tire —un VLC
+> remoto, MistServer, un monitor— con varios lectores a la vez y sin que la
+> salida se caiga si nadie está leyendo (F2-115, `docs/VLC-PARIDAD.md`).
 
 > **Lo que un multiplexor exige de `udp-ts`, y por eso no es "mandar un
 > stream".** Un multiplexor de transmisor junta varios programas en un ASI
@@ -864,14 +869,21 @@ su reconexión con espera progresiva.
 > del TS, transcodificación a MPEG-2/H.264 con MPEG L2/AC-3/AAC, varias
 > salidas a la vez, grabación, HTTP TS, HLS, SRT, RTMP, logo y marquesina,
 > y como entrada tirar de una URL (`udp://`, `rtsp://`, `http://`) además
-> de recibir SRT/RTMP. La lista completa, función por función, con lo que
-> falta (`http-ts`, multicast/TTL explícitos, entrada `url`, ventana local)
-> está en `docs/VLC-PARIDAD.md`, y la firma es el criterio F2-113: sin ella,
-> VLC no se apaga.
+> de recibir SRT/RTMP. La lista completa, función por función, está en
+> `docs/VLC-PARIDAD.md`; los huecos que le faltaban al diseño ya son
+> criterio: multicast y TTL explícitos (F2-114), salida `http-ts`
+> (F2-115), entrada `url` (F2-116) y ventana local de monitor (F2-117). La
+> firma completa es el criterio F2-113: sin ella, VLC no se apaga.
 
 **Entrada en vivo:** `srt-listen` (**el preferido, por latencia**) ·
-`rtmp-listen` · `ninguna`. NDI queda fuera: su SDK obliga a enlazar C, y SRT
-resuelve la latencia sin esa deuda.
+`rtmp-listen` · `url` · `ninguna`. NDI queda fuera: su SDK obliga a enlazar
+C, y SRT resuelve la latencia sin esa deuda.
+
+> **`url` es de paridad con VLC.** Es para cuando nadie empuja la señal: el
+> motor **tira** él mismo de `udp://@…`, `rtsp://`, `http://…ts`, HLS o
+> `rtmp://` —lo que hoy le da MistServer—, y si la fuente se ausenta sigue
+> el mismo camino que un vivo por SRT: relleno, alarma, reintento con
+> espera progresiva y regreso en borde de clip (F2-116, `docs/VLC-PARIDAD.md`).
 
 **Señalización de cortes:** `scte104-tcp` (la ruta primaria; el encoder de
 CAtv lo acepta) · `gpi-out` (cierre de contacto hacia el encoder o el

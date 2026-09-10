@@ -801,6 +801,44 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   `udp-ts` está entre los disponibles desde F2 (confirmado como el primero
   que CAtv necesita, §25).
 
+### Paridad con VLC: los huecos que el diseño no tenía (§10, `docs/VLC-PARIDAD.md`)
+
+- **F2-114** [AUTO] — Dado un canal con salida `udp-ts` configurada a un
+  grupo multicast `239.x.x.x` con TTL fijado por la persona (por ejemplo
+  TTL = 4) · Cuando el motor produce su flujo continuo · Entonces el TS
+  llega completo a un receptor suscrito a ese grupo, el paquete sale con el
+  TTL configurado, y la opción de unicast a una sola IP (F2-46) sigue
+  disponible sin cambiar de driver — la pantalla pregunta en lenguaje llano
+  **"¿a un receptor o a un grupo?"**, nunca `multicast`/`TTL` como flags
+  sueltos (`docs/VLC-PARIDAD.md`, §1).
+- **F2-115** [AUTO] — Dado un canal con salida `http-ts` levantada en un
+  puerto (por ejemplo `:8080/stream.ts`) · Cuando dos clientes distintos
+  —un VLC remoto y un segundo lector— se conectan a la vez a esa URL ·
+  Entonces ambos reciben el mismo TS completo al mismo tiempo, sin que uno
+  afecte al otro; y si ningún cliente está conectado, la salida sigue
+  produciéndose igual para las demás salidas del canal, sin error ni caída
+  (`docs/VLC-PARIDAD.md`, §1 — equivalente al `http{mux=ts,dst=…}` de VLC).
+- **F2-116** [AUTO] — Dado un `live_source` con `tipo = url` apuntando a
+  `udp://@239.5.5.5:5004` (o, en corridas separadas, `rtsp://…`,
+  `http://…ts`, una lista HLS o `rtmp://…`) · Cuando llega la hora
+  reservada del bloque en vivo · Entonces el motor **tira** de esa fuente
+  él mismo, sin esperar a que nadie le empuje la señal; y si la fuente no
+  responde, sigue exactamente el mismo camino que una fuente SRT ausente
+  (F2-19, F2-20, F2-26): relleno, alarma `vivo_ausente`, reintento con
+  espera progresiva 1, 2, 4… hasta 60 s de tope, y regreso al vivo en el
+  siguiente borde de clip (`docs/VLC-PARIDAD.md`, §2).
+- **F2-117** [MANUAL] — Dado el PC de la torre con Antena787 corriendo, y
+  sin la ventana que la versión actual de MistServer ya no abre (dato de
+  Rolando, 9 sept 2026: antes veía ahí su salida; hoy no tiene con qué) ·
+  Cuando alguien abre en el navegador de esa misma máquina la vista de
+  **monitor de salida** de Antena787 a pantalla completa · Entonces ve la
+  salida real del canal —servida por el propio motor en baja latencia,
+  sobre `http-ts`/HLS de baja latencia (no una ventana nativa, sin CGo ni
+  SDK), con **no más de 3 segundos** de retraso frente al aire— sin
+  necesidad de abrir VLC ni ningún otro programa. Es la ventana local que
+  VLC le daba y que la versión actual de MistServer ya no da
+  (`docs/VLC-PARIDAD.md`, fila `display`).
+
 ### Detector de silencio/negro en la salida (§9 pasos 4 y 6)
 
 - **F2-51** [AUTO] — Dado la salida real del canal con audio por debajo de
@@ -1264,6 +1302,7 @@ dentro de F0-F2.5, contra el criterio que las verifica:
 | E9 · entrada rápida de vivo; `bloque_arrendado` | F2-76 · F1-55 |
 | F · SHA-256 de ffmpeg; contraseña en las entradas en vivo | F2-98 · F2-76 |
 | G · Ajustes vigila deriva, aceleración y umbral de silencio | F2-15 · F2-55 · F2-56 · F2-100 |
+| V1 · paridad con VLC: multicast/TTL, `http-ts`, entrada `url`, ventana local | F2-113 · F2-114 · F2-115 · F2-116 · F2-117 |
 
 **Fuera del alcance de este documento, a propósito:** las decisiones E1-E6,
 E8 y E9 de publicidad, portal, cobro, make-good y perfil `us-fcc` pertenecen a

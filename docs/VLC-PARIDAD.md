@@ -14,13 +14,13 @@ Technalogix TP1000. Antena787 ocupa el lugar de MistServer + VLC.
 | Función de VLC | Lo que hace Rolando con ella | Antena787 | Fase |
 |---|---|---|---|
 | **UDP unicast** (`udp{dst=ip:puerto}`, mux `ts`) | Mandar el TS al multiplexor | `udp-ts` MPEG-2 CBR (PRD §10, F2-46, F2-50) | **F2, lo primero** |
-| **UDP multicast** con `ttl=` | Si el TP1000 o un receptor escucha en un grupo multicast | `udp-ts` tiene que aceptar grupo multicast y TTL como opciones visibles («¿a qué dirección lo mando?») | **F2** — añadir explícito |
+| **UDP multicast** con `ttl=` | Si el TP1000 o un receptor escucha en un grupo multicast | `udp-ts` tiene que aceptar grupo multicast y TTL como opciones visibles («¿a qué dirección lo mando?») | **F2-114** |
 | **RTP** (`rtp{dst=,port=,sap,name=}`) | Alternativa al UDP crudo; SAP anuncia el stream en la red | `rtp` está nombrado en §10 («UDP-TS y RTP»); el anuncio SAP no | **F2** (RTP) · SAP solo si él lo usa |
 | **Opciones del mux TS**: `pid-video`, `pid-audio`, `pid-pmt`, `tsid`, `program`, `pcr=`, `dts-delay`, `shaping`, `use-key-frames` | Los PIDs y el número de programa que el TP1000 espera | §10: «PIDs y número de programa fijos que la persona escribe una vez, PCR ≤ 40 ms, PAT/PMT a tiempo, CBR con paquetes nulos» | **F2** (ya en el diseño) |
 | **Transcode**: `vcodec=mp2v` / `h264` / `hevc`, `vb=`, `scale`, `fps`, `deinterlace`, `acodec=mpga` / `mp4a` / `a52`, `ab=`, `channels`, `samplerate` | 720p MPEG-2 + audio MPEG capa II hacia el transmisor; H.264 + AAC hacia internet | Formato de casa (720p59.94) + por salida: MPEG-2 con AC-3 o MPEG L2 (`udp-ts`), H.264/AAC (`internet`); HEVC en F5 | **F2** |
 | **`duplicate{dst=…,dst=…}`** | La misma señal al transmisor y a internet a la vez | Varias salidas simultáneas, cada una con su volumen y su reconexión (F2-46, F2-47, F2-49) | **F2** |
-| **`display`** dentro de `duplicate` | Ver en la pantalla del PC lo que está saliendo | Al aire enseña la salida (hoy «Aquí se vería tu señal») y el retorno de aire; falta decidir si además hay **ventana local** en el PC de la torre | **F2** — decidir |
-| **HTTP TS** (`http{mux=ts,dst=:8080/}`) | Que otro programa (MistServer, un VLC remoto, un monitor) tire de la señal | No está: solo hay `udp-ts`, `internet` (RTMP/HLS/SRT) y `archivo` | **F2** — añadir `http-ts` (es barato: el mismo TS servido por HTTP) |
+| **`display`** dentro de `duplicate` | Ver en la pantalla del PC lo que está saliendo — y hoy es la **única** forma que tiene: la versión actual de MistServer ya no abre esa ventana (Rolando, 9 sept 2026), así que sin VLC, Rolando no tiene cómo ver su salida en el PC de la torre | Decidido: ventana en el navegador a pantalla completa, servida por el propio motor en baja latencia (`http-ts`/HLS de baja latencia, no una ventana nativa, sin CGo ni SDK), ≤3 s de retraso frente al aire | **F2-117** |
+| **HTTP TS** (`http{mux=ts,dst=:8080/}`) | Que otro programa (MistServer, un VLC remoto, un monitor) tire de la señal | No está construido aún: solo hay `udp-ts`, `internet` (RTMP/HLS/SRT) y `archivo`; ya es criterio (es barato: el mismo TS servido por HTTP) | **F2-115** |
 | **HLS** (`livehttp`) | Salida web | `internet` → HLS (§10) | **F2** |
 | **SRT** (`srt{dst=}`) | Salida a un servidor o a otra estación | `internet` → SRT (§10) | **F2** |
 | **RTMP** (`rtmp://`) | YouTube, Facebook, servidor propio | `internet` → RTMP (§10, F2-48 reconexión) | **F2** |
@@ -38,7 +38,7 @@ Technalogix TP1000. Antena787 ocupa el lugar de MistServer + VLC.
 |---|---|---|---|
 | Archivos locales y listas | La biblioteca | Carpeta vigilada, ingest, normalización | **Hecho (F1)** |
 | **Recibir** RTMP / SRT que alguien empuja | RadioOnce Live!, un noticiero desde OBS | `rtmp-listen`, `srt-listen` (§10) | **F2** |
-| **Tirar** de una URL: `udp://@`, `rtsp://`, `http://…ts`, `hls`, `rtmp://` | Una cámara IP, un stream remoto, lo que hoy le da MistServer | No está: `live_source.tipo` solo tiene `srt`, `rtmp`, `captura`. Falta **`url`** (el motor tira de la fuente) | **F2** — añadir |
+| **Tirar** de una URL: `udp://@`, `rtsp://`, `http://…ts`, `hls`, `rtmp://` | Una cámara IP, un stream remoto, lo que hoy le da MistServer | No está construido aún: `live_source.tipo` solo tiene `srt`, `rtmp`, `captura`. Ya es criterio **`url`** (el motor tira de la fuente, mismo camino que un vivo por SRT ante una ausencia) | **F2-116** |
 | Tarjeta de captura (DirectShow en Windows) | Entrada de un mezclador o una cámara por captura | `captura` (§10), por ffmpeg `dshow`; Decklink/NDI fuera (CGo) | **F2** |
 | Captura de pantalla, DVB, disco | — | No aplica | no |
 
@@ -53,6 +53,11 @@ Technalogix TP1000. Antena787 ocupa el lugar de MistServer + VLC.
   de su lado, y Rolando confirma que no le falta nada de lo que hacía con
   VLC. Sin esa firma, VLC no se apaga.
 
+Los cuatro huecos concretos que esta tabla señalaba ya son criterio propio:
+multicast y TTL explícitos (**F2-114**), salida `http-ts` (**F2-115**),
+entrada `url` (**F2-116**) y ventana local de monitor (**F2-117**). Están
+en `docs/ACEPTACION.md`, sección F2, justo después de F2-50.
+
 ## 4 · Preguntas para Rolando (ya, antes de F2)
 
 1. **La cadena exacta de VLC** con la que emite: el `sout` (o el `.vlm` /
@@ -63,6 +68,8 @@ Technalogix TP1000. Antena787 ocupa el lugar de MistServer + VLC.
 4. ¿MistServer **empuja** a VLC o VLC **tira** de MistServer (y por qué
    protocolo: HTTP TS, RTMP, HLS)? Es lo que decide si hace falta `url`.
 5. ¿Usa el `display` de VLC para ver la salida en el monitor de la torre?
+   **Confirmado por Rolando, 9 sept 2026: hoy es la única forma que tiene**
+   — la versión actual de MistServer ya no abre esa ventana (ver F2-117).
 6. ¿Graba con VLC lo que sale, o con otra cosa?
 7. ¿Alguien más tira de la señal por HTTP desde otro equipo (monitor,
    streaming) que hoy sirva VLC?
