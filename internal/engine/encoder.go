@@ -18,9 +18,12 @@ import (
 // la que recibe el multiplexor de CAtv (MPEG-2 CBR por UDP y a archivo) y
 // una de internet (H.264) con otro volumen, para probar dos a la vez.
 type Output struct {
-	Name     string
-	Kind     string // "mpeg2-ts" | "h264-ts"
-	File     string // archivo de salida (siempre; es lo que se analiza)
+	Name string
+	Kind string // "mpeg2-ts" | "h264-ts"
+	// File es el archivo de salida: en el arnés de F0 es lo que se analiza.
+	// Al aire puede ir vacío —el canal manda por UDP y no graba nada en el
+	// disco—; grabar la salida de verdad, con su retención, es F2-36 (T7).
+	File     string
 	UDP      string // opcional: udp://host:puerto para el multiplexor
 	VideoKbs int
 	MuxKbs   int     // tasa constante del TS (solo mpeg2-ts)
@@ -145,9 +148,12 @@ func (e *Encoder) outputArgs() []string {
 				"-c:a:0", "mp2", "-b:a:0", "192k", "-c:a:1", "ac3", "-b:a:1", "192k",
 				"-max_muxing_queue_size", "1024")
 			mux := fmt.Sprintf("f=mpegts:muxrate=%d:pcr_period=20:pat_period=0.1", o.MuxKbs*1000)
-			if o.UDP != "" {
+			switch {
+			case o.UDP != "" && o.File != "":
 				args = append(args, "-f", "tee", fmt.Sprintf("[%s:onfail=ignore]%s?pkt_size=1316|[%s]%s", mux, o.UDP, mux, o.File))
-			} else {
+			case o.UDP != "":
+				args = append(args, "-f", "mpegts", "-muxrate", strconv.Itoa(o.MuxKbs*1000), "-pcr_period", "20", "-pat_period", "0.1", o.UDP+"?pkt_size=1316")
+			default:
 				args = append(args, "-f", "mpegts", "-muxrate", strconv.Itoa(o.MuxKbs*1000), "-pcr_period", "20", "-pat_period", "0.1", o.File)
 			}
 		case "h264-ts":

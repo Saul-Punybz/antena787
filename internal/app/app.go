@@ -376,6 +376,7 @@ func (a *App) Start(parent context.Context) {
 	a.guard("ingest", a.ingestLoop)
 	a.guard("normalizacion", a.normalizeLoop)
 	a.guard("portal", a.portalLoop)
+	a.guard("motor", a.motorLoop)
 	if !a.opts.NoMaintenance {
 		a.guard("respaldo", a.backupLoop)
 		a.guard("disco", a.diskLoop)

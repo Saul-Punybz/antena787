@@ -18,6 +18,14 @@ import (
 type Clip struct {
 	Path string
 	Name string
+	// SeekMs es por dónde empieza: 0 es desde el principio. Lo usa el
+	// arranque a mitad de programa —el servicio se reinició en el minuto
+	// 07:32 de un bloque— para abrir el archivo donde toca y no volver a
+	// empezarlo (F2-13).
+	SeekMs int64
+	// Ref es de quien pone el clip; el motor no la mira. internal/app guarda
+	// ahí el id del plan_item, para cerrar el as-run cuando el clip sale.
+	Ref int64
 }
 
 // Decoder es la pareja de procesos ffmpeg que convierten un clip a cuadros
@@ -61,12 +69,21 @@ func StartDecoder(parent context.Context, ffmpeg, ffprobe string, f Format, clip
 	d := &Decoder{Clip: clip, Format: f, cancel: cancel, frames: make(chan []byte, prerollFrames), vdone: make(chan error, 1)}
 
 	if dur, err := probeDuration(ffprobe, clip.Path); err == nil {
+		dur -= float64(clip.SeekMs) / 1000 // lo que queda desde el seek
+		if dur < 0 {
+			dur = 0
+		}
 		d.ExpectedFrames = int64(math.Round(dur * f.FPS()))
 	}
 
-	d.vcmd = exec.CommandContext(ctx, ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error",
+	// El seek va antes de -i: así ffmpeg salta por índice y no decodifica lo
+	// que no va a salir. Un archivo sin índice cae solo en el modo lento.
+	seek := seekArgs(clip.SeekMs)
+
+	d.vcmd = exec.CommandContext(ctx, ffmpeg, append(append([]string{
+		"-nostdin", "-hide_banner", "-loglevel", "error"}, seek...),
 		"-i", clip.Path, "-an", "-sn", "-dn",
-		"-vf", videoFilter(f), "-f", "rawvideo", "pipe:1")
+		"-vf", videoFilter(f), "-f", "rawvideo", "pipe:1")...)
 	d.vcmd.Stderr = &d.verr
 	// En Windows, Wait se quedaba esperando a que ffmpeg soltara sus tuberías
 	// después de matarlo (issue #14): con WaitDelay, Wait cierra las tuberías
@@ -77,9 +94,10 @@ func StartDecoder(parent context.Context, ffmpeg, ffprobe string, f Format, clip
 		cancel()
 		return nil, err
 	}
-	d.acmd = exec.CommandContext(ctx, ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error",
+	d.acmd = exec.CommandContext(ctx, ffmpeg, append(append([]string{
+		"-nostdin", "-hide_banner", "-loglevel", "error"}, seek...),
 		"-i", clip.Path, "-vn", "-sn", "-dn",
-		"-af", audioFilter(f), "-f", "s16le", "-ar", strconv.Itoa(f.SampleRate), "-ac", strconv.Itoa(f.Channels), "pipe:1")
+		"-af", audioFilter(f), "-f", "s16le", "-ar", strconv.Itoa(f.SampleRate), "-ac", strconv.Itoa(f.Channels), "pipe:1")...)
 	d.acmd.Stderr = &d.aerr
 	d.acmd.WaitDelay = 3 * time.Second
 	aout, err := d.acmd.StdoutPipe()
@@ -123,6 +141,15 @@ func StartDecoder(parent context.Context, ffmpeg, ffprobe string, f Format, clip
 		}
 	}()
 	return d, nil
+}
+
+// seekArgs es el salto de entrada, vacío cuando el clip sale desde el
+// principio (que es lo normal).
+func seekArgs(ms int64) []string {
+	if ms <= 0 {
+		return nil
+	}
+	return []string{"-ss", fmt.Sprintf("%.3f", float64(ms)/1000)}
 }
 
 // NextFrame entrega el siguiente cuadro o false cuando el clip terminó.

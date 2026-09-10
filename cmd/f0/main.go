@@ -97,7 +97,10 @@ func run(ffmpeg, ffprobe, media, out string, dur time.Duration, udp string, one 
 			playlist = append(playlist, c)
 		}
 	}
-	srv := &engine.Server{Format: fm, Enc: enc, Playlist: playlist, Filler: filler, Events: evf, Ffmpeg: ffmpeg, Ffprobe: ffprobe}
+	// El arnés alimenta el motor con una lista circular: aquí no hay plan
+	// ni decks, que es justo lo que hace de esto un laboratorio (§22.1).
+	srv := engine.NewServer(fm, enc, engine.NuevaLista(playlist, filler), filler)
+	srv.Events, srv.Ffmpeg, srv.Ffprobe = evf, ffmpeg, ffprobe
 
 	stats := f0.NewStats(filepath.Join(out, "stats.csv"), enc.PID())
 	go stats.Run(ctx, 10*time.Second)

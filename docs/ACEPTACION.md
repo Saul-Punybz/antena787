@@ -578,17 +578,33 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   · Cuando el motor lo conforma antes de entregarlo al encoder · Entonces
   rellena los 200 ms finales del audio con silencio digital, y la duración
   de video no se recorta para igualarlo.
+  Construido en T1 (9 sept 2026): `internal/engine/frameserver.go:emitir`
+  (evento `audio_corto`), con `Decoder.ReadSamples` devolviendo silencio.
+  Prueba: `TestF2_02AudioCortoSeRellenaConSilencio`.
 - **F2-03** [AUTO] — Dado un clip cuyo video mide 300 ms menos que su audio
   · Cuando el motor lo conforma · Entonces sostiene el **último cuadro** de
   video durante 300 ms adicionales en vez de cortar el audio.
+  Construido en T1 (9 sept 2026): `internal/engine/frameserver.go:emitir`
+  (el bucle de después del video, evento `cuadro_sostenido`). Prueba:
+  `TestF2_03VideoCortoSostieneElUltimoCuadro`; visto en la F0 corta con el
+  clip 480i, cuyo video acaba 16 ms antes que su audio.
 - **F2-04** [AUTO] — Dado un clip 4:3 en un canal de formato de casa 16:9 ·
   Cuando el motor lo conforma · Entonces aplica pillarbox (barras laterales)
   en vez de estirar la imagen.
+  Construido en T1 (9 sept 2026): `internal/engine/decoder.go:videoFilter`
+  (`force_original_aspect_ratio=decrease` + `pad`). Prueba:
+  `TestF2_04CuatroTercosSaleConBarrasALosLados`.
 - **F2-05** [AUTO] — Dado dos clips consecutivos en el plan · Cuando el
   motor se acerca al final del primero · Entonces el decodificador del
   segundo ya arrancó (pre-roll) antes de que el primero termine, y el
   cambio no produce cuadros duplicados/perdidos ni discontinuidad de audio
   sobre −40 dBFS (mismos umbrales validados en F0).
+  Construido en T1 (9 sept 2026):
+  `internal/engine/frameserver.go:quizasPreroll` (abre el clip que viene
+  `PrerollLead` antes del corte) y `emitir`. Pruebas:
+  `TestF2_05ElCambioDeClipNoPierdeNiDuplicaCuadros` y la F0 corta con
+  marcadores sobre el TS real (F0-03 y F0-01: 25 cambios, 0 con problema,
+  peor clic −69.5 dBFS).
 - **F2-06** [AUTO] — Dado que el deck programa tiene un `plan_item` en
   curso y el deck comercial tiene un corte pautado exactamente a las
   14:00:00 · Cuando el reloj llega a las 14:00:00 · Entonces el aire pasa al
@@ -608,6 +624,12 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   relleno cargado para el canal · Cuando el motor necesita producir salida
   para el siguiente instante · Entonces cae a **cartel (Slate)**, nunca a
   negro.
+  Construido en T1 (9 sept 2026):
+  `internal/app/motor.go:fuenteDelPlan.Filler` y `App.cartelALaMano` (si la
+  biblioteca de relleno está vacía, el cartel; si no hay cartel apuntado, se
+  dibuja uno en el acto), con `internal/engine/frameserver.go:rellenar` y
+  `sostener` cubriendo el hueco. Prueba:
+  `TestF2_09SinPlanSaleElRellenoYAlFinalElCartel`.
 - **F2-10** [AUTO] — Dado que no hay programa y no hay relleno · Cuando el
   motor necesita producir salida · Entonces cae al **cartel, que es el último
   escalón de la cascada** —programa → relleno → cartel— y **nunca a negro ni
@@ -617,6 +639,11 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   *(Corregido: la versión anterior de este criterio ponía barras y tono como
   último escalón. Las barras y el tono existen solo para la prueba del paso 5
   del asistente — ver F2-69 y F2-104.)*
+  Construido en T1 (9 sept 2026): la misma cascada de F2-09
+  —`internal/engine/frameserver.go:pedir` → `rellenar` → `sostener`,
+  `internal/app/motor.go:cartelALaMano`—; el motor no tiene ninguna ruta a
+  barras. Pruebas: `TestElClipQueNoExisteLoCubreElRelleno` (ningún cuadro
+  negro en la salida) y la F0 corta (F0-NEGRO: 0 cuadros negros de 7572).
 - **F2-11** [AUTO] — Dado el proceso encoder de salida congelado (no consume
   un solo cuadro) · Cuando pasan **3 segundos** sin que consuma cuadro
   (default configurable) · Entonces el motor manda el **cartel** al aire, mata
@@ -633,18 +660,33 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   solo parpadeo de red **no** saca de la parrilla un programa bueno; dos
   fallos de verdad sí, para que no se programe otra vez la semana siguiente y
   falle igual.
+  Construido en T1 (9 sept 2026):
+  `internal/app/motor.go:fuenteDelPlan.registrarFallo` (con el conteo por
+  `media_asset` y el umbral `FalloRepetido`), avisado desde
+  `internal/engine/frameserver.go:contar` y `abrirClip` por la interfaz
+  `engine.Avisada`. Prueba: `TestF2_12ElArchivoVaACuarentenaAlSegundoFallo`.
 - **F2-13** [AUTO] — Dado un `plan_item` de 20:00 minutos que empezó hace
   07:32 cuando el servicio de Antena787 se reinicia · Cuando el motor
   arranca de nuevo · Entonces todo lo que estaba en `cued` vuelve a
   `planned`, calcula que debería estar en el minuto 07:32 de ese archivo,
   abre el mismo archivo con **seek** a ese segundo, y arranca — **nunca**
   reinicia el bloque desde 00:00.
+  Construido en T1 (9 sept 2026): `internal/app/motor.go:correrMotor`
+  (`Plan.ResetCuedToPlanned` al arrancar) y `fuenteDelPlan.clipDe`
+  (`Clip.SeekMs`), con `internal/engine/decoder.go:seekArgs` pasándole el
+  `-ss` a los dos decodificadores. Prueba:
+  `TestF2_13ElBloqueEnCursoEntraPorDondeToca`.
 - **F2-14** [AUTO] — Dado el reloj **monotónico** del motor, derivado de las
   marcas de tiempo del encoder · Cuando se compara contra la hora de pared
   cada minuto y la diferencia es **de hasta 60 segundos** · Entonces se
   corrige por **deriva gradual**, nunca por salto brusco, sin importar si son
   milisegundos o decenas de segundos. *(Una diferencia mayor a 60 segundos ya
   no es deriva sino un salto de reloj, y se trata aparte: ver F2-89.)*
+  Construido en T1 (9 sept 2026): `internal/engine/frameserver.go:AirTime`
+  (el reloj del aire se cuenta en cuadros, no en `time.Now`) y
+  `corregirDeriva`, que compara con la hora de pared cada minuto y corrige
+  como máximo `DerivaPorMinuto` (300 ms) cada vez, nunca de un salto. El
+  salto de más de un minuto sigue siendo de `App.clockLoop` (F2-89).
 - **F2-15** [MANUAL] — Dado el motor arrancando en una máquina con
   QuickSync, NVENC, VAAPI y software disponibles · Cuando corre la prueba de
   10 segundos con cada encoder candidato · Entonces la pantalla de Ajustes
@@ -653,10 +695,21 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   bloque de RadioOnce Live! · Cuando llega su hora · Entonces toma el aire
   (deck programa) y, al terminar, la señal en vivo regresa sola, sin
   intervención manual.
+  Construido en T1 (9 sept 2026): `internal/app/motor.go:queToca` (un ítem
+  con `dentro_de` manda sobre el que lo contiene) y `corteDe` (el bloque de
+  fuera se corta cuando entra el de dentro); al terminar, `clipDe` devuelve el
+  de fuera con `SeekMs` al instante actual. Prueba:
+  `TestF2_16ElElementoDeDentroTomaElAireYElDeFueraVuelveSolo`. **Sobre una
+  fuente en vivo se cierra con T4**: en T1 el bloque de fuera es un archivo.
 - **F2-17** [AUTO] — Dado un archivo con audio 5.1 y otro con audio mono
   (archivos de prueba #6 de F0) programados consecutivamente en producción
   · Cuando el motor los reproduce · Entonces ambos salen sin fallo y sin
   discontinuidad de canal audible en el cambio.
+  Construido en T1 (9 sept 2026): `internal/engine/decoder.go:audioFilter`
+  (todo baja o sube a estéreo del formato de casa antes de llegar al
+  servidor de cuadros). Medido en la F0 corta con los archivos 06a-mono y
+  06b-surround51 seguidos: F0-01 pasa (peor clic −69.5 dBFS) y no hay
+  ningún evento de fallo en esos dos cortes.
 
 ### Fuente en vivo (§9 paso 5)
 

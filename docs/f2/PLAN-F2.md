@@ -36,7 +36,41 @@ Diez tandas. El orden 1→2→3 sigue lo que §22.3 pide probar primero
 de §22.3; 9-10 cierran con lo que pide la tarea (tablero, telemetría/ENDEC,
 soak).
 
-### T1 · Motor y conformado dentro de `antena`
+### T1 · Motor y conformado dentro de `antena` — **HECHA** (9 sept 2026)
+
+> Rama `agente/t1-motor`, un solo commit («Motor y conformado dentro de
+> `antena`: el plan alimenta el servidor de cuadros»). El hash es el de esa
+> rama: un commit no puede llevar su propio hash escrito dentro, así que se
+> anota al fusionar. Lo construido está criterio por criterio en
+> `docs/ACEPTACION.md` (F2-02, 03, 04, 05, 09, 10, 12, 13, 14, 16, 17), y
+> F2-01 se midió por primera vez con la F0 corta después del cambio: 7572
+> cuadros, 0 reinicios, ningún FALLA en `f0/out/REPORTE.md`.
+>
+> **Lo que T1 dejó puesto, y que T2 hereda:**
+>
+> - `engine.ClipSource` tal como decía el contrato, y `NewServer(formato,
+>   enc, src, filler)` — con `enc` como la interfaz `engine.Sink` en vez de
+>   `*Encoder` (que la cumple): así el conformado se prueba sin levantar
+>   ffmpeg. `Server.Playlist` ya no existe; el arnés de `f0` usa
+>   `engine.NuevaLista`.
+> - `engine.Avisada` (opcional): la fuente que la implementa se entera de qué
+>   clip salió —para `MarkAired`— y qué clip falló —para la cuarentena de
+>   F2-12—. `internal/app` la implementa; el motor funciona sin ella.
+> - `Clip.SeekMs` (entrar a un archivo por el medio, F2-13) y `Clip.Ref` (el
+>   id del `plan_item`, que el motor no mira).
+> - `until` es **corte**: al llegar, el motor pregunta otra vez. Si la fuente
+>   contesta el mismo clip, no se reinicia nada: se corre el corte.
+> - `engine.Output.File` puede ir vacío (salida solo por UDP). Es el único
+>   cambio de T1 en `encoder.go`, que es de T2: revisarlo al fusionar.
+> - El reloj del aire es `Server.AirTime` —cuadros, no `time.Now`— y la
+>   deriva se corrige en `corregirDeriva`, comparando con la hora de pared
+>   descontando el colchón de `Lead`.
+> - Catálogo de incidentes en `internal/model/incidentes.go`. Dos nombres
+>   cambiaron a lo que dicen el PRD y el contrato: `encoder_colgado` →
+>   `encoder_reiniciado`, `timeout_manual` → `manual_por_timeout` (los
+>   viejos siguen teniendo frase en `TextoDeIncidente`, nadie escribe con
+>   ellos).
+
 **Objetivo:** sacar el servidor de cuadros del arnés `f0` y ponerlo a correr
 dentro del proceso real, alimentado por el plan de verdad, sin decks todavía
 (un solo carril).

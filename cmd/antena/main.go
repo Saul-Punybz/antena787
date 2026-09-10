@@ -245,6 +245,12 @@ func saludo(a *app.App, direcciones []string, dataDir string, uiBuilt bool) {
 	if hay, err := a.Store.Settings.HasPIN(ctx); err == nil && !hay {
 		fmt.Printf("\n  Todavía no hay clave de estación: abre http://%s y el asistente te lleva.\n", direcciones[0])
 	}
-	fmt.Println("\n  El canal está en modo sombra: arma el plan y publica la guía, todavía no emite.")
+	// El motor arranca solo cuando el canal está al aire (F2, T1); en sombra
+	// se arma el plan y se publica la guía, y nada sale a ninguna salida.
+	if ch, err := a.Store.Channel.Get(ctx, a.ChannelID); err == nil && ch.Mode == app.ModoAire {
+		fmt.Println("\n  El canal está AL AIRE: el motor arranca con el plan que haya.")
+	} else {
+		fmt.Println("\n  El canal está en modo sombra: arma el plan y publica la guía, todavía no emite.")
+	}
 	fmt.Println("  Ctrl-C para parar.")
 }

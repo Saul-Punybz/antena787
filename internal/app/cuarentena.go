@@ -95,10 +95,11 @@ var textosDeIncidente = map[string]string{
 	"guia_rechazada":          "La guía no se publicó; sigue puesta la anterior",
 	"maquina_despierta":       "La máquina no se va a dormir mientras el canal esté encendido",
 	"guardian_caido":          "El guardián que impide dormir a la máquina se cayó y se volvió a levantar",
-	// F2
+	// F2 — los nombres son los del catálogo de internal/model/incidentes.go.
 	"vivo_ausente":       "La fuente en vivo no llegó y se cubrió con relleno",
-	"encoder_colgado":    "El encoder se colgó y se relanzó solo",
-	"timeout_manual":     "El control manual venció y el aire volvió solo",
+	"encoder_reiniciado": "El encoder se paró y se relanzó solo",
+	"fallo_de_clip":      "Un bloque no pudo salir y lo cubrió el relleno",
+	"manual_por_timeout": "El control manual venció y el aire volvió solo",
 	"cartel":             "El aire cayó al cartel de la estación",
 	"cascada_extendida":  "El relleno cubrió más de lo previsto",
 	"solape":             "Dos bloques quisieron salir a la vez",
@@ -106,6 +107,11 @@ var textosDeIncidente = map[string]string{
 	"enlace_caido":       "Una salida se cayó y se reconectó",
 	"silencio_detectado": "Se detectó silencio en la salida",
 	"negro_detectado":    "Se detectó negro en la salida",
+	// Los dos nombres que se usaron antes de que el catálogo existiera. Se
+	// dejan para que una fila vieja siga teniendo su frase; nadie escribe ya
+	// con ellos.
+	"encoder_colgado": "El encoder se paró y se relanzó solo",
+	"timeout_manual":  "El control manual venció y el aire volvió solo",
 }
 
 // TextoDeIncidente es la frase en cristiano de un tipo de incidente. Un tipo
