@@ -1201,7 +1201,7 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
 ## Resumen
 
 - **F0:** 9 criterios (F0-01 a F0-09).
-- **F1:** 71 criterios (F1-01 a F1-71; del 9 de septiembre de 2026: F1-58 a F1-63 audio de todo el material, F1-64 a F1-67 emparejar títulos, F1-68 y F1-69 cuarentena e incidentes en pantalla, F1-70 y F1-71 lo aprendido de los proyectos comparables).
+- **F1:** 76 criterios (F1-01 a F1-76; del 9 de septiembre de 2026: F1-58 a F1-63 audio de todo el material, F1-64 a F1-67 emparejar títulos, F1-68 y F1-69 cuarentena e incidentes en pantalla, F1-70 y F1-71 lo aprendido de los proyectos comparables, F1-72 y F1-73 el modo sombra con archivos reales, F1-74 a F1-76 lo señalado por la investigación de subtítulos y metadata).
 - **F2:** 110 criterios (F2-01 a F2-110).
 - **Total: 184 criterios de aceptación**, de los cuales **158 son [AUTO]** y
   **26 son [MANUAL]**.
