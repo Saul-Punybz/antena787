@@ -167,12 +167,23 @@ go test ./... -count=1           # todo debe estar verde
    programa absorbe el tiempo). CI: ffmpeg en el job de pruebas, bloqueo
    real de archivo en Windows (`bloqueo_windows_test.go`); issues #8 y #9
    cerrados.
-6. **Antes de F2, decidir con Saul lo que dejaron los dos informes de hoy:**
-   marcar programación infantil (E/I) en la ficha (Class A: 156 h/año, hoy no
-   existe), el umbral de $3M en el texto de la exención de subtítulos, el
-   aviso de licencia de TMDB, y las preguntas para el ingeniero de CAtv (¿el
-   TP1000 genera PSIP?, modelo del Sage, ¿emiten con subtítulos?).
-7. Después, **F2 · Playout** (PRD §22.3), donde además se cierran F1-04
+6. ~~Lo que dejaron los dos informes~~ **Hecho (9 sept, octava tanda, con
+   agentes en paralelo):** E/I en la ficha (esquema **v6**, `title.infantil_core`,
+   interruptor en la ficha, categoría Infantil/Children en la guía, F1-76; el
+   conteo de 156 h/año es F4), umbral de $3M y licencia de TMDB en
+   `COMPLIANCE.md` y en Ajustes (F1-74), sidecar `.mcc` (F1-75), F2-112 (la
+   máquina no se duerme: `internal/despierto`, probado en el Mac), criterios
+   de paridad con VLC (F2-114 a F2-117) y **`docs/f2/PLAN-F2.md`** (diez
+   tandas paralelizables, contratos Go entre tandas, puerta de cierre,
+   diez preguntas para Saul). Pendiente chico: el selector de subtítulos de
+   tres estados del perfil `us-fcc` no existe en la interfaz (el texto del
+   $3M vive en `COMPLIANCE.md` hasta entonces). Las preguntas para el
+   ingeniero de CAtv y la cadena `sout` de VLC siguen en `PARA-ROLANDO.md`.
+7. **F2 · Playout**, por las tandas de `docs/f2/PLAN-F2.md`: T1 (motor dentro
+   de `antena`) en curso con un agente; después T2 y T3 en paralelo, y así.
+   Antes de T2 hay que contestar las preguntas 1, 3 y 10 del plan (F2.5,
+   multicast, varias salidas desde el principio).
+8. Después de F2 (PRD §22.3), donde además se cierran F1-04
    (CEA-608 con detección propia, ffprobe ≥ 9 ya no emite `closed_captions`),
    el fundido de 1 s del clip recortado (`fundido_salida_ms` ya viene en el
    plan) y los ítems `dentro_de` de un vivo.
