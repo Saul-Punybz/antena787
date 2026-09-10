@@ -33,8 +33,10 @@ var (
 // La aserción es **por hilo**: quien la pone tiene que ser el mismo hilo que
 // la suelta, y si ese hilo se muere la aserción se va con él. Por eso vive en
 // una goroutine con runtime.LockOSThread pegada a su hilo del sistema de
-// principio a fin.
-func SostenerCon(ctx context.Context, _ Lanzador, _ Buscador) (func(), error) {
+// principio a fin. Como no hay un subproceso externo al que alguien pueda
+// matar por fuera, caido siempre es nil: en macOS y Linux avisa de una
+// caída; aquí no hay nada de qué avisar.
+func SostenerCon(ctx context.Context, _ Lanzador, _ Buscador) (soltar func(), caido <-chan error, err error) {
 	listo := make(chan error, 1)
 	suelta := make(chan struct{})
 
@@ -59,8 +61,8 @@ func SostenerCon(ctx context.Context, _ Lanzador, _ Buscador) (func(), error) {
 	}()
 
 	if err := <-listo; err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var una sync.Once
-	return func() { una.Do(func() { close(suelta) }) }, nil
+	return func() { una.Do(func() { close(suelta) }) }, nil, nil
 }

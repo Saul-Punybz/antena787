@@ -94,6 +94,7 @@ var textosDeIncidente = map[string]string{
 	"vencimiento":             "Una regla se acerca a su fin",
 	"guia_rechazada":          "La guía no se publicó; sigue puesta la anterior",
 	"maquina_despierta":       "La máquina no se va a dormir mientras el canal esté encendido",
+	"guardian_caido":          "El guardián que impide dormir a la máquina se cayó y se volvió a levantar",
 	// F2
 	"vivo_ausente":       "La fuente en vivo no llegó y se cubrió con relleno",
 	"encoder_colgado":    "El encoder se colgó y se relanzó solo",

@@ -8,28 +8,50 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
-// procesoFalso es el guardián de mentira: se acuerda de si lo mataron y de si
-// alguien lo esperó (esperar es lo que evita el proceso zombi).
+// procesoFalso es el guardián de mentira: Esperar() se queda colgado, como
+// el de verdad, hasta que alguien lo mata (Matar) o hasta que la prueba
+// simula que se cayó solo (caeSolo) — así se puede probar la diferencia
+// entre soltarlo a propósito y que se muera por su cuenta.
 type procesoFalso struct {
 	mu      sync.Mutex
 	muerto  bool
 	esperas int
+	fin     chan error
+}
+
+func nuevoProcesoFalso() *procesoFalso {
+	return &procesoFalso{fin: make(chan error, 1)}
 }
 
 func (p *procesoFalso) Matar() error {
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	p.muerto = true
+	p.mu.Unlock()
+	select {
+	case p.fin <- nil:
+	default:
+	}
 	return nil
 }
 
 func (p *procesoFalso) Esperar() error {
+	e := <-p.fin
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	p.esperas++
-	return nil
+	p.mu.Unlock()
+	return e
+}
+
+// caeSolo simula que el guardián murió por su cuenta —alguien lo mató a
+// mano, o el sistema— sin que nadie llamara a Matar().
+func (p *procesoFalso) caeSolo(err error) {
+	select {
+	case p.fin <- err:
+	default:
+	}
 }
 
 func (p *procesoFalso) estado() (bool, int) {
@@ -55,7 +77,7 @@ func (l *lanzadorFalso) lanzar(_ context.Context, programa string, args ...strin
 	if l.err != nil {
 		return nil, l.err
 	}
-	l.proc = &procesoFalso{}
+	l.proc = nuevoProcesoFalso()
 	return l.proc, nil
 }
 
@@ -67,7 +89,7 @@ func noHay(p string) (string, error) {
 
 func TestMacLanzaCaffeinateAtadoANuestroPid(t *testing.T) {
 	l := &lanzadorFalso{}
-	soltar, err := sostenerCaffeinate(context.Background(), l.lanzar, hay)
+	soltar, _, err := sostenerCaffeinate(context.Background(), l.lanzar, hay)
 	if err != nil {
 		t.Fatalf("no sostuvo: %v", err)
 	}
@@ -100,7 +122,7 @@ func TestMacLanzaCaffeinateAtadoANuestroPid(t *testing.T) {
 
 func TestMacSinCaffeinateLoDiceEnCristiano(t *testing.T) {
 	l := &lanzadorFalso{}
-	_, err := sostenerCaffeinate(context.Background(), l.lanzar, noHay)
+	_, _, err := sostenerCaffeinate(context.Background(), l.lanzar, noHay)
 	if err == nil {
 		t.Fatal("sin caffeinate tenía que dar error")
 	}
@@ -114,12 +136,15 @@ func TestMacSinCaffeinateLoDiceEnCristiano(t *testing.T) {
 
 func TestLanzarQueFallaDevuelveErrorLegible(t *testing.T) {
 	l := &lanzadorFalso{err: errors.New("no hay memoria")}
-	soltar, err := sostenerCaffeinate(context.Background(), l.lanzar, hay)
+	soltar, caido, err := sostenerCaffeinate(context.Background(), l.lanzar, hay)
 	if err == nil {
 		t.Fatal("el lanzador falló y no salió error")
 	}
 	if soltar != nil {
 		t.Fatal("con error, soltar tiene que ser nil")
+	}
+	if caido != nil {
+		t.Fatal("con error, caido tiene que ser nil")
 	}
 	if !strings.Contains(err.Error(), "no hay memoria") {
 		t.Fatalf("el error se comió la causa: %q", err)
@@ -128,7 +153,7 @@ func TestLanzarQueFallaDevuelveErrorLegible(t *testing.T) {
 
 func TestLinuxUsaSystemdInhibitBloqueandoInactividadYSueño(t *testing.T) {
 	l := &lanzadorFalso{}
-	soltar, err := sostenerSystemdInhibit(context.Background(), l.lanzar, hay)
+	soltar, _, err := sostenerSystemdInhibit(context.Background(), l.lanzar, hay)
 	if err != nil {
 		t.Fatalf("no sostuvo: %v", err)
 	}
@@ -147,7 +172,7 @@ func TestLinuxUsaSystemdInhibitBloqueandoInactividadYSueño(t *testing.T) {
 
 func TestLinuxSinSystemdInhibitLoDiceEnCristiano(t *testing.T) {
 	l := &lanzadorFalso{}
-	_, err := sostenerSystemdInhibit(context.Background(), l.lanzar, noHay)
+	_, _, err := sostenerSystemdInhibit(context.Background(), l.lanzar, noHay)
 	if err == nil {
 		t.Fatal("sin systemd-inhibit tenía que dar error")
 	}
@@ -164,10 +189,10 @@ func TestLinuxSinSystemdInhibitLoDiceEnCristiano(t *testing.T) {
 // Nunca entra en pánico y nunca devuelve las dos cosas a la vez.
 func TestSostenerConNuncaEntraEnPanico(t *testing.T) {
 	l := &lanzadorFalso{}
-	soltar, err := SostenerCon(context.Background(), l.lanzar, hay)
+	soltar, caido, err := SostenerCon(context.Background(), l.lanzar, hay)
 	switch {
-	case err != nil && soltar != nil:
-		t.Fatal("con error, soltar tiene que ser nil")
+	case err != nil && (soltar != nil || caido != nil):
+		t.Fatal("con error, soltar y caido tienen que ser nil")
 	case err == nil && soltar == nil:
 		t.Fatal("sin error, soltar no puede ser nil")
 	case err == nil:
@@ -175,5 +200,48 @@ func TestSostenerConNuncaEntraEnPanico(t *testing.T) {
 		soltar()
 	default:
 		t.Logf("este sistema no se pudo sostener y lo dijo claro: %v", err)
+	}
+}
+
+// caido es la señal de que el guardián se cayó por su cuenta: no se
+// confunde con un soltar a propósito, y lleva el motivo de la caída.
+func TestCaidoAvisaSiElGuardianSeCaePorSuCuenta(t *testing.T) {
+	l := &lanzadorFalso{}
+	soltar, caido, err := sostenerCaffeinate(context.Background(), l.lanzar, hay)
+	if err != nil {
+		t.Fatalf("no sostuvo: %v", err)
+	}
+	defer soltar()
+
+	select {
+	case <-caido:
+		t.Fatal("caido avisó antes de que nadie matara ni cayera nada")
+	default:
+	}
+
+	l.proc.caeSolo(errors.New("lo mataron a mano"))
+
+	select {
+	case e := <-caido:
+		if e == nil || !strings.Contains(e.Error(), "mataron") {
+			t.Fatalf("caido no llevó el motivo de la caída: %v", e)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("el guardián se cayó por su cuenta y caido nunca avisó")
+	}
+}
+
+// Soltar a propósito nunca cuenta como una caída, aunque sea el mismo canal
+// el que se entera de que el proceso terminó.
+func TestSoltarNoCuentaComoCaida(t *testing.T) {
+	l := &lanzadorFalso{}
+	soltar, caido, err := sostenerCaffeinate(context.Background(), l.lanzar, hay)
+	if err != nil {
+		t.Fatalf("no sostuvo: %v", err)
+	}
+	soltar()
+
+	if e, avisó := <-caido; avisó {
+		t.Fatalf("soltar mató al guardián y caido lo contó como una caída: %v", e)
 	}
 }

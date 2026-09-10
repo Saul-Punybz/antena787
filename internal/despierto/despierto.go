@@ -49,12 +49,18 @@ type Lanzador func(ctx context.Context, programa string, args ...string) (Proces
 type Buscador func(programa string) (string, error)
 
 // Sostener pide al sistema que no se duerma por inactividad y devuelve la
-// función que lo suelta. Llamar a soltar dos veces no hace daño; soltar
-// también ocurre solo si se cancela el contexto.
+// función que lo suelta y el canal por el que se avisa si el guardián se cae
+// por su cuenta —alguien lo mata a mano, o el sistema—, sin que nadie haya
+// llamado a soltar. Llamar a soltar dos veces no hace daño; soltar también
+// ocurre solo si se cancela el contexto, y soltar nunca cuenta como caída:
+// caido se calla para siempre en cuanto soltar actúa.
 //
-// Si no se pudo, soltar es nil y el error se puede enseñar tal cual a una
-// persona.
-func Sostener(ctx context.Context) (soltar func(), err error) {
+// En Windows caido nunca avisa: la aserción es del propio proceso (por
+// hilo), no de un subproceso que alguien pueda matar por fuera.
+//
+// Si no se pudo, soltar y caido son nil y el error se puede enseñar tal cual
+// a una persona.
+func Sostener(ctx context.Context) (soltar func(), caido <-chan error, err error) {
 	return SostenerCon(ctx, nil, nil)
 }
 
@@ -83,35 +89,54 @@ func (p *procesoDelSistema) Esperar() error { return p.cmd.Wait() }
 // buscadorDelSistema es exec.LookPath. Un buscador nil vale por este.
 func buscadorDelSistema(programa string) (string, error) { return exec.LookPath(programa) }
 
-// sostenerConProceso lanza un guardián y devuelve la función que lo mata. El
-// guardián es un programa que, mientras viva, tiene al sistema despierto.
-func sostenerConProceso(ctx context.Context, lanzar Lanzador, programa string, args ...string) (func(), error) {
+// sostenerConProceso lanza un guardián y devuelve la función que lo mata,
+// junto con el canal por el que se avisa si el guardián termina por su
+// cuenta. El guardián es un programa que, mientras viva, tiene al sistema
+// despierto.
+//
+// Esperarlo (Proceso.Esperar) es lo que evita dejar un proceso zombi detrás,
+// así que corre siempre en una goroutine propia, tanto si lo matamos
+// nosotros al soltar como si se muere solo: es la única manera de enterarse
+// de la segunda sin quedarse bloqueado esperando la primera. soltar apaga el
+// aviso antes de matar, así que a él nunca le llega como caída: caido, al
+// soltar, se queda cerrado y sin nada dentro.
+func sostenerConProceso(ctx context.Context, lanzar Lanzador, programa string, args ...string) (soltar func(), caido <-chan error, err error) {
 	if lanzar == nil {
 		lanzar = LanzadorDelSistema
 	}
 	p, err := lanzar(ctx, programa, args...)
 	if err != nil {
-		return nil, fmt.Errorf("no pude lanzar %s para impedir que la máquina se duerma: %w", programa, err)
+		return nil, nil, fmt.Errorf("no pude lanzar %s para impedir que la máquina se duerma: %w", programa, err)
 	}
+
+	fin := make(chan error, 1)
+	go func() {
+		fin <- p.Esperar()
+		close(fin)
+	}()
+
 	var una sync.Once
-	return func() {
+	soltar = func() {
 		una.Do(func() {
 			_ = p.Matar()
-			// Esperarlo es lo que evita dejar un proceso zombi detrás.
-			_ = p.Esperar()
+			// El propio soltar es quien se queda con el aviso de Esperar:
+			// así quien mira caido nunca lo confunde con una caída, y
+			// tampoco queda un zombi por no esperarlo.
+			<-fin
 		})
-	}, nil
+	}
+	return soltar, fin, nil
 }
 
 // sostenerCaffeinate es la manera de macOS: caffeinate atado a nuestro pid.
 // Vive en el archivo común, y no en el de darwin, para que las pruebas la
 // puedan recorrer en cualquier sistema con un lanzador de mentira.
-func sostenerCaffeinate(ctx context.Context, lanzar Lanzador, buscar Buscador) (func(), error) {
+func sostenerCaffeinate(ctx context.Context, lanzar Lanzador, buscar Buscador) (soltar func(), caido <-chan error, err error) {
 	if buscar == nil {
 		buscar = buscadorDelSistema
 	}
 	if _, err := buscar("caffeinate"); err != nil {
-		return nil, fmt.Errorf("no encuentro caffeinate en esta Mac (%v): apaga la suspensión por inactividad en Ajustes del Sistema → Batería", err)
+		return nil, nil, fmt.Errorf("no encuentro caffeinate en esta Mac (%v): apaga la suspensión por inactividad en Ajustes del Sistema → Batería", err)
 	}
 	// -i: no dormirse por inactividad. -s: no dormirse el sistema mientras
 	// haya corriente. -w: morirse cuando se muera este proceso.
@@ -121,12 +146,12 @@ func sostenerCaffeinate(ctx context.Context, lanzar Lanzador, buscar Buscador) (
 // sostenerSystemdInhibit es la manera de Linux. `sleep infinity` es el
 // programa que systemd-inhibit tiene que vigilar: mientras corra, la
 // prohibición está puesta.
-func sostenerSystemdInhibit(ctx context.Context, lanzar Lanzador, buscar Buscador) (func(), error) {
+func sostenerSystemdInhibit(ctx context.Context, lanzar Lanzador, buscar Buscador) (soltar func(), caido <-chan error, err error) {
 	if buscar == nil {
 		buscar = buscadorDelSistema
 	}
 	if _, err := buscar("systemd-inhibit"); err != nil {
-		return nil, fmt.Errorf("esta máquina no tiene systemd-inhibit: apaga la suspensión a mano (%v)", err)
+		return nil, nil, fmt.Errorf("esta máquina no tiene systemd-inhibit: apaga la suspensión a mano (%v)", err)
 	}
 	return sostenerConProceso(ctx, lanzar, "systemd-inhibit",
 		"--what=idle:sleep",
