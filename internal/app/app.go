@@ -1,8 +1,9 @@
 // Package app es el cableado: abre la base, encuentra ffmpeg, y levanta las
 // goroutines que hacen que el canal exista solo —el resolver, la vigilancia
 // de la carpeta de contenido, la cola de normalización, el respaldo de cada
-// hora, la vigilancia del disco y la del reloj—. No sabe nada de HTTP: eso
-// es internal/api. Un solo proceso, un solo canal (PRD §14.1).
+// hora, la vigilancia del disco, la del reloj y la aserción de no dormir—. No
+// sabe nada de HTTP: eso es internal/api. Un solo proceso, un solo canal
+// (PRD §14.1).
 //
 // La regla que manda aquí es la de la auditoría A2: **un pánico en cualquier
 // rincón no puede tumbar el proceso**. Cada goroutine corre bajo guard, que
@@ -23,6 +24,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"antena787/internal/engine"
@@ -132,7 +134,7 @@ type Alarma struct {
 
 // fuentesDeAlarma es el orden en que se enseñan las alarmas vivas. Cada
 // fuente manda sobre las suyas y no pisa las de las demás.
-var fuentesDeAlarma = []string{"guia", "disco", "cuarentena", "vencimiento", "emparejar", "avisos"}
+var fuentesDeAlarma = []string{"guia", "disco", "despierto", "cuarentena", "vencimiento", "emparejar", "avisos"}
 
 // DBName es el nombre del archivo de la base dentro de la carpeta de datos.
 const DBName = "antena.db"
@@ -156,6 +158,9 @@ const (
 	ClockJump  = 60 * time.Second
 	// WatchPoll es cada cuánto se relee qué carpeta hay que vigilar.
 	WatchPoll = 3 * time.Second
+	// DespiertoRetry es cada cuánto se reintenta impedir que la máquina se
+	// duerma cuando el sistema no dejó a la primera (F2-112).
+	DespiertoRetry = 5 * time.Minute
 )
 
 // Task es una goroutine más, con nombre, que corre bajo la misma protección
@@ -181,13 +186,20 @@ type Options struct {
 	RelaunchDelay time.Duration
 	// Tasks son goroutines extra, con la misma protección contra pánico.
 	Tasks []Task
-	// NoMaintenance apaga respaldo, disco y reloj (las pruebas no los
-	// quieren). El resolver y el ingest siguen.
+	// NoMaintenance apaga respaldo, disco, reloj y el no-dormir (las pruebas
+	// no los quieren). El resolver y el ingest siguen.
 	NoMaintenance bool
 	// NormalizeTimeout es lo máximo que se espera por una normalización
 	// antes de darla por colgada; 0 = se calcula del archivo
 	// (normalizeDeadline).
 	NormalizeTimeout time.Duration
+	// Sostener es lo que impide que la máquina se duerma mientras el canal
+	// esté encendido (F2-112); nil = despierto.Sostener. Las pruebas meten
+	// aquí una que falla a propósito.
+	Sostener func(context.Context) (soltar func(), err error)
+	// DespiertoRetry es cada cuánto se vuelve a intentar sostener la máquina
+	// despierta si no se pudo; 0 = DespiertoRetry.
+	DespiertoRetry time.Duration
 }
 
 // App es el proceso: la base abierta, las rutas de ffmpeg y las goroutines.
@@ -232,6 +244,10 @@ type App struct {
 	owner      map[int64]int64
 	alarms     map[string][]Alarma
 	started    bool
+
+	// despiertoAvisado dice que el incidente `maquina_despierta` ya se
+	// escribió: se deja una sola vez por arranque, no en cada reintento.
+	despiertoAvisado atomic.Bool
 }
 
 // Open abre la base y deja la aplicación lista para Start.
@@ -364,6 +380,7 @@ func (a *App) Start(parent context.Context) {
 		a.guard("respaldo", a.backupLoop)
 		a.guard("disco", a.diskLoop)
 		a.guard("reloj", a.clockLoop)
+		a.guard("despierto", a.despiertoLoop)
 	}
 	for _, t := range a.opts.Tasks {
 		a.guard(t.Name, t.Run)
