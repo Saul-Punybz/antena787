@@ -14,14 +14,21 @@ que todavía no soporta.
 
 > ## Antes que nada: hoy un driver empieza por una propuesta, no por código
 >
-> **Las interfaces de driver en Go todavía no existen.** Lo único que hay en
-> `internal/drivers/` es `alerta/sage` (el primero, 11 sept 2026), que no
-> define una interfaz de familia: decodifica su protocolo y entrega eventos.
-> Aparte de eso hay `engine.Output` en
-> [`internal/engine/encoder.go`](../../internal/engine/encoder.go) — una
-> estructura que describe una salida del encoder de la Fase 0, con dos clases
-> construidas (`mpeg2-ts` y `h264-ts`), y que **no es todavía la interfaz de
-> un driver.**
+> **`internal/drivers/` ya existe, y solo una familia tiene interfaz.** La
+> de **salida** la definió T2 el 10 de septiembre de 2026
+> ([`internal/drivers/salida`](../../internal/drivers/salida)): un `Driver`
+> con `Abrir`, `Vigilar` y `Descripcion`, con `udp-ts` y `archivo`
+> construidos. Las demás familias todavía no tienen interfaz común: lo que
+> hay son **paquetes de un equipo concreto**, que hablan su protocolo y
+> entregan lo suyo —
+> [`alerta/sage`](../../internal/drivers/alerta/sage) (11 sept) y
+> [`captura/hdhomerun`](../../internal/drivers/captura/hdhomerun) (10 sept)—
+> sin nada que los generalice todavía, y sin cablear a la aplicación:
+> `capture_input`/`signal-compare` y el ENDEC son trabajo de F2 (T8).
+> Aparte está `engine.Output` en
+> [`internal/engine/encoder.go`](../../internal/engine/encoder.go), la
+> estructura que describe una salida del encoder, que tampoco es la interfaz de
+> un driver.
 >
 > Así que hoy un driver nuevo empieza **abriendo un issue** con lo que el
 > equipo necesita, no con una implementación. Esa propuesta es la que va a dar
@@ -165,6 +172,22 @@ con este software** (§5, §12).
 
 Del retorno sale también el **monitor por streaming**: una copia de baja
 calidad de lo que de verdad está al aire, para verla desde el teléfono.
+
+**`stream` por un SiliconDust HDHomeRun ya tiene paquete** en
+[`internal/drivers/captura/hdhomerun`](../../internal/drivers/captura/hdhomerun)
+(10 sept 2026, catálogo §1): `Descubrir`/`DescubrirEnHost` (discover.json),
+`Lineup` (lineup.json) y, sobre la URL de cada canal, `Abrir` —el TS crudo con
+reconexión de 1 a 60 s— y `Medir` —una ventana de tiempo analizada con
+`internal/ts` para PIDs, continuidad, PCR y si hay video y audio—. Es el
+ejemplo más barato de `stream` (catálogo, "por qué `stream` es el tipo más
+barato de construir"): sin CGo, con `net/http` puro, y exactamente lo que
+`signal-compare` necesita cuando la estación no tiene ya un retorno de aire
+(ADR 0009). El nivel de señal (`Señal.FuerzaPct/RuidoPct/SimboloPct`, ss/snq/seq
+en la Guía de Desarrollo de SiliconDust) es mejor esfuerzo: el equipo lo
+publica por el protocolo binario de `hdhomerun_config`, documentado, y por un
+`status.json` HTTP que traen los modelos recientes pero que SiliconDust no
+documenta por escrito — si no aparece, `Medir` no falla por eso, deja la señal
+sin dato.
 
 ### Transmisor (telemetría, solo lectura)
 
