@@ -13,6 +13,7 @@ import type {
   ComprobacionesDelAire,
   CandidatoDeTitulo,
   DetectadoEnLaMaquina,
+  DriverDeSalida,
   ElementoDelPlan,
   EpisodioDeBiblioteca,
   Estado,
@@ -1394,17 +1395,35 @@ function textoArchivoDemo(parametros: string): string {
   return p.ruta?.trim() ? `al archivo ${p.ruta.trim()}` : ''
 }
 
+// Los tipos de salida que este demo sabe abrir, con su nombre en cristiano
+// (el mismo que devuelve GET /salidas en `drivers_disponibles`). Se guarda
+// una sola vez para no repetir la lista y para poder nombrar un tipo
+// desconocido en cristiano en vez de por su clave (F1-56).
+const TIPOS_DE_SALIDA_DEMO: DriverDeSalida[] = [
+  {
+    driver: 'udp-ts',
+    nombre: 'Al transmisor (multiplexor)',
+    explicacion:
+      'La señal MPEG-2 por la red, a la dirección y el puerto que espera tu multiplexor.',
+  },
+  {
+    driver: 'archivo',
+    nombre: 'A un archivo',
+    explicacion: 'Guarda lo que sale, tal cual, en el disco.',
+  },
+]
+
 /** La frase en cristiano de a dónde va la salida, como la escribe el servidor. */
-function textoDeSalidaDemo(driver: string, parametros: string): string {
-  if (driver === 'udp-ts') return textoUDPTSDemo(parametros)
-  if (driver === 'archivo') return textoArchivoDemo(parametros)
+function textoDeSalidaDemo(tipo: string, parametros: string): string {
+  if (tipo === 'udp-ts') return textoUDPTSDemo(parametros)
+  if (tipo === 'archivo') return textoArchivoDemo(parametros)
   return ''
 }
 
 /** Lo que `salidaValida`/`salida.Para` dirían del lado del servidor. */
-function validarSalidaDemo(nombre: string, driver: string, parametros: string): string | null {
+function validarSalidaDemo(nombre: string, tipo: string, parametros: string): string | null {
   if (!nombre.trim()) return 'ponle un nombre a la salida: es el que se ve en Al aire'
-  if (driver === 'udp-ts') {
+  if (tipo === 'udp-ts') {
     let p: ParamsUDPTSDemo = {}
     try {
       p = JSON.parse(parametros || '{}') as ParamsUDPTSDemo
@@ -1415,7 +1434,7 @@ function validarSalidaDemo(nombre: string, driver: string, parametros: string): 
       return 'no me has dicho a qué dirección mandar la señal: se escribe como 192.168.1.50:1234'
     return null
   }
-  if (driver === 'archivo') {
+  if (tipo === 'archivo') {
     let p: { ruta?: string } = {}
     try {
       p = JSON.parse(parametros || '{}') as { ruta?: string }
@@ -1425,7 +1444,9 @@ function validarSalidaDemo(nombre: string, driver: string, parametros: string): 
     if (!p.ruta?.trim()) return 'no me has dicho en qué archivo guardar la señal'
     return null
   }
-  return `todavía no sé mandar la señal por "${driver}": en esta versión están la salida al multiplexor y la grabación a un archivo`
+  const conocido = TIPOS_DE_SALIDA_DEMO.find((d) => d.driver === tipo)
+  const destino = conocido ? conocido.nombre : 'ese destino'
+  return `todavía no sé mandar la señal a "${destino}": en esta versión están la salida al multiplexor y la grabación a un archivo`
 }
 
 // ── el ruteador ───────────────────────────────────────────────────────
@@ -1457,37 +1478,25 @@ export async function responder(ruta: string, init?: RequestInit): Promise<Respo
   if (p === '/salidas' && metodo === 'GET') {
     return json({
       salidas,
-      drivers_disponibles: [
-        {
-          driver: 'udp-ts',
-          nombre: 'Al transmisor (multiplexor)',
-          explicacion:
-            'La señal MPEG-2 por la red, a la dirección y el puerto que espera tu multiplexor.',
-        },
-        {
-          driver: 'archivo',
-          nombre: 'A un archivo',
-          explicacion: 'Guarda lo que sale, tal cual, en el disco.',
-        },
-      ],
+      drivers_disponibles: TIPOS_DE_SALIDA_DEMO,
     })
   }
   if (p === '/salidas' && metodo === 'POST') {
     const nombre = String(cuerpo?.nombre ?? '')
-    const driver = String(cuerpo?.driver ?? '').trim()
+    const tipo = String(cuerpo?.driver ?? '').trim()
     const parametros = String(cuerpo?.parametros ?? '{}')
-    const error = validarSalidaDemo(nombre, driver, parametros)
+    const error = validarSalidaDemo(nombre, tipo, parametros)
     if (error) return json({ error, campo: 'parametros' }, 400)
     const nueva: Salida = {
       id: siguienteId++,
       nombre: nombre.trim(),
-      driver,
+      driver: tipo,
       estado_conexion: 'sin_probar',
       reintentos: 0,
       ultimo_error: '',
       parametros,
       objetivo_volumen: typeof cuerpo?.objetivo_volumen === 'number' ? cuerpo.objetivo_volumen : -24,
-      texto: textoDeSalidaDemo(driver, parametros),
+      texto: textoDeSalidaDemo(tipo, parametros),
     }
     salidas = [...salidas, nueva]
     return json(nueva, 201)
@@ -1506,22 +1515,22 @@ export async function responder(ruta: string, init?: RequestInit): Promise<Respo
     }
     // PUT: lo que no venga en el cuerpo se queda como estaba.
     const nombre = typeof cuerpo?.nombre === 'string' ? cuerpo.nombre : vieja.nombre
-    const driver = typeof cuerpo?.driver === 'string' ? cuerpo.driver.trim() : vieja.driver
+    const tipo = typeof cuerpo?.driver === 'string' ? cuerpo.driver.trim() : vieja.driver
     const parametros =
       typeof cuerpo?.parametros === 'string' ? cuerpo.parametros : (vieja.parametros ?? '{}')
-    const error = validarSalidaDemo(nombre, driver, parametros)
+    const error = validarSalidaDemo(nombre, tipo, parametros)
     if (error) return json({ error, campo: 'parametros' }, 400)
     // Cambiar a dónde va la señal deja el estado sin probar (salidas.go:85):
     // lo que decía antes era de la dirección anterior.
-    const cambioDeDestino = parametros !== (vieja.parametros ?? '{}') || driver !== vieja.driver
+    const cambioDeDestino = parametros !== (vieja.parametros ?? '{}') || tipo !== vieja.driver
     const actualizada: Salida = {
       ...vieja,
       nombre: nombre.trim(),
-      driver,
+      driver: tipo,
       parametros,
       objetivo_volumen:
         typeof cuerpo?.objetivo_volumen === 'number' ? cuerpo.objetivo_volumen : vieja.objetivo_volumen,
-      texto: textoDeSalidaDemo(driver, parametros),
+      texto: textoDeSalidaDemo(tipo, parametros),
       ...(cambioDeDestino
         ? { estado_conexion: 'sin_probar', reintentos: 0, ultimo_error: '' }
         : {}),

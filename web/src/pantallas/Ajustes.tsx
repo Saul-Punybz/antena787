@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router'
 import { api } from '../lib/api'
 import { useEstado } from '../lib/estado'
+import { IconoSalidas } from '../componentes/Iconos'
 import type { Ajustes as MapaDeAjustes } from '../lib/tipos'
 
 /**
@@ -120,6 +122,25 @@ export function Ajustes() {
               </span>
             </div>
           )}
+        </Tarjeta>
+
+        {/* Salidas: a dónde manda el canal su señal. Se configura una vez al
+            instalar la estación, así que no vive en el menú principal —pero
+            necesita una puerta de todos modos, y esta es (F1-57). */}
+        <Tarjeta rotulo="A DÓNDE VA LA SEÑAL">
+          <p className="ayuda">
+            El multiplexor, la grabación a un archivo o cualquier otro destino se
+            configuran una vez, al instalar la estación, y casi nunca hace falta
+            volver.
+          </p>
+          <Link
+            to="/salidas"
+            className="boton"
+            style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 8 }}
+          >
+            <IconoSalidas tamano={16} />
+            A dónde va la señal
+          </Link>
         </Tarjeta>
 
         {/* Acceso remoto */}

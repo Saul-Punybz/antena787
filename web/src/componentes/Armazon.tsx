@@ -7,15 +7,16 @@ import {
   IconoBiblioteca,
   IconoParrilla,
   IconoReglas,
-  IconoSalidas,
 } from './Iconos'
 
+// Salidas (a dónde manda el canal su señal) no está aquí: configurarla es
+// instalación, no algo que se toque a diario. Se llega desde Ajustes
+// («A dónde va la señal»), pero la ruta /salidas sigue viva (F1-57).
 const MENU = [
   { a: '/al-aire', texto: 'Al aire', Icono: IconoAntena },
   { a: '/parrilla', texto: 'Parrilla', Icono: IconoParrilla },
   { a: '/reglas', texto: 'Reglas', Icono: IconoReglas },
   { a: '/biblioteca', texto: 'Biblioteca', Icono: IconoBiblioteca },
-  { a: '/salidas', texto: 'Salidas', Icono: IconoSalidas },
   { a: '/anuncios', texto: 'Anuncios', Icono: IconoAnuncios, soloConAnunciantes: true },
   { a: '/ajustes', texto: 'Ajustes', Icono: IconoAjustes },
 ]
