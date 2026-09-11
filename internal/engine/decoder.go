@@ -64,6 +64,21 @@ func audioFilter(f Format) string {
 }
 
 // StartDecoder lanza los dos procesos y empieza a llenar el pre-roll.
+//
+// **Son dos ffmpeg por clip a propósito, y juntarlos empeora las cosas.** Cada
+// uno escribe su salida cruda a `pipe:1`, y un proceso solo tiene un stdout;
+// sacar video y audio del mismo ffmpeg pide dos tuberías de salida, que en
+// Windows es un lío. Pero la razón de verdad no es esa: **se midió**, el 11 de
+// septiembre de 2026, sobre un HEVC 1080p real y 30 segundos de trabajo
+// (docs/investigacion/MEDICION-CPU-2026-09-11.md):
+//
+//	dos procesos, como está aquí     1.58 s de reloj · 11.98 s de CPU
+//	uno solo con dos salidas         3.64 s de reloj · 14.65 s de CPU
+//
+// Los dos corren en núcleos distintos; uno solo serializa el trabajo. Y el
+// audio sale gratis: solo el video cuesta 11.91 s, o sea que el segundo
+// proceso no se nota. Si a alguien le parece un desperdicio obvio —le pareció
+// a quien escribe esto—, que mida antes de tocarlo.
 func StartDecoder(parent context.Context, ffmpeg, ffprobe string, f Format, clip Clip, prerollFrames int) (*Decoder, error) {
 	ctx, cancel := context.WithCancel(parent)
 	d := &Decoder{Clip: clip, Format: f, cancel: cancel, frames: make(chan []byte, prerollFrames), vdone: make(chan error, 1)}
