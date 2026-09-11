@@ -369,6 +369,33 @@ Repaso hecho contra el código, no contra el PRD. Tres grupos:
   manda `texto`, la interfaz enseña el tipo legible (`textoDe` en
   `Bitacora.tsx`).
 
+## La prioridad, fijada por Saul el 11 de septiembre de 2026
+
+**Esto es para Rolando**, que corre un canal chico de televisión. Es el
+cliente, y es una persona. Lo que hace falta: *«lo más cercano a funcional y
+completo para que él lo pueda utilizar y romper»*.
+
+**Tiene prioridad, en este orden:** que el sistema funcione · que **conecte** ·
+que **envíe, reciba y transmita** · que **se vean los videos** · que **se
+comunique con los equipos** · que **lo transmitido quede salvado** (grabación)
+· y el streaming, que se vea.
+
+**No tiene prioridad:** el dashboard del cliente, pagar los anuncios y
+subirlos. El portal del anunciante y los pagos (F4) quedan **pospuestos por
+decisión**, no olvidados: no van en el camino crítico.
+
+Dos consecuencias:
+
+1. **«Que lo pueda romper» sube la resistencia al mínimo.** La cascada, el
+   watchdog, nunca negro ni silencio, nada manual que se quede trabado: deja
+   de ser el final del plan y pasa a ser parte de lo que hay que entregar.
+   Un sistema que solo aguanta cuando todo va bien no se le da a alguien
+   para que lo rompa.
+2. **El eje es el camino de la señal, de punta a punta:** entra (archivo o
+   vivo) → se ve en pantalla → sale al multiplexor y a internet → se graba →
+   se comprueba en el retorno que salió. Cada tanda dice qué parte del camino
+   completa. La pantalla de conexiones va primera: sin ella no hay «conecte».
+
 ## Reglas que no cambian
 
 - **Paridad con VLC** (Saul, 9 sept 2026): todo lo que Rolando hace con el
