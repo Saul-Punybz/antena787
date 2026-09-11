@@ -189,7 +189,7 @@ func (a *App) correrMotor(ctx context.Context, ch model.Channel) error {
 	}()
 
 	fuente := a.nuevaFuenteDelPlan(ctx, formato)
-	srv := engine.NewServer(formato, enc, fuente, fuente.Filler())
+	srv := engine.NewServer(formato, a.Vigilar(ctx, formato, enc), fuente, fuente.Filler())
 	srv.Ffmpeg, srv.Ffprobe = a.FFmpeg, a.FFprobe
 	if f, err := a.registroDelMotor(); err == nil {
 		srv.Events = f
