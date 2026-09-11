@@ -9,6 +9,8 @@
 import type {
   Ajustes,
   Alarma,
+  Comprobacion,
+  ComprobacionesDelAire,
   CandidatoDeTitulo,
   DetectadoEnLaMaquina,
   ElementoDelPlan,
@@ -357,6 +359,71 @@ function horaLocalDe(instante: string): string {
   const m = t.getUTCMinutes()
   const s = h < 12 ? 'AM' : 'PM'
   return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, '0')} ${s}`
+}
+
+/**
+ * Las comprobaciones de antes de encender, con los datos de ejemplo (F2-118).
+ * La del retorno de aire sale en aviso a propósito: el canal de ejemplo no
+ * tiene retorno, y así se ve en la pantalla cómo queda un aviso que sí deja
+ * encender.
+ */
+function comprobacionesDelAire(): ComprobacionesDelAire {
+  const comprobaciones: Comprobacion[] = [
+    {
+      clave: 'ffmpeg',
+      nombre: 'Está el programa que produce la señal',
+      resultado: 'bien',
+      texto: 'ffmpeg y ffprobe están donde tienen que estar',
+    },
+    {
+      clave: 'salidas',
+      nombre: 'Hay a dónde mandar la señal',
+      resultado: 'bien',
+      texto: `${salidas.length} salidas configuradas`,
+    },
+    {
+      clave: 'salidas_abren',
+      nombre: 'Las salidas abren',
+      resultado: 'bien',
+      texto: 'la señal va a salir ' + salidas.map((s) => `«${s.nombre}» ${s.texto ?? ''}`).join(' · y '),
+    },
+    {
+      clave: 'plan',
+      nombre: 'Hay programación para la próxima media hora',
+      resultado: 'bien',
+      texto: 'la próxima media hora está llena',
+    },
+    {
+      clave: 'cobertura',
+      nombre: 'Hay con qué cubrir un hueco',
+      resultado: 'bien',
+      texto: 'si algo falta, sale el cartel de la estación',
+    },
+    {
+      clave: 'retorno',
+      nombre: 'Se va a poder comprobar lo que sale',
+      resultado: 'aviso',
+      texto:
+        'no hay retorno de aire conectado: se puede salir al aire, pero no voy a poder comprobar que lo que sale es lo que mandé',
+      arreglo: 'Cuando tengas un receptor o un cable que traiga la señal de vuelta, dilo en Ajustes.',
+      ruta: '/ajustes',
+    },
+  ]
+  return {
+    puede: !comprobaciones.some((c) => c.resultado === 'falta'),
+    comprobaciones,
+    modo: canal.modo,
+  }
+}
+
+/** La confirmación escrita, comparable: sin acentos, en mayúsculas. */
+function normalizar(v: string): string {
+  return v
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
 }
 
 function estado(): Estado {
@@ -1116,9 +1183,9 @@ function pasoDelAsistente(n: number, cuerpo: Record<string, unknown> | undefined
       apuntarPaso(2)
       return json({
         ...sigue,
-        modo_del_canal: 'sombra',
+        modo_del_canal: canal.modo,
         aviso:
-          'esto queda apuntado; el canal sigue en modo sombra hasta que exista el motor de emisión',
+          'esto queda apuntado; el canal sigue en modo sombra hasta que lo saques desde Al aire, con el botón «Salir al aire»',
       })
     }
     case 3: {
@@ -1235,9 +1302,9 @@ function pasoDelAsistente(n: number, cuerpo: Record<string, unknown> | undefined
       return json({
         ...sigue,
         completa: true,
-        modo_del_canal: 'sombra',
+        modo_del_canal: canal.modo,
         aviso:
-          'listo. El canal queda en modo sombra: resuelve el plan y publica la guía, pero todavía no emite — el motor es la fase siguiente.',
+          'listo. El canal queda en modo sombra: resuelve el plan y publica la guía, pero todavía no emite. Cuando quieras emitir de verdad, en Al aire está el botón «Salir al aire»: te dice qué falta antes de encender nada.',
       })
     }
     default:
@@ -1289,8 +1356,58 @@ export async function responder(ruta: string, init?: RequestInit): Promise<Respo
     })
   }
   if (p === '/canal') {
-    if (metodo === 'PUT') Object.assign(canal, cuerpo)
+    // El modo no se cambia guardando el canal: para eso están /canal/al-aire
+    // y /canal/a-sombra (F2-118), igual que en el servidor de verdad.
+    if (metodo === 'PUT') Object.assign(canal, cuerpo, { modo: canal.modo })
     return json(canal)
+  }
+  // La puerta del aire (F2-118).
+  if (p === '/canal/comprobaciones') return json(comprobacionesDelAire())
+  if (p === '/canal/al-aire' && metodo === 'POST') {
+    if (normalizar(String(cuerpo?.confirmacion ?? '')) !== 'AL AIRE')
+      return json(
+        {
+          error:
+            'para salir al aire hay que escribir «AL AIRE»: la señal va a empezar a salir hacia el equipo configurado',
+          campo: 'confirmacion',
+        },
+        400,
+      )
+    if (canal.modo === 'aire') return json({ error: 'el canal ya está al aire' }, 409)
+    const previo = comprobacionesDelAire()
+    if (!previo.puede) {
+      const falta = previo.comprobaciones.find((c) => c.resultado === 'falta')!
+      return json(
+        {
+          error: 'todavía no se puede salir al aire: ' + falta.texto,
+          campo: falta.clave,
+          ...previo,
+        },
+        409,
+      )
+    }
+    canal.modo = 'aire'
+    return json({
+      ...comprobacionesDelAire(),
+      aviso: 'el canal está al aire: la señal empieza a salir hacia el equipo configurado',
+    })
+  }
+  if (p === '/canal/a-sombra' && metodo === 'POST') {
+    if (normalizar(String(cuerpo?.confirmacion ?? '')) !== 'SOMBRA')
+      return json(
+        {
+          error:
+            'para volver a modo sombra hay que escribir «SOMBRA»: la señal va a dejar de salir',
+          campo: 'confirmacion',
+        },
+        400,
+      )
+    if (canal.modo !== 'aire') return json({ error: 'el canal ya está en modo sombra' }, 409)
+    canal.modo = 'sombra'
+    return json({
+      ...comprobacionesDelAire(),
+      aviso: 'el canal volvió a modo sombra: la señal dejó de salir y el plan se sigue armando',
+    })
   }
   if (p === '/ajustes') {
     if (metodo === 'PUT') ajustes = { ...ajustes, ...cuerpo }

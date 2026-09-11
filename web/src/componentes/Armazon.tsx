@@ -60,6 +60,15 @@ export function Armazon() {
         <dl className="lateral__pie">
           <dt>CANAL</dt>
           <dd>{estado?.canal.nombre ?? '—'}</dd>
+          {/*
+            Cómo está el canal se ve desde cualquier pantalla, no solo en Al
+            aire: nadie tiene que ir a mirar si está emitiendo (F2-118).
+          */}
+          <dt style={{ marginTop: 12 }}>AHORA MISMO</dt>
+          <dd className="fila" style={{ gap: 8 }}>
+            <span className={'punto ' + (modo === 'aire' ? 'punto--bien' : 'punto--aviso')} />
+            {modo === 'aire' ? 'Al aire' : 'Modo sombra'}
+          </dd>
         </dl>
       </nav>
       <main className="contenido">

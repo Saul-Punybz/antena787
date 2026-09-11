@@ -446,13 +446,13 @@ func (a *App) Warnings() []resolver.Warning {
 	return append([]resolver.Warning(nil), a.warnings...)
 }
 
-// MarkAired es lo que llamará el motor cuando un bloque termine de salir al
+// MarkAired es lo que llama el motor cuando un bloque termina de salir al
 // aire: cierra el plan_item y **solo entonces** avanza el contador de
 // episodios de la regla que lo puso (resolver.Output.EpisodeAdvance).
 //
-// En F1 el canal está en modo sombra y no hay motor: nadie llama a esta
-// función. Está escrita y probada para que F2 la enchufe sin inventar la
-// semántica del contador a última hora.
+// Con el canal en modo sombra no la llama nadie, porque no sale nada: la
+// llamada vive en el motor (`motor.go`), que solo corre cuando alguien sacó
+// el canal de sombra por la puerta del aire (F2-118).
 func (a *App) MarkAired(ctx context.Context, itemID int64, at time.Time, actualMs int64, partial bool) error {
 	if err := a.Store.Plan.MarkAired(ctx, itemID, at, actualMs, partial); err != nil {
 		return err

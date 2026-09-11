@@ -107,6 +107,8 @@ var textosDeIncidente = map[string]string{
 	"enlace_caido":       "Una salida se cayó y se reconectó",
 	"silencio_detectado": "Se detectó silencio en la salida",
 	"negro_detectado":    "Se detectó negro en la salida",
+	"al_aire":            "El canal salió al aire",
+	"a_sombra":           "El canal volvió a modo sombra",
 	// Los dos nombres que se usaron antes de que el catálogo existiera. Se
 	// dejan para que una fila vieja siga teniendo su frase; nadie escribe ya
 	// con ellos.

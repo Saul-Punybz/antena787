@@ -44,6 +44,43 @@ export interface Salida {
   objetivo_volumen?: number
 }
 
+// ── la puerta del aire (F2-118) ───────────────────────────────────────
+
+/**
+ * Cómo salió una de las comprobaciones de antes de encender. `falta` es la
+ * única que no deja salir al aire; `aviso` sí deja, y dice qué no se va a
+ * poder comprobar.
+ */
+export type ResultadoDeComprobacion = 'bien' | 'aviso' | 'falta'
+
+/**
+ * Una de las cosas que se miran antes de dejar salir al aire, ya escrita por
+ * el servidor en cristiano. `clave` es lo único interno y no se pinta.
+ */
+export interface Comprobacion {
+  clave: string
+  nombre: string
+  resultado: ResultadoDeComprobacion
+  texto: string
+  /** Qué hacer para arreglarlo. Solo viene cuando hay algo que arreglar. */
+  arreglo?: string
+  /** La pantalla donde se arregla. */
+  ruta?: string
+}
+
+/**
+ * Cuerpo de `GET /canal/comprobaciones` y de lo que contestan
+ * `POST /canal/al-aire` y `POST /canal/a-sombra` (también en el 409 de
+ * cuando falta algo).
+ */
+export interface ComprobacionesDelAire {
+  puede: boolean
+  comprobaciones: Comprobacion[]
+  modo: ModoCanal
+  /** La frase de lo que acabó de pasar, cuando pasó algo. */
+  aviso?: string
+}
+
 /** Un driver de salida como se le ofrece a una persona: nunca la clave sola. */
 export interface DriverDeSalida {
   driver: string

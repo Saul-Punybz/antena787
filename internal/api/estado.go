@@ -155,8 +155,11 @@ func (s *Server) canalPut(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "la hora de inicio del día de emisión tiene que estar dentro del día", "hora_inicio_dia_emision")
 		return
 	}
-	// En F1 no hay motor: el canal se queda en sombra dígase lo que se diga.
-	nuevo.Mode = "sombra"
+	// El modo no se cambia por aquí. Guardar el nombre del canal no puede
+	// encender ni apagar un transmisor de paso: para eso están
+	// POST /canal/al-aire y POST /canal/a-sombra, que comprueban antes y
+	// dejan constancia (F2-118).
+	nuevo.Mode = old.Mode
 
 	if err := s.App.Store.Channel.Update(ctx, nuevo); err != nil {
 		failStore(w, err, "guardar el canal")

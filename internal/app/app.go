@@ -10,9 +10,11 @@
 // atrapa el pánico, deja un incidente `panico_<nombre>` y la relanza a los
 // cinco segundos.
 //
-// En F1 el canal está en modo **sombra**: se resuelve el plan, se publica la
-// guía y se ingiere el contenido, pero no hay motor al aire. Por eso nadie
-// marca ítems como emitidos y MarkAired existe pero no la llama nadie.
+// Un canal recién instalado está en modo **sombra**: se resuelve el plan, se
+// publica la guía y se ingiere el contenido, pero no sale señal a ninguna
+// parte y nadie marca ítems como emitidos. Se sale de sombra por su propia
+// puerta —`aire.go`, con las comprobaciones delante— y entonces el motor
+// arranca y es él quien llama a MarkAired (F2-118).
 package app
 
 import (
@@ -232,6 +234,12 @@ type App struct {
 	bus    *bus
 	recalc chan struct{}
 
+	// modoCambio avisa al motor de que alguien cambió el modo del canal por
+	// la puerta de POST /canal/al-aire o /canal/a-sombra (F2-118): encender y
+	// apagar un transmisor no puede tardar diez segundos en pasar. Si nadie
+	// lo escucha, el repaso de cada MotorPoll lo ve igual.
+	modoCambio chan struct{}
+
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
@@ -304,6 +312,7 @@ func Open(opts Options) (*App, error) {
 		now:          opts.Now,
 		bus:          newBus(),
 		recalc:       make(chan struct{}, 1),
+		modoCambio:   make(chan struct{}, 1),
 		advance:      map[int64]int64{},
 		owner:        map[int64]int64{},
 		alarms:       map[string][]Alarma{},

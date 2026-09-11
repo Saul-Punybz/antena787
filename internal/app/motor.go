@@ -95,7 +95,9 @@ func (a *App) motorLoop(ctx context.Context) error {
 					"el canal está en modo sombra: se arma el plan y se publica la guía, pero no se emite")
 				dijoSombra = true
 			}
-			if !dormir(ctx, MotorPoll) {
+			// Se despierta en el acto cuando alguien saca el canal de sombra
+			// (F2-118), y si no, en el próximo repaso.
+			if !a.dormirOCambioDeModo(ctx, MotorPoll) {
 				return ctx.Err()
 			}
 			continue
@@ -106,6 +108,13 @@ func (a *App) motorLoop(ctx context.Context) error {
 		err = a.correrMotor(ctx, ch)
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+		// Si el aire se apagó a propósito, el motor no se cayó: lo apagaron.
+		// Ni incidente de encoder ni espera progresiva; la vuelta de arriba
+		// dice que el canal está en sombra y ahí se queda (F2-118).
+		if ahora, e := a.Store.Channel.Get(ctx, a.ChannelID); e == nil && ahora.Mode != ModoAire {
+			espera, ultimoMotivo = EsperaMotorMin, ""
+			continue
 		}
 		if time.Since(arranque) >= VidaBuena {
 			espera = EsperaMotorMin
@@ -145,6 +154,45 @@ func dormir(ctx context.Context, d time.Duration) bool {
 	}
 }
 
+// dormirOCambioDeModo es dormir, pero se levanta también si alguien cambió el
+// modo del canal: así «salir al aire» enciende cuando se aprieta el botón y
+// no en el próximo repaso.
+func (a *App) dormirOCambioDeModo(ctx context.Context, d time.Duration) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-a.modoCambio:
+		return true
+	case <-time.After(d):
+		return true
+	}
+}
+
+// vigilarElModo para el motor cuando el canal deja de estar al aire. Sin esto,
+// devolver el canal a sombra no apagaría nada: correrMotor no vuelve hasta que
+// el encoder se muere solo, así que la señal seguiría saliendo (F2-118).
+func (a *App) vigilarElModo(ctx context.Context, parar context.CancelFunc) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-a.modoCambio:
+		case <-time.After(MotorPoll):
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		ch, err := a.Store.Channel.Get(ctx, a.ChannelID)
+		if err != nil || ch.Mode == ModoAire {
+			continue
+		}
+		a.Publish("motor", "apagado",
+			"el canal volvió a modo sombra: el motor se para y la señal deja de salir")
+		parar()
+		return
+	}
+}
+
 // correrMotor enciende el encoder y el servidor de cuadros, y no vuelve hasta
 // que algo se rompe o se pide parar. Una vida del encoder por llamada: si
 // muere, quien llama espera y entra otra vez (F2-11; el watchdog de los 3 s
@@ -174,6 +222,8 @@ func (a *App) correrMotor(ctx context.Context, ch model.Channel) error {
 	// Los vigilantes de las salidas arrancan antes que el encoder: si el
 	// encoder no llega a encender, cada salida queda con su motivo escrito.
 	salidas.vigilar(ctx)
+	// Y el que mira si alguien apagó el aire: apagar tiene que apagar.
+	go a.vigilarElModo(ctx, cancel)
 	enc, err := engine.StartEncoder(ctx, a.FFmpeg, formato, salidas.outs)
 	if err != nil {
 		salidas.avisar(err)
