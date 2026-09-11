@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"antena787/internal/engine"
 	"antena787/internal/model"
@@ -77,11 +78,31 @@ func (d *archivo) Abrir(engine.Format) (engine.Output, error) {
 	return engine.Output{
 		Name:     nombre,
 		Kind:     "mpeg2-ts",
-		File:     d.p.Ruta,
+		File:     porVida(d.p.Ruta, time.Now()),
 		VideoKbs: d.p.BitrateVideoKbs,
 		MuxKbs:   d.p.BitrateMuxKbs,
 		Audio:    d.p.Audio,
 	}, nil
+}
+
+// porVida le pone la hora al nombre del archivo, una vez por vida del
+// encoder. Sin esto, cada relanzado escribía sobre la misma ruta y ffmpeg
+// —que arranca sin -y, a propósito— moría con «Not overwriting», así que el
+// canal se quedaba sin salida justo cuando acababa de recuperarse. Lo
+// encontró el watchdog de F2-11, pero pasa igual cuando el encoder se muere
+// solo.
+//
+// La otra salida sería -y, y es la mala: sobrescribir borraría lo que ya se
+// había grabado del aire. Lo que salió al aire no se pisa (F2-43).
+func porVida(ruta string, t time.Time) string {
+	// La primera vida escribe donde se pidió: nada que ya funcionaba cambia
+	// de sitio. Solo cuando ya hay una grabación ahí se abre una nueva al
+	// lado, que es exactamente el caso que mataba al encoder relanzado.
+	if _, err := os.Stat(ruta); err != nil {
+		return ruta
+	}
+	ext := filepath.Ext(ruta)
+	return strings.TrimSuffix(ruta, ext) + "-" + t.Format("2006-01-02T15-04-05") + ext
 }
 
 func (d *archivo) Vigilar(ctx context.Context, salida model.Output, listo <-chan error) {
