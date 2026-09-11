@@ -274,3 +274,30 @@ equipo —el excitador RVR es el candidato— o no se está poniendo. Puede tamb
 que su unidad lleve otro firmware, o que lo que él llama PSIP sea el SDT de DVB.
 **Se confirma con el equipo delante** (invariante 3): no se escribe una línea de
 PSIP hasta saberlo. Las preguntas están en el bloque 8.
+
+#### Corrección de Saul, el mismo día: DVB por dentro, ATSC por fuera
+
+El apartado de arriba planteó mal la contradicción. **Las dos cosas son ciertas
+a la vez:** CAtv corre por dentro como una cabecera de cable —DVB— y **la
+conversión a ATSC pasa después**, camino del transmisor. El estándar de emisión
+es ATSC y el equipo lo soporta; lo que el manual describe es la parte de dentro.
+
+Con eso, cada tabla tiene dueño y no hay misterio:
+
+| Qué | Quién lo hace |
+|---|---|
+| El Transport Stream MPEG-2 | **Antena787.** Ya está, y medido |
+| PIDs, programa, tsid | **El TP1000**, los reasigna |
+| SDT y nombre del servicio (DVB) | **El TP1000**, campo *Program Name*, a mano |
+| **PSIP, TVCT y EIT (ATSC)** | **Quien convierte a ATSC** — el excitador RVR es el candidato |
+
+**Lo que esto rescata.** `internal/resolver/pmcp.go` y `/guia.pmcp` generan la
+guía en **PMCP (ATSC A/76)**, que es el formato con el que se le habla a un
+generador de PSIP. Hasta ahora eso estaba construido **sin destino conocido**.
+Ahora tiene uno probable: **si el equipo que hace el PSIP acepta PMCP por red,
+la guía de Antena787 entra directa** y la guía en blanco se acaba sin que nadie
+escriba nada a mano, día tras día.
+
+**La única pregunta que queda, y decide trabajo:** qué equipo arma el PSIP, y si
+tiene entrada de red para la guía (PMCP / «PSIP data input» / «EPG input»). Con
+el modelo exacto basta para averiguarlo sin molestar más a Rolando.
