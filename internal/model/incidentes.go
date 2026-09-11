@@ -55,4 +55,11 @@ const (
 	// (T3, F2-51 a F2-54).
 	IncSilencioDetectado TipoIncidente = "silencio_detectado"
 	IncNegroDetectado    TipoIncidente = "negro_detectado"
+	// IncAlAire e IncASombra — alguien sacó el canal de sombra, o lo devolvió
+	// a sombra (F2-118). Son las dos cosas más serias que se pueden hacer
+	// desde la interfaz, así que quedan en la bitácora además de en la
+	// auditoría: la bitácora dice qué le pasó al aire, la auditoría quién lo
+	// pidió.
+	IncAlAire  TipoIncidente = "al_aire"
+	IncASombra TipoIncidente = "a_sombra"
 )

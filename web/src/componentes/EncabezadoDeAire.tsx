@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { useEstado } from '../lib/estado'
 import { fechaCorta, hora } from '../lib/fechas'
@@ -6,8 +7,12 @@ import { fechaCorta, hora } from '../lib/fechas'
  * El encabezado de la vista de aire: el punto rojo de tally siempre en el
  * mismo sitio, la fecha y la hora del canal, y el modo escrito con todas sus
  * letras además del color. Nunca un icono solo (docs/adr/0008).
+ *
+ * `accion` va justo al lado de donde se dice el modo: ahí es donde tiene que
+ * estar el botón de salir al aire y el de volver a sombra (F2-118), pegado a
+ * la frase que dice cómo está el canal.
  */
-export function EncabezadoDeAire() {
+export function EncabezadoDeAire({ accion }: { accion?: ReactNode }) {
   const { estado, demo } = useEstado()
   const [tic, setTic] = useState(0)
   useEffect(() => {
@@ -50,6 +55,7 @@ export function EncabezadoDeAire() {
               : 'Señal saliendo bien'
             : 'Modo sombra · todavía no estás al aire'}
         </span>
+        {accion}
       </div>
     </header>
   )

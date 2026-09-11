@@ -1436,6 +1436,51 @@ inventario sin cambiar de pantalla. No hay ruta nueva del servidor.
   Entonces la completa dentro de la hora del §23 y contestando seis preguntas o
   menos; si no lo logra, el editor se rediseña **antes** de publicar (§24).
 
+### Salir de sombra: la puerta del aire (§9 paso 4, §17)
+
+- **F2-118** [AUTO] — Dado un canal en **modo sombra** con el motor ya
+  construido · Cuando alguien pide sacarlo de sombra · Entonces el modo
+  **solo** se cambia por `POST /api/v1/canal/al-aire` y
+  `POST /api/v1/canal/a-sombra` —`PUT /canal` ni lo fuerza ni lo cambia—, las
+  dos rutas exigen una **confirmación escrita** (`AL AIRE` y `SOMBRA`, sin
+  distinguir mayúsculas ni acentos), y antes de encender se comprueba, cada
+  cosa con su frase llana y su arreglo, nunca un código:
+  1. está el programa que produce la señal (ffmpeg y ffprobe) — **impide
+     encender**;
+  2. hay al menos una salida configurada — **impide encender**;
+  3. esa salida **abre** con lo que tiene guardado; que una de varias no abra
+     es aviso (sale por las demás, F2-49), que no abra ninguna **impide
+     encender**;
+  4. hay programación para la **próxima media hora**; si tiene huecos es aviso;
+  5. hay **con qué cubrir** un hueco —relleno de la biblioteca o cartel de la
+     estación ya hecho—, y si la parrilla tiene huecos y no hay ninguno de los
+     dos, **impide encender** diciendo que saldría negro (F2-09, F2-10);
+  6. hay **retorno de aire**; si no lo hay es **aviso** y se deja encender,
+     diciendo que no se va a poder comprobar que lo que sale es lo que se
+     mandó (ADR 0009).
+  Con todo en orden, el canal pasa a `aire`, **el motor arranca en el acto**
+  (sin esperar el repaso de 10 s), queda un incidente `al_aire` con quién lo
+  hizo y con los avisos que se aceptaron, y una entrada de auditoría
+  `channel.modo: sombra → aire` con su autor y `origen: humano`. Al volver a
+  sombra, el motor **se para de verdad** —el encoder cierra y no queda ningún
+  proceso escribiendo— y queda el incidente `a_sombra` y su auditoría. Si
+  falta algo, la respuesta es `409` con la frase de lo que falta y la lista
+  entera, y el canal **no se toca**.
+  Construido el 11 de septiembre de 2026: `internal/app/aire.go`
+  (`ComprobacionesParaElAire`, `AlAire`, `ASombra`),
+  `internal/api/aire.go` (las tres rutas y la confirmación escrita),
+  `internal/app/motor.go` (`vigilarElModo` y `dormirOCambioDeModo`: apagar
+  apaga, encender enciende sin esperar) y
+  `web/src/componentes/PuertaDelAire.tsx` (el panel al lado, con la lista de
+  comprobaciones y lo que va a pasar). Pruebas:
+  `TestNoSeEnciendeSinSalida`, `TestNoSeEnciendeSinFFmpeg`,
+  `TestNoSeEnciendeSinConQueLlenarElAire`,
+  `TestSinRetornoDeAireSeEnciendeYSeDice`, `TestConLaParrillaLlenaElPlanSaleBien`,
+  `TestSaleAlAireYVuelveASombraConElMotorDeVerdad` (con ffmpeg de verdad: la
+  salida crece al encender y deja de crecer al apagar),
+  `TestGuardarElCanalNoCambiaElModo`, `TestSalirAlAireSinConfirmarNoEnciendeNada`,
+  `TestSalirAlAireSinSalidaLoDiceYNoEnciende` y `TestElCanalSaleDeSombraYVuelve`.
+
 ---
 
 ## Resumen

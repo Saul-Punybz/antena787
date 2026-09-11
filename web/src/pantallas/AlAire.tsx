@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { EncabezadoDeAire } from '../componentes/EncabezadoDeAire'
 import { Caratula } from '../componentes/Caratula'
 import { Panel } from '../componentes/Panel'
+import { PuertaDelAire } from '../componentes/PuertaDelAire'
 import { Bitacora } from '../componentes/Bitacora'
 import { IconoMano } from '../componentes/Iconos'
 import { useEstado } from '../lib/estado'
@@ -46,7 +47,8 @@ export function AlAire() {
 
   return (
     <>
-      <EncabezadoDeAire />
+      {/* El botón de salir al aire va pegado a donde se dice el modo (F2-118). */}
+      <EncabezadoDeAire accion={<PuertaDelAire />} />
 
       <div
         style={{
@@ -107,8 +109,9 @@ export function AlAire() {
                   Aquí se vería tu señal
                 </div>
                 <div style={{ font: '400 14px var(--sans)', color: 'var(--texto-3)' }}>
-                  Hoy sigues emitiendo con VLC. Antena787 está calculando el plan en
-                  paralelo, sin tocar el aire.
+                  Antena787 está calculando el plan en paralelo, sin tocar el aire. Cuando
+                  quieras encender, el botón «Salir al aire» de arriba hace las
+                  comprobaciones y te dice qué va a pasar antes de hacer nada.
                 </div>
               </div>
             )}

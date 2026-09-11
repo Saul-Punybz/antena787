@@ -1597,6 +1597,15 @@ así que la parte de radio (F4b) es para CAtv, no para después.
    as-run, **pero Rolando sigue emitiendo con VLC**. Se compara lo que
    Antena787 *habría* puesto contra lo que salió. **Cero riesgo, semanas de
    evidencia real.**
+   **Cómo se sale de sombra:** por su propia puerta y a propósito —en Al aire,
+   el botón «Salir al aire», que enseña las comprobaciones de que no va a
+   salir negro (que esté el programa que produce la señal, que haya una salida
+   configurada y que abra, y que haya parrilla o relleno con qué cubrir la
+   próxima media hora) y pide escribir `AL AIRE` con la mano—. Guardar el canal
+   nunca cambia el modo. Lo que no se puede comprobar —el retorno de aire, por
+   ejemplo— se dice y no impide encender. Volver a sombra es el mismo camino al
+   revés, y para el motor. Las dos cosas quedan en la bitácora y en la
+   auditoría, con quién las hizo (F2-118).
 2. **Salida paralela a archivo** — emite de verdad, a un archivo o stream
    privado. Una semana de observación.
 3. **Madrugadas primero** — hoy son aire vacío. Una falla ahí casi nadie la

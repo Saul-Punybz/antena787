@@ -84,6 +84,13 @@ func (s *Server) routes() {
 	open("GET /api/v1/estado", s.estado)
 	api("GET /api/v1/canal", s.canalGet)
 	api("PUT /api/v1/canal", s.canalPut)
+
+	// La puerta del aire (F2-118). El modo del canal no se cambia guardando
+	// un formulario: se comprueba, se confirma escribiéndolo, y queda dicho
+	// quién lo hizo.
+	api("GET /api/v1/canal/comprobaciones", s.canalComprobaciones)
+	api("POST /api/v1/canal/al-aire", s.canalAlAire)
+	api("POST /api/v1/canal/a-sombra", s.canalASombra)
 	api("GET /api/v1/ajustes", s.ajustesGet)
 	api("PUT /api/v1/ajustes", s.ajustesPut)
 

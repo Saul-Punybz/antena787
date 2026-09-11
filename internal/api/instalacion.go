@@ -187,9 +187,10 @@ func (s *Server) instalacionPaso(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.set(r, app.KeyPlannedMode, modo)
-		// En F1 no hay motor: el canal se queda en sombra y el estado lo dice.
-		out["modo_del_canal"] = "sombra"
-		out["aviso"] = "esto queda apuntado; el canal sigue en modo sombra hasta que exista el motor de emisión"
+		// Contestar el asistente no enciende nada: el canal sigue como está, y
+		// para salir de sombra hay una puerta con sus comprobaciones (F2-118).
+		out["modo_del_canal"] = s.modoDelCanal(r)
+		out["aviso"] = "esto queda apuntado; el canal sigue en modo sombra hasta que lo saques desde Al aire, con el botón «Salir al aire»"
 
 	case 3:
 		// La revisión automática no pregunta nada: contesta lo que encontró.
@@ -229,8 +230,8 @@ func (s *Server) instalacionPaso(w http.ResponseWriter, r *http.Request) {
 	case PasoFinal:
 		s.set(r, app.KeyInstallDone, "si")
 		out["completa"] = true
-		out["modo_del_canal"] = "sombra"
-		out["aviso"] = "listo. El canal queda en modo sombra: resuelve el plan y publica la guía, pero todavía no emite — el motor es la fase siguiente."
+		out["modo_del_canal"] = s.modoDelCanal(r)
+		out["aviso"] = "listo. El canal queda en modo sombra: resuelve el plan y publica la guía, pero todavía no emite. Cuando quieras emitir de verdad, en Al aire está el botón «Salir al aire»: te dice qué falta antes de encender nada."
 	}
 
 	siguiente := n + 1
@@ -543,4 +544,15 @@ func boolText(b bool) string {
 		return "si"
 	}
 	return "no"
+}
+
+// modoDelCanal es el modo que tiene el canal ahora mismo. El asistente lo
+// dice, no lo decide: contestar un paso nunca enciende ni apaga el aire
+// (F2-118).
+func (s *Server) modoDelCanal(r *http.Request) string {
+	ch, err := s.App.Store.Channel.Get(r.Context(), s.App.ChannelID)
+	if err != nil {
+		return app.ModoSombra
+	}
+	return ch.Mode
 }
