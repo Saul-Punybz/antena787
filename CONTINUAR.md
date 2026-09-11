@@ -207,7 +207,10 @@ go test ./... -count=1           # todo debe estar verde
    `internal/drivers/alerta/sage` (protocolo del ENDEC por serial y TCP,
    contra el manual Rev 1.5), `internal/drivers/alerta/same` (decodificador
    SAME, 0.5 ms por segundo de audio, cero asignaciones, lee hasta −4 dB de
-   SNR), `internal/drivers/captura/hdhomerun` (retorno de aire por HTTP) y
+   SNR), `internal/drivers/captura/hdhomerun` (retorno de aire por HTTP),
+   `internal/drivers/senal/scte104` (cortes hacia el inyector: 92.7 % de
+   cobertura, escrito contra las dos únicas implementaciones libres que
+   existen, porque SCTE publica el estándar solo tras registro) y
    `internal/resolver/pmcp.go` + `/guia.pmcp` (guía para el generador PSIP).
    Todo compila sin CGo en Windows, Linux y macOS.
    **Dos cosas que decidir, chicas:** (a) el decodificador SAME marca
@@ -215,7 +218,11 @@ go test ./... -count=1           # todo debe estar verde
    —a −6 dB de SNR una de cada diez sale con un carácter mal—; hay que
    decidir si el as-run exige 2/3 para escribir la línea sin asterisco;
    (b) la cabecera SAME va en UTC y el texto del ENDEC en hora local, ya
-   resuelto en el driver, pero conviene que T8 no lo olvide.
+   resuelto en el driver, pero conviene que T8 no lo olvide; (c) en SCTE-104,
+   `inject_section` es el único mensaje cuyo orden de campos no se pudo
+   cotejar con nadie —si un inyector lo rechaza con `result 115`, ahí hay que
+   mirar primero— y el puerto 5167 sale de un datasheet de fabricante, no de
+   IANA: confirmarlo con el ingeniero de CAtv.
    **Ramas de agentes en marcha al guardar (10 sept):** `agente/t2-decks-udpts`
    (T2), y cinco bibliotecas de protocolo aisladas que no tocan `app` ni
    los criterios: `agente/sage-endec` (`internal/drivers/alerta/sage`,
