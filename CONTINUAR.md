@@ -244,6 +244,56 @@ go test ./... -count=1           # todo debe estar verde
    el fundido de 1 s del clip recortado (`fundido_salida_ms` ya viene en el
    plan) y los ítems `dentro_de` de un vivo.
 
+## Lo que Saul preguntó el 11 sept y no tiene dónde vivir
+
+Repaso hecho contra el código, no contra el PRD. Tres grupos:
+
+**Existe, pero a medias.**
+- Nombre del canal, identificativo, comunidad de licencia y zona horaria se
+  ponen en el paso 1 del asistente y se ven en Ajustes → Canal, **en solo
+  lectura**: no se pueden corregir después sin rehacer la instalación. Deben
+  ser editables.
+- El **modo demo** existe (`VITE_DEMO=1`, o cae solo si no hay servidor) pero
+  no hay forma de entrar a propósito desde la interfaz. Falta un «ver un
+  ejemplo» visible, que es lo que se enseña a un cliente.
+- La puerta por donde entra el video de un anunciante **sí existe en el
+  servidor** (`portal/entrada` → `acceptFromPortal`: valida sin red y con
+  tope de tiempo, y solo si pasa lo mueve a la carpeta de contenido, de donde
+  entra a la biblioteca como cualquier otra cosa). Lo que no existe es el
+  portal que suba ahí.
+
+**Diseñado, con fase asignada.**
+- **Anuncios y pagos**: el menú ya tiene su entrada (aparece con el primer
+  anunciante) y hoy lleva a una pantalla «por hacer». Es F4: portal del
+  anunciante con enlace propio y fecha, pago o cobro en mano, subida del
+  video, aprobación antes del primer aire, y reporte de ingresos.
+- **Logo al aire**: la tabla `overlay` (tipo `logo`) está en el esquema desde
+  F1; ponerlo en la señal es F2 (T7).
+
+**No existe en ninguna parte. Son huecos reales.**
+1. **Dónde escribir IPs, puertos y direcciones. El más urgente.** El paso 4
+   del asistente pregunta el *tipo* de destino en lenguaje llano («al equipo
+   que junta los canales, por el cable de red») pero **no pide la dirección**.
+   T2 ya construyó toda la API (`/api/v1/salidas`, con IP, puerto, multicast,
+   TTL, PIDs, programa, tsid, PCR, bitrate y códec de audio), pero su
+   pantalla está asignada a **T9, al final del plan**. Hay que adelantarla:
+   sin ella no se conecta nada ni se puede probar en casa de Rolando.
+2. **El nombre del puerto serial** del ENDEC: tampoco hay dónde. Y como no
+   enumeramos puertos (la parte de `go.bug.st/serial` que lo hace usa CGo),
+   se escribe a mano: `COM3`, `/dev/ttyUSB0`. La pantalla tiene que decirlo
+   con un ejemplo por sistema.
+3. **Dueño o licenciatario del canal**: no hay campo. En una estación con
+   licencia es un dato que se pide en todos los formularios.
+4. **Términos de servicio y política de privacidad**: no existen. El repo
+   tiene LICENSE, CONTRIBUTING y código de conducta, que son para quien
+   contribuye al software, no para el operador ni para el anunciante. Hacen
+   falta sobre todo en el portal del anunciante, que es la única pantalla
+   pública y donde alguien paga.
+5. **Ayuda dentro del producto**: no hay pantalla de «cómo se usa esto», solo
+   textos sueltos en Ajustes.
+6. **Logo de la estación en la interfaz** (la marca del canal en pantalla, no
+   al aire): no existe.
+
 ## Cosas pequeñas pendientes
 
 - **Hueco de producto que vio Saul (11 sept): a la Parrilla se le puede mover
