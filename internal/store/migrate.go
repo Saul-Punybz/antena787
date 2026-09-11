@@ -2,9 +2,11 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	_ "embed"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -19,6 +21,23 @@ var schemaSQL string
 type Migration struct {
 	Version int
 	SQL     string
+	// SinClaves marca un escalón que **rehace una tabla a la que otras
+	// apuntan**. SQLite no sabe cambiar un CHECK ni quitar una columna, así
+	// que la única forma es tabla nueva, copiar, borrar la vieja y renombrar
+	// — y borrar la vieja, con las claves foráneas encendidas, es borrarle el
+	// padre a sus hijos.
+	//
+	// `defer_foreign_keys` NO sirve aquí, aunque lo parezca: aplaza la
+	// comprobación hasta el COMMIT, pero volver a crear la tabla padre no
+	// descuenta las violaciones que el DROP ya anotó, así que falla igual al
+	// cerrar. Se probó, y falló (TestMigracion11...).
+	//
+	// El procedimiento que documenta SQLite es apagar las claves del todo
+	// —cosa que no se puede hacer dentro de una transacción— y comprobar
+	// después con PRAGMA foreign_key_check. Eso es lo que hace applyStep
+	// cuando ve esta marca, y la comprobación corre **antes** del COMMIT: si
+	// algo quedó apuntando a la nada, no entra nada.
+	SinClaves bool
 }
 
 // migrations son los escalones posteriores a la versión 1. Se aplican en
@@ -34,6 +53,7 @@ var migrations = []Migration{
 	{Version: 8, SQL: migracion8},
 	{Version: 9, SQL: migracion9},
 	{Version: 10, SQL: migracion10},
+	{Version: 11, SQL: migracion11, SinClaves: true},
 }
 
 // migracion2 cierra tres huecos de integridad del plan (F1-12, F1-22, F1-26
@@ -266,6 +286,53 @@ ALTER TABLE title       ADD COLUMN preset_id INTEGER REFERENCES preset(id);
 ALTER TABLE media_asset ADD COLUMN preset_id INTEGER REFERENCES preset(id);
 `
 
+// migracion11 deja que una fuente en vivo sea una URL de la que se tira, y no
+// solo un sitio donde se espera a que alguien empuje (F2-116).
+//
+// Hasta aquí `live_source.tipo` solo admitía 'srt', 'rtmp' y 'captura', que
+// son las tres formas de **recibir**: alguien nos manda la señal, o entra por
+// una tarjeta. Falta la cuarta, que es **ir a buscarla**: el canal de CAtv se
+// alimenta hoy de HLS —de MistServer en su propia máquina y de un proveedor
+// externo— y eso no cabía en el modelo
+// (docs/equipos/CADENA-CATV-2026-09-11.md).
+//
+// SQLite no sabe cambiar un CHECK, así que hay que rehacer la tabla. Y como
+// `schedule_rule` y `plan_item` apuntan aquí y este proyecto abre la base con
+// las claves foráneas encendidas, borrar la tabla vieja es borrarle el padre a
+// sus hijos: va marcada `SinClaves`, que es lo que hace que se corra con las
+// claves apagadas y se compruebe con `foreign_key_check` antes de cerrar.
+//
+// `defer_foreign_keys` parecía la respuesta y no lo es: aplaza la comprobación
+// al COMMIT, pero volver a crear la tabla padre no descuenta lo que el DROP ya
+// anotó, así que falla igual. Se probó y falló.
+const migracion11 = `
+CREATE TABLE live_source_nueva (
+  id                  INTEGER PRIMARY KEY,
+  channel_id          INTEGER NOT NULL REFERENCES channel(id),
+  nombre              TEXT NOT NULL,
+  -- 'url' es la nueva: la señal no se espera, se va a buscar.
+  tipo                TEXT NOT NULL CHECK (tipo IN ('srt','rtmp','captura','url')),
+  -- Para 'srt' y 'rtmp' es dónde se escucha; para 'url', de dónde se tira.
+  punto_de_escucha    TEXT NOT NULL DEFAULT '',
+  solo_audio          INTEGER NOT NULL DEFAULT 0,
+  duracion_prevista_ms INTEGER NOT NULL DEFAULT 0,
+  filler_de_respaldo  INTEGER REFERENCES filler_asset(id),
+  reloj_de_cortes     TEXT NOT NULL DEFAULT '[]',
+  driver_de_cue       TEXT NOT NULL DEFAULT '',
+  retardo_ms          INTEGER NOT NULL DEFAULT 7000,
+  gracia_s            INTEGER NOT NULL DEFAULT 30
+);
+
+INSERT INTO live_source_nueva
+  SELECT id, channel_id, nombre, tipo, punto_de_escucha, solo_audio,
+         duracion_prevista_ms, filler_de_respaldo, reloj_de_cortes,
+         driver_de_cue, retardo_ms, gracia_s
+  FROM live_source;
+
+DROP TABLE live_source;
+ALTER TABLE live_source_nueva RENAME TO live_source;
+`
+
 // SchemaVersion es la versión a la que lleva este binario.
 func SchemaVersion() int {
 	v := 1
@@ -306,12 +373,30 @@ func (s *Store) migrate(ctx context.Context) error {
 				return fmt.Errorf("no se migró: falló el respaldo previo: %w", err)
 			}
 		}
-		if err := s.applyStep(ctx, m.Version, m.SQL); err != nil {
+		if err := s.applyStepDe(ctx, m); err != nil {
 			return fmt.Errorf("no se pudo aplicar la migración %d: %w", m.Version, err)
 		}
 		v = m.Version
 	}
 	return nil
+}
+
+// applyStepDe corre un escalón, apagando las claves foráneas antes si el
+// escalón rehace una tabla a la que otras apuntan (ver Migration.SinClaves).
+// Las claves vuelven a encenderse pase lo que pase.
+func (s *Store) applyStepDe(ctx context.Context, m Migration) error {
+	if !m.SinClaves {
+		return s.applyStep(ctx, m.Version, m.SQL)
+	}
+	if _, err := s.db.ExecContext(ctx, "PRAGMA foreign_keys = OFF"); err != nil {
+		return fmt.Errorf("no se pudieron apagar las claves foráneas: %w", err)
+	}
+	defer func() {
+		// Esto no puede fallar en silencio: una base que se queda sin claves
+		// foráneas acepta cualquier cosa a partir de ahí.
+		_, _ = s.db.ExecContext(ctx, "PRAGMA foreign_keys = ON")
+	}()
+	return s.applyStep(ctx, m.Version, m.SQL)
 }
 
 // applyStep corre un escalón entero en una transacción y sube user_version.
@@ -324,6 +409,12 @@ func (s *Store) applyStep(ctx context.Context, version int, script string) error
 	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(ctx, script); err != nil {
+		return err
+	}
+	// Antes de cerrar: que nada haya quedado apuntando a la nada. Con las
+	// claves apagadas esto es la única red que queda, y corre dentro de la
+	// transacción a propósito — si encuentra algo, no entra nada.
+	if err := sinHuerfanos(ctx, tx); err != nil {
 		return err
 	}
 	// PRAGMA no admite parámetros; version es un entero nuestro, no entra
@@ -364,4 +455,45 @@ func backupName(path string, version int, now time.Time) string {
 		name = fmt.Sprintf("%s-%d.db", base, i)
 	}
 	return name
+}
+
+// sinHuerfanos corre PRAGMA foreign_key_check y falla si alguna fila quedó
+// apuntando a algo que ya no existe. Es barato en una base de una estación y
+// es la diferencia entre enterarse aquí o enterarse al aire.
+func sinHuerfanos(ctx context.Context, tx *sql.Tx) error {
+	rows, err := tx.QueryContext(ctx, "PRAGMA foreign_key_check")
+	if err != nil {
+		return fmt.Errorf("no se pudo comprobar la integridad tras migrar: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var tablas []string
+	for rows.Next() {
+		var tabla, padre string
+		var fila, idx sql.NullString
+		if err := rows.Scan(&tabla, &fila, &padre, &idx); err != nil {
+			return fmt.Errorf("no se pudo leer la comprobación de integridad: %w", err)
+		}
+		tablas = append(tablas, tabla+" → "+padre)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if len(tablas) > 0 {
+		return fmt.Errorf("la migración dejó filas apuntando a algo que ya no está (%s): no se aplicó nada",
+			strings.Join(unicos(tablas), ", "))
+	}
+	return nil
+}
+
+// unicos quita repetidos conservando el orden.
+func unicos(xs []string) []string {
+	visto := map[string]bool{}
+	out := xs[:0]
+	for _, x := range xs {
+		if !visto[x] {
+			visto[x] = true
+			out = append(out, x)
+		}
+	}
+	return out
 }
