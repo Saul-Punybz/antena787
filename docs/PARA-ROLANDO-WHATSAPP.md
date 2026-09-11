@@ -236,3 +236,41 @@ apariciones en todo el repositorio.
 
 **3.5 ¿Tienes el manual?** → **Sí, lo mandó por WhatsApp.** Pendiente de meterlo
 en `docs/equipos/` y leerlo antes de escribir una línea de PSIP.
+
+### Lo que dice el manual del TP1000 · leído el 11 sept 2026
+
+Manual de 90 páginas que mandó Rolando (`~/Downloads/117ce1.pdf`, de
+manualslib). **No se guarda en este repositorio**: es material con derechos de
+autor de un tercero y el repositorio es público.
+
+Lo que dice, con su sitio:
+
+1. **Es un multiplexor DVB, no ATSC.** El menú se llama literalmente «SI
+   Setting **(DVB)**» y edita NIT, SDT y BAT e inserta LCN (línea 873). En las
+   90 páginas, **«PSIP» aparece 0 veces**; «TVCT» y «VCT», 0. El LCN que
+   describe (línea 2849) es el canal virtual **de DVB**, no el `40.1` de ATSC.
+2. **Program Name y Provider Name se escriben dentro del equipo**, programa por
+   programa, desde su web (líneas 1875, 1974, 2069). **No llegan desde la
+   señal que le entra.**
+3. **`BypassTS`** pasa el TS entero sin cambiar nada (línea 821), pero entonces
+   no se reparten programas uno a uno.
+4. La entrada IP acepta **UDP o RTP** (línea 1406), y **la versión de IGMP tiene
+   que coincidir con la del switch** (línea 1376) — si no coinciden, el
+   multicast no llega y no hay nada en el software que lo explique.
+
+**Qué le hace esto al «PSIP en blanco» de la respuesta 3.3.** Son dos cosas
+distintas y conviene no mezclarlas:
+
+- **El nombre del canal** que enseña el televisor sale del campo *Program Name*
+  del TP1000. Si está vacío, **se llena en su web en cinco minutos, sin
+  nosotros y sin código.**
+- **La guía de verdad** —qué dan ahora, qué sigue— necesita EIT, y **en el
+  manual no hay ni una función que genere EIT**: solo sale en el glosario
+  (línea 3049) y en un visor de tablas (línea 818).
+
+**Lo que no se sabe, y no se va a suponer.** En ATSC el PSIP es obligatorio por
+la FCC. Si este equipo es DVB y no genera PSIP, el PSIP de CAtv lo pone otro
+equipo —el excitador RVR es el candidato— o no se está poniendo. Puede también
+que su unidad lleve otro firmware, o que lo que él llama PSIP sea el SDT de DVB.
+**Se confirma con el equipo delante** (invariante 3): no se escribe una línea de
+PSIP hasta saberlo. Las preguntas están en el bloque 8.
