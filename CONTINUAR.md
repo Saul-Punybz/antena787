@@ -191,6 +191,13 @@ go test ./... -count=1           # todo debe estar verde
    una en su worktree.** Antes de T2, contestar las preguntas 1, 3 y 10 del
    plan (F2.5, unicast/multicast al TP1000, varias salidas desde el
    principio) y pedir a Rolando su cadena `sout` de VLC.
+   **T2 y T3 en curso (10 sept)** con dos agentes (`agente/t2-decks-udpts`,
+   `agente/t3-detector`), bajo tres decisiones por defecto que Saul puede
+   cambiar: (1) F2-91 a F2-102 (F2.5) no bloquean el cierre de F2; (3) el
+   TP1000 recibe unicast IP:puerto por defecto y multicast+TTL es opción del
+   mismo driver; (10) varias salidas simultáneas desde T2, solo `udp-ts` y
+   `archivo` (internet y `http-ts` en T7). PIDs/programa/bitrate son valores
+   de ejemplo configurables hasta tener la cadena `sout` de Rolando.
 8. Después de F2 (PRD §22.3), donde además se cierran F1-04
    (CEA-608 con detección propia, ffprobe ≥ 9 ya no emite `closed_captions`),
    el fundido de 1 s del clip recortado (`fundido_salida_ms` ya viene en el
