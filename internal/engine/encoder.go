@@ -531,6 +531,24 @@ func (e *Encoder) Finish() error {
 	}
 }
 
+// Matar mata el encoder sin esperar a que termine bien. Es lo contrario de
+// Finish y existe para un solo caso: un ffmpeg colgado, que no tiene colas que
+// vaciar porque no está haciendo nada, y al que Finish le regalaría un minuto
+// de aire congelado. Al morir el proceso, el sistema cierra sus conexiones y
+// la escritura que estaba bloqueada devuelve error, que es lo que hace que el
+// motor vuelva a entrar con un encoder nuevo (F2-11).
+//
+// Se puede llamar dos veces y desde otra goroutine: matar a un muerto no hace
+// nada.
+func (e *Encoder) Matar() {
+	if e.cancel != nil {
+		e.cancel()
+	}
+	if e.Cmd != nil && e.Cmd.Process != nil {
+		_ = e.Cmd.Process.Kill()
+	}
+}
+
 // Done avisa si el encoder murió por su cuenta (eso es un incidente).
 func (e *Encoder) Done() <-chan error { return e.done }
 

@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
@@ -67,7 +68,42 @@ const (
 	// parada. Entre medias se dice por el bus, para que la bitácora siga
 	// siendo legible cuando algo lleva horas mal.
 	RepetirIncidente = 10 * time.Minute
+	// EncoderColgado es lo que se le da al encoder para tragarse un cuadro
+	// antes de darlo por colgado: tres segundos, el número que pide F2-11.
+	// Se puede cambiar en ajustes con KeyEncoderColgadoS.
+	EncoderColgado = 3 * time.Second
+	// ColgadoMinimo y ColgadoMaximo son lo que se acepta de ese ajuste. Por
+	// debajo de un segundo, un hipo del disco relanzaría el encoder; por
+	// encima de un minuto el televidente ya cambió de canal.
+	ColgadoMinimo = time.Second
+	ColgadoMaximo = time.Minute
+	// LatidoDelVigilante es cada cuánto se mira si el encoder sigue tragando.
+	// Medio segundo: mirar un reloj no cuesta nada y el plazo no se pasa por
+	// más de eso.
+	LatidoDelVigilante = 500 * time.Millisecond
+	// VentanaDeLaTarjeta y ColgadasParaSoftware son la regla de F2-11: dos
+	// veces colgado en diez minutos ya no es mala suerte, es una tarjeta que
+	// dejó de responder, y el canal sigue por el procesador.
+	VentanaDeLaTarjeta   = 10 * time.Minute
+	ColgadasParaSoftware = 2
+	// GraciaDelCartel es cuánto sale el cartel de la estación después de
+	// relanzar un encoder colgado. Lo que colgó a ffmpeg pudo ser el clip que
+	// estaba saliendo: volver a metérselo al encoder recién nacido es pedirle
+	// que se cuelgue otra vez. Diez segundos es lo que tarda la cascada en
+	// volver a pedir el plan con el aire ya estable.
+	GraciaDelCartel = 10 * time.Second
 )
+
+// KeyEncoderColgadoS es cada cuántos segundos sin tragar un cuadro se da el
+// encoder por colgado. Vive en settings como todo lo demás: no hay archivo de
+// configuración (PRD §14.1). De fábrica tres (F2-11).
+const KeyEncoderColgadoS = "encoder_colgado_s"
+
+// FraseTarjetaCaida es lo que lee la persona del canal cuando la tarjeta de
+// video dejó de responder dos veces en diez minutos. Está escrita una sola vez
+// porque va a tres sitios —la bitácora, el bus y la pantalla de estado— y las
+// tres tienen que decir lo mismo, sin jerga (F2-11).
+const FraseTarjetaCaida = "tu tarjeta de video dejó de responder"
 
 // motorLoop es la goroutine del aire. Corre bajo guard como todas: si algo
 // dentro entra en pánico, queda el incidente y vuelve sola (auditoría A2).
@@ -195,8 +231,8 @@ func (a *App) vigilarElModo(ctx context.Context, parar context.CancelFunc) {
 
 // correrMotor enciende el encoder y el servidor de cuadros, y no vuelve hasta
 // que algo se rompe o se pide parar. Una vida del encoder por llamada: si
-// muere, quien llama espera y entra otra vez (F2-11; el watchdog de los 3 s
-// sobre el encoder colgado es de T6).
+// muere —o si el vigilante lo mata por colgado— quien llama espera y entra
+// otra vez (F2-11).
 func (a *App) correrMotor(ctx context.Context, ch model.Channel) error {
 	if a.FFmpeg == "" {
 		return a.FFmpegErr
@@ -207,6 +243,18 @@ func (a *App) correrMotor(ctx context.Context, ch model.Channel) error {
 		return err
 	}
 	defer salidas.cerrar()
+
+	// Con qué se comprime esta vida del encoder. Es lo que el canal tiene
+	// guardado, salvo que el vigilante ya haya bajado el canal al procesador
+	// porque la tarjeta dejó de responder: mientras eso esté forzado manda
+	// eso, sin tocar lo que la persona escogió (F2-11).
+	acel := a.AceleradorDelCanal(ctx)
+	if forzado, porque := a.AceleradorEnCurso(); porque != "" {
+		acel = forzado
+	}
+	for i := range salidas.outs {
+		salidas.outs[i].Accel = acel
+	}
 
 	// Lo que quedó cargado de la vida anterior vuelve a planeado: el motor
 	// recalcula desde el instante real y entra al archivo por donde toca,
@@ -230,6 +278,7 @@ func (a *App) correrMotor(ctx context.Context, ch model.Channel) error {
 		return fmt.Errorf("no se pudo encender la salida: %w", err)
 	}
 	salidas.avisar(nil)
+	a.UsandoAcelerador(acel)
 	// Si el encoder se muere por su cuenta, el servidor de cuadros no puede
 	// seguir escribiendo a un caño roto: se para y quien llama lo relanza.
 	// El vigilante suelta enc.Done() en cuanto se cancela el contexto, porque
@@ -248,7 +297,10 @@ func (a *App) correrMotor(ctx context.Context, ch model.Channel) error {
 	}()
 
 	fuente := a.nuevaFuenteDelPlan(ctx, formato)
-	srv := engine.NewServer(formato, a.Vigilar(ctx, formato, enc), fuente, fuente.Filler())
+	// El vigilante de los tres segundos va pegado al encoder, por debajo del
+	// detector de negro: lo que mide es si ffmpeg se traga los cuadros, y eso
+	// solo se ve en la última escritura de la cadena (F2-11).
+	srv := engine.NewServer(formato, a.Vigilar(ctx, formato, a.vigilarElEncoder(ctx, enc, acel)), fuente, fuente.Filler())
 	srv.Ffmpeg, srv.Ffprobe = a.FFmpeg, a.FFprobe
 	if f, err := a.registroDelMotor(); err == nil {
 		srv.Events = f
@@ -288,6 +340,160 @@ func (a *App) registroDelMotor() (*os.File, error) {
 	}
 	nombre := fmt.Sprintf("eventos-%s.jsonl", a.Now().Format("2006-01-02"))
 	return os.OpenFile(filepath.Join(dir, nombre), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+}
+
+// ── el vigilante del encoder colgado (F2-11) ──────────────────────────
+//
+// Un encoder que muere se nota solo: enc.Done() suelta el error y correrMotor
+// vuelve. Un encoder **colgado** es otra cosa y es peor: el proceso sigue
+// vivo, no consume un solo cuadro, y como no lee su socket, la escritura del
+// servidor de cuadros se queda bloqueada para siempre. Desde fuera no se ve
+// nada: ni error, ni proceso muerto, ni salida que se corte — solo un aire
+// congelado. Por eso lo único que hay que mirar es cuánto lleva bloqueada la
+// escritura que está en vuelo.
+
+// encoderVigilado es el encoder con un reloj encima: apunta cuándo empezó la
+// escritura que todavía no ha vuelto. No mide cuadros por segundo ni nada
+// parecido, porque el síntoma no es lentitud: es una escritura que no vuelve.
+type encoderVigilado struct {
+	destino engine.Sink
+
+	mu      sync.Mutex
+	empezo  time.Time // cuándo empezó la escritura que está en vuelo
+	enVuelo bool
+}
+
+func (v *encoderVigilado) WriteFrame(fr []byte) error {
+	return v.escribir(func() error { return v.destino.WriteFrame(fr) })
+}
+
+func (v *encoderVigilado) WriteAudio(pcm []byte) error {
+	return v.escribir(func() error { return v.destino.WriteAudio(pcm) })
+}
+
+func (v *encoderVigilado) escribir(mandar func() error) error {
+	v.mu.Lock()
+	v.empezo, v.enVuelo = time.Now(), true
+	v.mu.Unlock()
+	err := mandar()
+	v.mu.Lock()
+	v.enVuelo = false
+	v.mu.Unlock()
+	return err
+}
+
+// atascado es cuánto lleva bloqueada la escritura en vuelo, y cero si no hay
+// ninguna. Que no haya escritura en vuelo nunca cuenta como colgado: el
+// servidor de cuadros puede estar abriendo el clip que viene, y relanzar
+// ffmpeg por eso sería el remedio peor que la enfermedad.
+func (v *encoderVigilado) atascado(ahora time.Time) time.Duration {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if !v.enVuelo {
+		return 0
+	}
+	return ahora.Sub(v.empezo)
+}
+
+// laTarjeta es lo que el vigilante recuerda de una vida del encoder a la
+// siguiente: cuándo se colgó y hasta cuándo el aire sale con el cartel. Es una
+// variable de paquete, como controlDelAire en vigilancia.go y por lo mismo: un
+// proceso, un canal (PRD §14.1).
+var laTarjeta struct {
+	mu       sync.Mutex
+	colgadas []time.Time
+	cartel   time.Time
+}
+
+// apuntarColgada anota una colgada y dice cuántas van dentro de la ventana de
+// diez minutos. De paso abre la gracia del cartel, que es lo que va a salir en
+// cuanto el encoder nuevo encienda.
+func apuntarColgada(ahora time.Time) int {
+	laTarjeta.mu.Lock()
+	defer laTarjeta.mu.Unlock()
+	vivas := laTarjeta.colgadas[:0]
+	for _, t := range laTarjeta.colgadas {
+		if ahora.Sub(t) <= VentanaDeLaTarjeta {
+			vivas = append(vivas, t)
+		}
+	}
+	laTarjeta.colgadas = append(vivas, ahora)
+	laTarjeta.cartel = ahora.Add(GraciaDelCartel)
+	return len(laTarjeta.colgadas)
+}
+
+// elCartelManda dice si el aire todavía tiene que salir con el cartel después
+// de una colgada, y cuánto le queda. Se mide contra el reloj de pared a
+// propósito: la gracia cruza de una vida del encoder a la siguiente, y el
+// reloj del aire empieza de cero en cada una.
+func elCartelManda() (time.Duration, bool) {
+	laTarjeta.mu.Lock()
+	defer laTarjeta.mu.Unlock()
+	queda := time.Until(laTarjeta.cartel)
+	return queda, queda > 0
+}
+
+// plazoDelEncoder es lo que se le da al encoder para tragarse un cuadro antes
+// de darlo por colgado. De fábrica tres segundos (F2-11); lo que no se
+// entiende o se sale de rango vale el de fábrica, que un ajuste escrito con un
+// dedo torcido no puede apagar el vigilante.
+func (a *App) plazoDelEncoder(ctx context.Context) time.Duration {
+	n, err := strconv.Atoi(a.setting(ctx, KeyEncoderColgadoS))
+	if err != nil {
+		return EncoderColgado
+	}
+	d := time.Duration(n) * time.Second
+	if d < ColgadoMinimo || d > ColgadoMaximo {
+		return EncoderColgado
+	}
+	return d
+}
+
+// vigilarElEncoder pone el reloj entre el servidor de cuadros y el encoder, y
+// deja corriendo el vigilante mientras viva esta vida del motor. Devuelve el
+// Sink que hay que darle al servidor en lugar del encoder.
+func (a *App) vigilarElEncoder(ctx context.Context, enc *engine.Encoder, acel engine.Acelerador) engine.Sink {
+	v := &encoderVigilado{destino: enc}
+	plazo := a.plazoDelEncoder(ctx)
+	a.wg.Add(1)
+	go func() {
+		defer a.wg.Done()
+		for {
+			if !dormir(ctx, LatidoDelVigilante) {
+				return
+			}
+			if v.atascado(time.Now()) < plazo {
+				continue
+			}
+			a.elEncoderSeColgo(enc, acel, plazo)
+			// Una vez por vida del encoder: matarlo ya hace que correrMotor
+			// vuelva y que motorLoop encienda otro con su propio vigilante.
+			return
+		}
+	}()
+	return v
+}
+
+// elEncoderSeColgo es lo que pasa cuando el encoder lleva el plazo entero sin
+// tragarse un cuadro: queda el incidente, el cartel toma el aire, el proceso
+// colgado se mata —al morir, la escritura bloqueada devuelve error y el motor
+// entra otra vez con un encoder nuevo y el mismo acelerador— y, si es la
+// segunda vez en diez minutos, el canal sigue emitiendo por software (F2-11).
+func (a *App) elEncoderSeColgo(enc *engine.Encoder, acel engine.Acelerador, plazo time.Duration) {
+	veces := apuntarColgada(time.Now())
+	texto := fmt.Sprintf(
+		"la salida de video dejó de aceptar imagen durante %s: sale el cartel de la estación y el canal vuelve solo",
+		plazo.Round(time.Second))
+	// Dos veces en diez minutos ya no es mala suerte. El canal se queda con el
+	// procesador, que es más lento y nunca falla, y se dice por qué en
+	// cristiano: quien lo lee no es técnico.
+	if veces >= ColgadasParaSoftware && acel.Resolver() != engine.AcelSoftware {
+		a.ForzarAcelerador(engine.AcelSoftware, FraseTarjetaCaida)
+		texto = fmt.Sprintf("%s (%d veces en %s): el canal sigue emitiendo con el procesador, que es más lento pero no falla",
+			FraseTarjetaCaida, veces, VentanaDeLaTarjeta)
+	}
+	a.Incident(model.IncEncoderReiniciado.String(), texto)
+	enc.Matar()
 }
 
 // ── la fuente: del plan a clips ───────────────────────────────────────
@@ -363,6 +569,13 @@ func (f *fuenteDelPlan) deckDe(it model.PlanItem) model.DeckKind {
 // volver a preguntar: el bloque del deck de más prioridad que cubra ese
 // instante y, como corte, lo primero que le vaya a quitar el aire.
 func (f *fuenteDelPlan) Next(now time.Time) (engine.Clip, time.Time, error) {
+	// Menos cuando el encoder se acaba de colgar: entonces el aire vuelve con
+	// el cartel de la estación unos segundos, porque lo que colgó a ffmpeg
+	// pudo ser justo el clip que estaba saliendo (F2-11).
+	if queda, manda := elCartelManda(); manda && f.cartel.Path != "" {
+		f.sueltaElAire(now, model.DeckFiller, f.cartel.Name)
+		return f.cartel, now.Add(queda), nil
+	}
 	items, err := f.app.Store.Plan.ListRange(f.ctx, f.app.ChannelID,
 		now.Add(-VentanaAtras), now.Add(VentanaAdelante))
 	if err != nil {
