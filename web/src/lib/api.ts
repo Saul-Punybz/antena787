@@ -33,6 +33,10 @@ import type {
   RespuestasDePaso,
   ResultadoDeEmparejar,
   ResumenDeImportacion,
+  Salida,
+  SalidaBorrada,
+  SalidaNueva,
+  SalidasDelCanal,
   SemanaDelPlan,
   TituloDeBiblioteca,
   TituloDelCatalogo,
@@ -131,6 +135,14 @@ export const api = {
     pedir<ComprobacionesDelAire>('/canal/al-aire', conCuerpo('POST', { confirmacion })),
   volverASombra: (confirmacion: string) =>
     pedir<ComprobacionesDelAire>('/canal/a-sombra', conCuerpo('POST', { confirmacion })),
+
+  // Las salidas: a dónde va la señal. La API existía entera desde T2 y no
+  // tenía cliente ni pantalla, así que el canal no se podía apuntar a nada.
+  salidas: () => pedir<SalidasDelCanal>('/salidas'),
+  crearSalida: (nueva: SalidaNueva) => pedir<Salida>('/salidas', conCuerpo('POST', nueva)),
+  guardarSalida: (id: number, cambio: Partial<SalidaNueva>) =>
+    pedir<Salida>(`/salidas/${id}`, conCuerpo('PUT', cambio)),
+  borrarSalida: (id: number) => pedir<SalidaBorrada>(`/salidas/${id}`, conCuerpo('DELETE')),
   ajustes: () => pedir<Ajustes>('/ajustes'),
   guardarAjustes: (a: Ajustes) => pedir<Ajustes>('/ajustes', conCuerpo('PUT', a)),
 

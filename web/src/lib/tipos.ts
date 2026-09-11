@@ -88,6 +88,23 @@ export interface DriverDeSalida {
   explicacion: string
 }
 
+/**
+ * Lo que se manda al crear o cambiar una salida. `parametros` es el JSON del
+ * driver ya serializado, tal como se guarda (internal/model/model.go:133).
+ */
+export interface SalidaNueva {
+  nombre: string
+  driver: string
+  parametros: string
+  objetivo_volumen?: number
+}
+
+/** Respuesta de `DELETE /salidas/{id}`: el aviso cuenta si era la última. */
+export interface SalidaBorrada {
+  borrada: number
+  aviso: string
+}
+
 /** Cuerpo de `GET /salidas`: lo que hay y lo que se puede elegir. */
 export interface SalidasDelCanal {
   salidas: Salida[]
