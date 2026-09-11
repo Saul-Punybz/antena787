@@ -222,6 +222,28 @@ go test ./... -count=1           # todo debe estar verde
 
 ## Cosas pequeñas pendientes
 
+- **Hueco de producto que vio Saul (11 sept): a la Parrilla se le puede mover
+  contenido, pero no añadir.** El modelo es correcto —la parrilla es
+  consecuencia de las reglas, no una hoja de celdas— pero falta la acción
+  «aquí falta algo, lo arreglo aquí mismo», que el propio código promete en
+  un comentario («El aviso donde se toma la acción, no en un reporte
+  aparte»). Lo que falta, concreto:
+  1. El botón **«Escoger yo»** del panel de fin de semana vacío
+     (`ParrillaSemana.tsx:560`) **no tiene `onClick`**: está muerto.
+  2. Un **hueco no es clicable**: se pinta con rayado rojo y un `title`, sin
+     acción. Debería abrir «¿qué pongo aquí?» con tres salidas: regla nueva a
+     esa hora, algo solo ese día, o llenar con relleno/diferido.
+  3. **Biblioteca no es arrastrable hacia la Parrilla**: sus tarjetas no son
+     `draggable` y el `onDrop` de la tira solo acepta `text/antena-bloque`
+     (lo que ya estaba en la parrilla).
+  4. **El servidor tampoco puede**: hay `PUT /plan/{id}` pero **no existe
+     `POST /plan`** para un bloque suelto de un día. El panel «¿solo hoy, o
+     siempre?» existe solo para mover.
+  Decisión de Saul antes de construirlo: ¿la parrilla acepta poner contenido
+  directo (y entonces hace falta `POST /plan` con su regla de un día), o todo
+  lo nuevo sigue entrando por Reglas y la parrilla solo gana el atajo «crear
+  la regla a esta hora» desde el hueco?
+
 - **Catálogo de equipos y bibliotecas** (`docs/drivers/CATALOGO.md`, 10 sept):
   lo que T8 necesita antes de escribir drivers. Decisiones que deja: relés
   por serial (no HID), HDHomeRun como retorno de aire, PMCP para PSIP (F5),
