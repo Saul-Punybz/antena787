@@ -42,7 +42,7 @@ export function Salidas() {
   useEffect(cargar, [])
 
   const salidas = datos?.salidas ?? []
-  const drivers = datos?.drivers_disponibles ?? []
+  const tipos = datos?.drivers_disponibles ?? []
 
   return (
     <>
@@ -101,7 +101,7 @@ export function Salidas() {
       {editando && (
         <EditorDeSalida
           salida={editando === 'nueva' ? null : editando}
-          drivers={drivers}
+          tipos={tipos}
           alCerrar={() => setEditando(null)}
           alGuardar={() => {
             setEditando(null)
@@ -330,17 +330,17 @@ function construirParametrosArchivo(c: CamposArchivo): string {
 
 function EditorDeSalida({
   salida,
-  drivers,
+  tipos,
   alCerrar,
   alGuardar,
 }: {
   salida: Salida | null
-  drivers: DriverDeSalida[]
+  tipos: DriverDeSalida[]
   alCerrar: () => void
   alGuardar: () => void
 }) {
   const [nombre, setNombre] = useState(salida?.nombre ?? '')
-  const [driver, setDriver] = useState(salida?.driver ?? '')
+  const [tipo, setTipo] = useState(salida?.driver ?? '')
   const [objetivoVolumen, setObjetivoVolumen] = useState(
     salida?.objetivo_volumen !== undefined ? String(salida.objetivo_volumen) : '',
   )
@@ -350,12 +350,12 @@ function EditorDeSalida({
   const [guardando, setGuardando] = useState(false)
 
   const camposListos =
-    driver === DRIVER_UDP_TS
+    tipo === DRIVER_UDP_TS
       ? udpts.destino.trim() !== ''
-      : driver === DRIVER_ARCHIVO
+      : tipo === DRIVER_ARCHIVO
         ? archivo.ruta.trim() !== ''
         : false
-  const puedeGuardar = nombre.trim() !== '' && driver !== '' && camposListos && !guardando
+  const puedeGuardar = nombre.trim() !== '' && tipo !== '' && camposListos && !guardando
 
   async function guardar() {
     if (!puedeGuardar) return
@@ -363,9 +363,9 @@ function EditorDeSalida({
     setError(null)
     const cuerpo: SalidaNueva = {
       nombre: nombre.trim(),
-      driver,
+      driver: tipo,
       parametros:
-        driver === DRIVER_UDP_TS
+        tipo === DRIVER_UDP_TS
           ? construirParametrosUDPTS(udpts)
           : construirParametrosArchivo(archivo),
     }
@@ -384,7 +384,7 @@ function EditorDeSalida({
   return (
     <Panel
       titulo={salida ? salida.nombre : 'Nueva salida'}
-      descripcion="A dónde manda este canal su señal. El driver no se le enseña a nadie: aquí solo se elige a dónde va y qué espera el equipo del otro lado."
+      descripcion="A dónde manda este canal su señal: aquí solo se elige a dónde va y qué espera el equipo del otro lado."
       alCerrar={alCerrar}
       pie={
         <>
@@ -413,14 +413,14 @@ function EditorDeSalida({
 
       <div>
         <label>A dónde va</label>
-        <SelectorDeDriver lista={drivers} valor={driver} alElegir={setDriver} />
+        <SelectorDeTipo lista={tipos} valor={tipo} alElegir={setTipo} />
       </div>
 
-      {driver === DRIVER_UDP_TS && <CamposUDPTSForm valor={udpts} alCambiar={setUdpts} />}
-      {driver === DRIVER_ARCHIVO && <CamposArchivoForm valor={archivo} alCambiar={setArchivo} />}
+      {tipo === DRIVER_UDP_TS && <CamposUDPTSForm valor={udpts} alCambiar={setUdpts} />}
+      {tipo === DRIVER_ARCHIVO && <CamposArchivoForm valor={archivo} alCambiar={setArchivo} />}
 
       <div className="campo">
-        <label htmlFor="s-volumen">Objetivo de volumen (LKFS/LUFS)</label>
+        <label htmlFor="s-volumen">Objetivo de volumen (nivel de entrega)</label>
         <input
           id="s-volumen"
           type="number"
@@ -430,16 +430,16 @@ function EditorDeSalida({
         />
         <span className="ayuda">
           Cada salida va a su propio objetivo, no a uno compartido (F2-47): al transmisor suele
-          pedírsele −24 LKFS, a un destino de internet −16 LUFS. Déjalo en blanco para no
-          tocarlo.
+          pedírsele un nivel de −24, a un destino de internet uno más alto, −16. Déjalo en
+          blanco para no tocarlo.
         </span>
       </div>
     </Panel>
   )
 }
 
-/** Elegir el driver en cristiano: nunca la clave sola (PRD §4.3, tipos.ts). */
-function SelectorDeDriver({
+/** Elegir el tipo de salida en cristiano: nunca la clave sola (PRD §4.3, tipos.ts). */
+function SelectorDeTipo({
   lista,
   valor,
   alElegir,
