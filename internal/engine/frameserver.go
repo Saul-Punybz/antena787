@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"sync/atomic"
 	"time"
 )
 
@@ -122,7 +123,7 @@ type Server struct {
 	proximaDeriva int64
 	avisos        Avisada
 	enc           *json.Encoder
-	behind        int
+	behind        atomic.Int64
 }
 
 // NewServer arma el servidor de cuadros con la fuente que decide el aire.
@@ -552,6 +553,14 @@ func (s *Server) samplesFor(n int64) int {
 
 func (s *Server) silence(n int) []byte { return make([]byte, n*s.Format.BytesPerSample()) }
 
+// Atrasado dice si el aire está llegando tarde a su propio reloj ahora mismo:
+// más de un segundo por detrás de donde debería ir. Lo lee la cola de
+// preparación desde otro hilo, para apartarse cuando el aire sufre — el aire
+// manda sobre todo lo demás (ADR 0008).
+//
+// No es una alarma: un atraso corto se recupera solo. Es una señal de presión.
+func (s *Server) Atrasado() bool { return s.behind.Load() > 0 }
+
 // emit escribe un cuadro y su audio, a tiempo. Es el único punto que toca
 // el encoder, y el único que avanza el reloj del aire.
 func (s *Server) emit(frame, pcm []byte) error {
@@ -560,12 +569,12 @@ func (s *Server) emit(frame, pcm []byte) error {
 	if wait > 0 {
 		time.Sleep(wait)
 	} else if wait < -time.Second {
-		s.behind++
-		if s.behind%60 == 1 {
+		n := s.behind.Add(1)
+		if n%60 == 1 {
 			s.log("atraso", "", fmt.Sprintf("el aire va %s atrasado", (-wait).Round(time.Millisecond)))
 		}
 	} else {
-		s.behind = 0
+		s.behind.Store(0)
 	}
 	if frame == nil {
 		frame = s.blackFrame()

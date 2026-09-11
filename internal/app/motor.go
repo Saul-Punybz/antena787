@@ -302,6 +302,11 @@ func (a *App) correrMotor(ctx context.Context, ch model.Channel) error {
 	// solo se ve en la última escritura de la cadena (F2-11).
 	srv := engine.NewServer(formato, a.Vigilar(ctx, formato, a.vigilarElEncoder(ctx, enc, acel)), fuente, fuente.Filler())
 	srv.Ffmpeg, srv.Ffprobe = a.FFmpeg, a.FFprobe
+	// Desde aquí la cola de preparación puede preguntarle al aire si está
+	// sufriendo, y apartarse mientras lo esté (ADR 0008). Al salir se suelta:
+	// con el canal apagado la cola vuelve a tener la máquina entera.
+	a.AlAireCon(srv)
+	defer a.AlAireCon(nil)
 	if f, err := a.registroDelMotor(); err == nil {
 		srv.Events = f
 		defer func() { _ = f.Close() }()

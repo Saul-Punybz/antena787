@@ -519,6 +519,10 @@ func FormatOf(profile string) engine.Format {
 // vuelve a encolar todo lo que quedó a medias: la cola vive en memoria a
 // propósito.
 func (a *App) normalizeLoop(ctx context.Context) error {
+	// El aire manda sobre la preparación (ADR 0008): mientras la señal vaya
+	// atrasada de su propio reloj, la cola se aparta y lo dice.
+	a.Queue.Permiso = a.PermisoParaPreparar
+	a.Queue.Aviso = func(texto string) { a.Publish("normalizacion", "permiso", texto) }
 	a.requeuePending(ctx)
 	return a.Queue.Run(ctx, &persist{a: a}, a.normalizeOne)
 }
@@ -562,6 +566,9 @@ func (a *App) normalizeOne(ctx context.Context, j ingest.Job) (string, error) {
 	dst := ingest.NormalizedPathFor(dir, asset.Path, ".mkv")
 	lufs, peak := a.loudnessTarget(ctx)
 	opts := ingest.NormalizeOptionsFor(asset, m, a.preferenciasDe(ctx, asset))
+	// Y el tope de hilos: con el canal al aire se le apartan núcleos a la
+	// señal, con el canal apagado ffmpeg se queda con la máquina entera.
+	opts.Threads = a.HilosParaPreparar(ctx)
 	// Una preparación que no termina nunca no puede dejar el archivo en el
 	// limbo de «aún no listo para aire» para siempre (F1-71): se le da un
 	// plazo proporcional al archivo y, si se pasa, cuenta como un intento

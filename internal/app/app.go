@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -165,6 +166,12 @@ const (
 	ClockJump  = 60 * time.Second
 	// WatchPoll es cada cuánto se relee qué carpeta hay que vigilar.
 	WatchPoll = 3 * time.Second
+	// NucleosParaElAire son los núcleos que la preparación de archivos NO
+	// toca mientras el canal emite. Dos: el camino completo al transmisor se
+	// midió en 0.55 núcleos el 11 de septiembre de 2026
+	// (docs/investigacion/MEDICION-CPU-2026-09-11.md), así que dos dejan
+	// margen para la señal, el sistema y los picos.
+	NucleosParaElAire = 2
 	// DespiertoRetry es cada cuánto se reintenta impedir que la máquina se
 	// duerma cuando el sistema no dejó a la primera (F2-112).
 	DespiertoRetry = 5 * time.Minute
@@ -254,6 +261,13 @@ type App struct {
 	// responder dos veces en diez minutos, el watchdog escribe software aquí
 	// y el canal sigue emitiendo sin que nadie cambie lo guardado. Lo lee
 	// GET /estado para que Ajustes enseñe la verdad y no lo pedido.
+	// aireMu y aireSrv son el servidor de cuadros de la vida actual del
+	// encoder, o nil si el canal no está emitiendo. Existe para una sola
+	// cosa: que la cola de preparación pueda preguntarle al aire si está
+	// sufriendo antes de ponerse a transcodificar (ADR 0008).
+	aireMu  sync.RWMutex
+	aireSrv *engine.Server
+
 	accelMu       sync.RWMutex
 	accelEnCurso  engine.Acelerador
 	accelForzado  engine.Acelerador
@@ -604,4 +618,58 @@ func (a *App) ForzarAcelerador(ac engine.Acelerador, porque string) {
 	a.accelMu.Lock()
 	defer a.accelMu.Unlock()
 	a.accelForzado, a.accelPorQueEs = ac, porque
+}
+
+
+// ── el aire manda sobre la preparación (ADR 0008) ─────────────────────
+
+// AlAireCon lo llama el motor al encender: éste es el servidor de cuadros de
+// esta vida. Pasar nil dice que el canal dejó de emitir.
+func (a *App) AlAireCon(s *engine.Server) {
+	a.aireMu.Lock()
+	defer a.aireMu.Unlock()
+	a.aireSrv = s
+}
+
+// PermisoParaPreparar contesta si la cola puede ponerse a transcodificar
+// ahora. Es la puerta de la opción 4: con el canal apagado siempre sí; con el
+// canal al aire, solo mientras el aire no vaya atrasado de su propio reloj.
+//
+// Un archivo que ya empezó no se interrumpe —matarlo a mitad tira el trabajo y
+// no devuelve la CPU al instante—; lo que se evita es echarle más encima. El
+// tope de hilos de HilosParaPreparar es lo que acota el daño del que ya corre.
+func (a *App) PermisoParaPreparar() (bool, string) {
+	a.aireMu.RLock()
+	srv := a.aireSrv
+	a.aireMu.RUnlock()
+	if srv == nil {
+		return true, ""
+	}
+	if srv.Atrasado() {
+		return false, "el aire va atrasado y preparar archivos le quita máquina; sigue sola en cuanto se ponga al día"
+	}
+	return true, ""
+}
+
+// HilosParaPreparar es el tope de hilos de la opción 1: cuántos núcleos puede
+// usar ffmpeg para preparar un archivo.
+//
+// Con el canal apagado, cero: que se quede con la máquina entera, porque es
+// justo lo que hace falta el día de la instalación, cuando entra la biblioteca
+// completa y nadie está emitiendo.
+//
+// Con el canal al aire se le apartan dos núcleos. La medición del 11 de
+// septiembre pone el camino completo al transmisor en 0.55 núcleos
+// (docs/investigacion/MEDICION-CPU-2026-09-11.md), así que dos dejan margen de
+// sobra para la señal, el sistema operativo y los picos. En una máquina de dos
+// núcleos o menos queda uno: siempre al menos uno, o no se prepara nada nunca.
+func (a *App) HilosParaPreparar(ctx context.Context) int {
+	ch, err := a.Store.Channel.Get(ctx, a.ChannelID)
+	if err != nil || ch.Mode != ModoAire {
+		return 0
+	}
+	if n := runtime.NumCPU() - NucleosParaElAire; n > 0 {
+		return n
+	}
+	return 1
 }

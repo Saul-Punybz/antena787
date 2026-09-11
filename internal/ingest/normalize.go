@@ -26,6 +26,12 @@ type NormalizeOptions struct {
 
 	Deinterlace bool // el original viene entrelazado (Measure.Interlaced)
 
+	// Threads es cuántos hilos puede usar ffmpeg para preparar este archivo.
+	// Cero deja que ffmpeg se quede con la máquina entera, que es lo correcto
+	// cuando el canal no está emitiendo. Con el canal al aire hay que
+	// apartarle núcleos: preparar la biblioteca no puede comerse la CPU que
+	// sostiene la señal (ADR 0008, el aire manda). Lo calcula App.
+	Threads      int
 	VideoEncoder string // "libx264" por defecto; el perfil puede pedir otro
 	Preset       string // "medium" por defecto
 	CRF          int    // 20 por defecto
@@ -256,6 +262,9 @@ func normalizeArgs(src, dst string, f engine.Format, opts NormalizeOptions, rep 
 	gop := opts.GOPFrames
 	if gop <= 0 {
 		gop = int(math.Round(f.FPS()))
+	}
+	if opts.Threads > 0 {
+		args = append(args, "-threads", strconv.Itoa(opts.Threads))
 	}
 	args = append(args, "-c:v", enc, "-pix_fmt", "yuv420p",
 		"-g", strconv.Itoa(gop), "-keyint_min", strconv.Itoa(gop),

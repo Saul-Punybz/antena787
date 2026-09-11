@@ -96,6 +96,15 @@ type Queue struct {
 	RetryDelay time.Duration
 	// MaxAttempts es cuántos intentos antes de darlo por fallido.
 	MaxAttempts int
+	// Permiso, si está puesto, se pregunta antes de empezar cada archivo.
+	// Mientras conteste que no, la cola espera con la fila intacta y sin
+	// gastar nada. Es por donde el aire manda sobre la preparación: preparar
+	// la biblioteca nunca puede costarle la señal a nadie (ADR 0008).
+	// `porque` se dice tal cual en la bitácora, así que se escribe para que
+	// lo lea una persona.
+	Permiso func() (puede bool, porque string)
+	// Aviso deja constancia de que la cola se paró o siguió. Puede ser nil.
+	Aviso func(texto string)
 
 	mu     sync.Mutex
 	h      jobHeap
@@ -149,6 +158,11 @@ func (q *Queue) Pop() (Job, bool) {
 }
 
 // Next espera hasta que haya trabajo o hasta que se cancele el contexto.
+// PermisoPoll es cada cuánto se vuelve a preguntar si el aire ya aguanta.
+// Cinco segundos: lo bastante corto para no perder tiempo de preparación, lo
+// bastante largo para no preguntar mil veces por minuto.
+const PermisoPoll = 5 * time.Second
+
 func (q *Queue) Next(ctx context.Context) (Job, bool) {
 	for {
 		if j, ok := q.Pop(); ok {
@@ -169,6 +183,15 @@ func (q *Queue) Next(ctx context.Context) (Job, bool) {
 // contexto.
 func (q *Queue) Run(ctx context.Context, p Persist, work NormalizeFunc) error {
 	for {
+		// El aire manda (ADR 0008). Antes de empezar un archivo se pregunta
+		// si se puede; mientras la respuesta sea que no, la cola espera con
+		// la fila intacta. Se pregunta ANTES de sacar de la fila, para que lo
+		// que entre mientras tanto se ordene igual por su hora de aire: si se
+		// guardara el trabajo ya sacado, al reanudar saldría uno viejo
+		// delante de otro que corre más prisa.
+		if !q.esperarPermiso(ctx) {
+			return ctx.Err()
+		}
 		j, ok := q.Next(ctx)
 		if !ok {
 			return ctx.Err()
@@ -255,4 +278,35 @@ func (h *jobHeap) Pop() any {
 	old[n-1] = nil
 	*h = old[:n-1]
 	return j
+}
+
+
+// esperarPermiso bloquea mientras Permiso conteste que no. Devuelve false solo
+// si se canceló el contexto. Sin Permiso puesto no espera nunca, que es como
+// se comportaba la cola antes de que esto existiera.
+func (q *Queue) esperarPermiso(ctx context.Context) bool {
+	if q.Permiso == nil {
+		return true
+	}
+	dicho := ""
+	for {
+		puede, porque := q.Permiso()
+		if puede {
+			if dicho != "" && q.Aviso != nil {
+				q.Aviso("la preparación de archivos sigue: el aire se puso al día")
+			}
+			return true
+		}
+		// Se dice una vez por motivo, no cada vuelta: esto se mira cada pocos
+		// segundos y la bitácora es para leerla.
+		if porque != dicho && q.Aviso != nil {
+			q.Aviso("la preparación de archivos se detiene: " + porque)
+		}
+		dicho = porque
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(PermisoPoll):
+		}
+	}
 }
