@@ -1,5 +1,10 @@
 # Cómo añadir soporte para un equipo
 
+> **¿Hay un sitio de donde sacar los drivers?** No: cada equipo trae un
+> protocolo, no un driver. Qué protocolo habla cada uno, dónde está su
+> manual y con qué biblioteca de Go se escribe está en
+> [`CATALOGO.md`](CATALOGO.md) (10 sept 2026).
+
 Antena787 no asume ninguna marca ni ningún modelo. El despliegue de
 referencia es **donde se prueba primero, no el molde**: cada equipo que
 aparece ahí es un ejemplo de una familia que tiene driver (PRD §2).
@@ -98,9 +103,12 @@ Lo único que no se puede es enchufarse a sistemas de inserción de terceros.
 `cap-poll` · **`signal-compare`** · `ninguna`.
 
 **En Estados Unidos los equipos son pocos y se conocen, y se traen todos:**
-Sage Digital ENDEC **1822** (serial RS-232 y relés) y **3644** (serial, relés,
-y red: HTTP y syslog); DASDEC de Digital Alert Systems (red: HTTP, SNMP,
-syslog; y relés); Gorman-Redlich (relés y serial); TFT (relés).
+Sage Digital ENDEC **1822** (serial RS-232 y relés; manual público, verificado)
+y **3644** (serial, relés y red: HTTP confirmado; syslog y SNMP **no
+aparecen en ninguna fuente pública**, se confirman contra el equipo); DASDEC
+de Digital Alert Systems (red: HTTP confirmado, SNMP/syslog no encontrados;
+y relés); Gorman-Redlich (relés y serial); TFT (relés). Equipo por equipo,
+con fuentes: [`CATALOGO.md`](CATALOGO.md).
 
 **No hace falta saber el modelo antes de instalar.** El asistente pregunta **por
 dónde está conectado** —cable serial, cable de relés, cable de red, o varios— y

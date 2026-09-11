@@ -205,6 +205,12 @@ go test ./... -count=1           # todo debe estar verde
 
 ## Cosas pequeñas pendientes
 
+- **Catálogo de equipos y bibliotecas** (`docs/drivers/CATALOGO.md`, 10 sept):
+  lo que T8 necesita antes de escribir drivers. Decisiones que deja: relés
+  por serial (no HID), HDHomeRun como retorno de aire, PMCP para PSIP (F5),
+  SCTE-104 y SAME se escriben a mano, Sage 3644 syslog/SNMP por confirmar.
+  Las preguntas para el ingeniero de CAtv están juntas ahí.
+
 - **Decisión pendiente de Saul (10 sept):** página pública «ver en vivo» servida
   por el propio Antena787 (reproductor HLS con el nombre del canal y la guía
   al lado, para el celular del televidente, sin depender de YouTube). Sacar
