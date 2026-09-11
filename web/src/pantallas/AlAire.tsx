@@ -129,8 +129,9 @@ export function AlAire() {
               <p className="subtitulo" style={{ fontSize: 14.5 }}>
                 {alAire ? (
                   <>
-                    {alAire.temporada ? `Temporada ${alAire.temporada} · ` : ''}
-                    {alAire.episodio ? `Episodio ${alAire.episodio}  ·  ` : ''}
+                    {alAire.episodio
+                      ? `${typeof alAire.episodio === 'number' ? 'Episodio ' : ''}${alAire.episodio}  ·  `
+                      : ''}
                     {hora(alAire.instante_planeado, zona)} –{' '}
                     {hora(new Date(fin), zona)}
                   </>
@@ -299,7 +300,7 @@ export function AlAire() {
             <p className="ayuda" style={{ marginTop: 10 }}>
               {enSombra
                 ? 'En modo sombra no hay aire que tomar: Antena787 todavía no está alimentando el transmisor.'
-                : 'Vuelve solo cuando sueltes o al terminar el bloque'}
+                : 'Llega con el motor: hoy el aire no se puede tomar a mano'}
             </p>
           </div>
 
@@ -311,30 +312,26 @@ export function AlAire() {
       {panelControl && (
         <Panel
           titulo="Tomar el control"
-          descripcion="El aire pasa a ti hasta que lo sueltes o termine el bloque."
+          descripcion="Todavía no: el control manual llega con el motor."
           alCerrar={() => setPanelControl(false)}
           pie={
-            <>
-              <button className="boton" onClick={() => setPanelControl(false)}>
-                Cancelar
-              </button>
-              <button className="boton boton--primario" disabled>
-                Tomar el control
-              </button>
-            </>
+            <button className="boton" onClick={() => setPanelControl(false)}>
+              Cerrar
+            </button>
           }
         >
           <p className="subtitulo">
-            Mientras lo tengas, aparece el panel de disparo y una cuenta regresiva del
-            regreso automático. La vista de aire de la izquierda no se detiene ni se
-            tapa.
+            Quien manda el video al transmisor —el motor— es lo que se está
+            construyendo ahora. Hasta que esté, no hay aire que pasar a una persona:
+            aquí no hay ningún botón que apretar, y es mejor decirlo que enseñar uno
+            que no hace nada.
           </p>
-          <div className="campo">
-            <label htmlFor="quien">¿Quién lo toma?</label>
-            <input id="quien" type="text" placeholder="Tu nombre" />
-            <span className="ayuda">Queda anotado. Una persona a la vez.</span>
-          </div>
-          <p className="ayuda">Esta parte la construye la siguiente entrega.</p>
+          <p className="subtitulo">
+            Cuando llegue: el aire pasa a ti hasta que lo sueltes o termine el bloque,
+            con el panel de disparo, una cuenta regresiva del regreso automático y tu
+            nombre anotado en la bitácora. Una persona a la vez. La vista de aire de la
+            izquierda no se detiene ni se tapa.
+          </p>
         </Panel>
       )}
     </>

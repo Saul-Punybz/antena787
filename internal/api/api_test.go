@@ -608,19 +608,19 @@ func TestImportarLaHojaDeCAtv(t *testing.T) {
 		t.Fatalf("en la base hay %d reglas, se esperaban 34", len(reglas))
 	}
 
-	// Y un relevo se confirma de un clic.
+	// Y un relevo se confirma de un clic: la propuesta se devuelve tal cual.
 	rel := out.Relevos[0]
 	w = c.do("POST", "/api/v1/importar/confirmar-relevos", []map[string]any{
-		{"regla": rel.Relieves, "releva_a": rel.Expires},
+		{"regla": rel.Rule, "releva_a": rel.HandsOffTo},
 	})
 	if w.Code != http.StatusOK {
 		t.Fatalf("confirmar el relevo dio %d: %s", w.Code, w.Body.String())
 	}
-	confirmada, err := c.a.Store.Rule.Get(context.Background(), rel.Relieves)
+	confirmada, err := c.a.Store.Rule.Get(context.Background(), rel.Rule)
 	if err != nil {
 		t.Fatalf("no encuentro la regla que releva: %v", err)
 	}
-	if confirmada.HandsOffTo == nil || *confirmada.HandsOffTo != rel.Expires {
+	if confirmada.HandsOffTo == nil || *confirmada.HandsOffTo != rel.HandsOffTo {
 		t.Fatalf("el relevo no quedó guardado: %+v", confirmada.HandsOffTo)
 	}
 }

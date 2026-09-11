@@ -10,15 +10,21 @@ package api
 // servidor puede mandar más de lo que la interfaz usa.
 
 import (
+	"bufio"
 	"context"
+	"encoding/binary"
 	"encoding/json"
+	"io"
+	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"regexp"
 	"strings"
 	"testing"
 	"time"
 
+	"antena787/internal/app"
 	"antena787/internal/model"
 )
 
@@ -30,32 +36,49 @@ var (
 	rePropiedad = regexp.MustCompile(`^\s*(\w+)(\??)\s*:`)
 )
 
-// propiedadesObligatorias devuelve los nombres de las propiedades sin `?` de
-// una interfaz de tipos.ts. Las que llevan `?` son opcionales: el servidor
-// puede no mandarlas.
-func propiedadesObligatorias(t *testing.T, nombre string) []string {
-	t.Helper()
-	return propiedadesDe(t, nombre, true)
+// propiedad es una propiedad declarada en tipos.ts: cómo se llama, si la
+// interfaz la da por opcional, y el tipo escrito tal cual («number», «string |
+// null», «Alarma[]»). El tipo es lo que permite comprobar que el servidor no
+// solo manda la clave, sino que manda el tipo de valor que la pantalla espera:
+// `titulo` como objeto en vez de texto tumbó la pantalla de Reglas entera
+// (modo sombra, 9 sept 2026) y la prueba de antes no lo veía.
+type propiedad struct {
+	Nombre   string
+	Opcional bool
+	Tipo     string
 }
 
-// propiedadesTodas devuelve todas las propiedades de una interfaz, también
-// las opcionales. Sirve para lo que es opcional en el contrato pero tiene
-// que estar cuando hay algo que mandar: el sonido de un archivo que sí trae
-// pistas (F1-60).
-func propiedadesTodas(t *testing.T, nombre string) []string {
-	t.Helper()
-	return propiedadesDe(t, nombre, false)
-}
-
-func propiedadesDe(t *testing.T, nombre string, soloObligatorias bool) []string {
+// textoDeTipos lee el contrato de la interfaz.
+func textoDeTipos(t *testing.T) string {
 	t.Helper()
 	raw, err := os.ReadFile(tiposTS)
 	if err != nil {
 		t.Fatalf("no pude leer el contrato de la interfaz: %v", err)
 	}
-	texto := string(raw)
-	loc := reInterfaz.FindAllStringSubmatchIndex(texto, -1)
-	for _, m := range loc {
+	return string(raw)
+}
+
+// propiedadesObligatorias devuelve los nombres de las propiedades sin `?` de
+// una interfaz de tipos.ts. Las que llevan `?` son opcionales: el servidor
+// puede no mandarlas.
+func propiedadesObligatorias(t *testing.T, nombre string) []string {
+	t.Helper()
+	var out []string
+	for _, p := range propiedadesDe(t, nombre) {
+		if !p.Opcional {
+			out = append(out, p.Nombre)
+		}
+	}
+	return out
+}
+
+// propiedadesDe saca las propiedades del primer nivel de una interfaz, con su
+// tipo. Las líneas de comentario no cuentan, y lo de dentro de un objeto
+// anidado tampoco: eso se compara aparte si hace falta.
+func propiedadesDe(t *testing.T, nombre string) []propiedad {
+	t.Helper()
+	texto := textoDeTipos(t)
+	for _, m := range reInterfaz.FindAllStringSubmatchIndex(texto, -1) {
 		if texto[m[2]:m[3]] != nombre {
 			continue
 		}
@@ -63,21 +86,30 @@ func propiedadesDe(t *testing.T, nombre string, soloObligatorias bool) []string 
 		if fin < 0 {
 			t.Fatalf("la interfaz %s de tipos.ts no se cierra", nombre)
 		}
-		cuerpo := texto[m[1] : m[1]+fin]
-		var out []string
+		var out []propiedad
 		hondura := 0
-		for _, linea := range strings.Split(cuerpo, "\n") {
-			limpia := strings.TrimSpace(linea)
-			if strings.HasPrefix(limpia, "//") || strings.HasPrefix(limpia, "*") ||
-				strings.HasPrefix(limpia, "/*") {
+		for _, linea := range strings.Split(texto[m[1]:m[1]+fin], "\n") {
+			limpia := strings.TrimSpace(sinComentario(linea))
+			if limpia == "" || esComentario(linea) {
 				continue
 			}
 			if hondura == 0 {
-				if p := rePropiedad.FindStringSubmatch(linea); p != nil && (p[2] != "?" || !soloObligatorias) {
-					out = append(out, p[1])
+				if p := rePropiedad.FindStringSubmatch(linea); p != nil {
+					out = append(out, propiedad{
+						Nombre:   p[1],
+						Opcional: p[2] == "?",
+						Tipo:     limpia[strings.Index(limpia, ":")+1:],
+					})
+					hondura += llaves(limpia)
+					continue
+				}
+				// Una unión que sigue en la línea de abajo: `tipo?:` y luego
+				// una lista de `| 'algo'` (así está escrita Alarma.tipo).
+				if len(out) > 0 {
+					out[len(out)-1].Tipo += " " + limpia
 				}
 			}
-			hondura += strings.Count(limpia, "{") - strings.Count(limpia, "}")
+			hondura += llaves(limpia)
 		}
 		return out
 	}
@@ -85,53 +117,217 @@ func propiedadesDe(t *testing.T, nombre string, soloObligatorias bool) []string 
 	return nil
 }
 
+func esComentario(linea string) bool {
+	l := strings.TrimSpace(linea)
+	return strings.HasPrefix(l, "//") || strings.HasPrefix(l, "*") || strings.HasPrefix(l, "/*")
+}
+
+// sinComentario quita el comentario de final de línea («hora: number // …»).
+func sinComentario(linea string) string {
+	if i := strings.Index(linea, "//"); i >= 0 {
+		return linea[:i]
+	}
+	return linea
+}
+
+func llaves(s string) int {
+	return strings.Count(s, "{") - strings.Count(s, "}")
+}
+
+// ── el tipo del valor, no solo la clave ───────────────────────────────
+
+// clase dice de qué es un valor JSON, con la palabra que sale en el error.
+func clase(raw json.RawMessage) string {
+	s := strings.TrimSpace(string(raw))
+	if s == "" {
+		return "nada"
+	}
+	switch s[0] {
+	case '"':
+		return "texto"
+	case '{':
+		return "objeto"
+	case '[':
+		return "lista"
+	case 't', 'f':
+		return "booleano"
+	case 'n':
+		return "nulo"
+	}
+	return "número"
+}
+
+// clasesQueValen traduce un tipo de TypeScript a las clases de JSON que puede
+// tomar. Devuelve nil cuando el tipo no se entiende: entonces no se exige
+// nada, que es mejor que fallar por un tipo que esta prueba no sabe leer.
+func clasesQueValen(t *testing.T, tipo string) map[string]bool {
+	t.Helper()
+	return clasesEn(t, textoDeTipos(t), tipo, 0)
+}
+
+func clasesEn(t *testing.T, texto, tipo string, prof int) map[string]bool {
+	t.Helper()
+	tipo = strings.TrimSpace(tipo)
+	if tipo == "" || prof > 5 {
+		return nil
+	}
+	out := map[string]bool{}
+	for _, alt := range uniones(tipo) {
+		alt = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(alt), ";"))
+		for strings.HasPrefix(alt, "(") && strings.HasSuffix(alt, ")") {
+			alt = strings.TrimSpace(alt[1 : len(alt)-1])
+		}
+		switch {
+		case alt == "":
+			continue
+		case strings.HasSuffix(alt, "[]"), strings.HasPrefix(alt, "Array<"):
+			out["lista"] = true
+		case strings.HasPrefix(alt, "{"), strings.HasPrefix(alt, "Record<"), strings.HasPrefix(alt, "Partial<"):
+			out["objeto"] = true
+		case alt == "string", strings.HasPrefix(alt, "'"), strings.HasPrefix(alt, `"`), strings.HasPrefix(alt, "`"):
+			out["texto"] = true
+		case alt == "number":
+			out["número"] = true
+		case alt == "boolean", alt == "true", alt == "false":
+			out["booleano"] = true
+		case alt == "null", alt == "undefined":
+			out["nulo"] = true
+		case alt == "unknown", alt == "any", alt == "object":
+			return nil
+		case strings.Contains(texto, "export interface "+alt+" {"):
+			out["objeto"] = true
+		default:
+			alias := aliasDe(texto, alt)
+			if alias == "" {
+				return nil // un tipo que esta prueba no sabe leer
+			}
+			mas := clasesEn(t, texto, alias, prof+1)
+			if mas == nil {
+				return nil
+			}
+			for k := range mas {
+				out[k] = true
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// uniones parte un tipo por las barras de primer nivel: las de dentro de un
+// objeto, de una lista o de unos paréntesis no cuentan.
+func uniones(tipo string) []string {
+	var out []string
+	hondura, comilla, ini := 0, rune(0), 0
+	for i, r := range tipo {
+		switch {
+		case comilla != 0:
+			if r == comilla {
+				comilla = 0
+			}
+		case r == '\'' || r == '"' || r == '`':
+			comilla = r
+		case r == '{' || r == '[' || r == '(' || r == '<':
+			hondura++
+		case r == '}' || r == ']' || r == ')' || r == '>':
+			hondura--
+		case r == '|' && hondura == 0:
+			out = append(out, tipo[ini:i])
+			ini = i + len("|")
+		}
+	}
+	return append(out, tipo[ini:])
+}
+
+// aliasDe devuelve lo que hay a la derecha de `export type Nombre =`, aunque
+// siga en varias líneas. Vacío si no existe ese alias.
+func aliasDe(texto, nombre string) string {
+	re := regexp.MustCompile(`(?m)^export type ` + regexp.QuoteMeta(nombre) + `\s*=`)
+	m := re.FindStringIndex(texto)
+	if m == nil {
+		return ""
+	}
+	var b strings.Builder
+	hondura := 0
+	for _, linea := range strings.Split(texto[m[1]:], "\n") {
+		limpia := strings.TrimSpace(sinComentario(linea))
+		b.WriteString(" " + limpia)
+		hondura += llaves(limpia)
+		hecho := strings.TrimSpace(b.String())
+		if hondura <= 0 && hecho != "" && !strings.HasSuffix(hecho, "|") {
+			return hecho
+		}
+	}
+	return strings.TrimSpace(b.String())
+}
+
 // claves devuelve las claves del primer nivel de un objeto JSON.
 func clavesDe(t *testing.T, raw []byte) map[string]bool {
 	t.Helper()
-	var m map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &m); err != nil {
-		t.Fatalf("la respuesta no es un objeto JSON: %s", raw)
-	}
 	out := map[string]bool{}
-	for k := range m {
+	for k := range objetoDe(t, raw) {
 		out[k] = true
 	}
 	return out
 }
 
+func objetoDe(t *testing.T, raw []byte) map[string]json.RawMessage {
+	t.Helper()
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &m); err != nil {
+		t.Fatalf("la respuesta no es un objeto JSON: %s", raw)
+	}
+	return m
+}
+
 // exige comprueba que el objeto trae todas las propiedades obligatorias de
 // la interfaz, menos las que se declaren aparte (las que son de F2 y que la
-// interfaz ya sabe pintar vacías).
+// interfaz ya sabe pintar vacías). De las que sí vienen —obligatorias u
+// opcionales— comprueba además el tipo del valor.
 func exige(t *testing.T, quien string, raw []byte, interfaz string, salvo ...string) {
 	t.Helper()
-	tiene := clavesDe(t, raw)
-	perdonadas := map[string]bool{}
-	for _, s := range salvo {
-		perdonadas[s] = true
-	}
-	for _, prop := range propiedadesObligatorias(t, interfaz) {
-		if perdonadas[prop] || tiene[prop] {
-			continue
-		}
-		t.Errorf("%s no manda %q, que %s declara obligatorio en web/src/lib/tipos.ts",
-			quien, prop, interfaz)
-	}
+	compara(t, quien, raw, interfaz, false, salvo)
 }
 
 // exigeTodas comprueba que el objeto trae todas las propiedades de la
 // interfaz, opcionales incluidas, menos las que se perdonen aparte.
 func exigeTodas(t *testing.T, quien string, raw []byte, interfaz string, salvo ...string) {
 	t.Helper()
-	tiene := clavesDe(t, raw)
+	compara(t, quien, raw, interfaz, true, salvo)
+}
+
+func compara(t *testing.T, quien string, raw []byte, interfaz string, tambienOpcionales bool, salvo []string) {
+	t.Helper()
+	tiene := objetoDe(t, raw)
 	perdonadas := map[string]bool{}
 	for _, s := range salvo {
 		perdonadas[s] = true
 	}
-	for _, prop := range propiedadesTodas(t, interfaz) {
-		if perdonadas[prop] || tiene[prop] {
+	for _, p := range propiedadesDe(t, interfaz) {
+		if perdonadas[p.Nombre] {
 			continue
 		}
-		t.Errorf("%s no manda %q, que %s declara en web/src/lib/tipos.ts", quien, prop, interfaz)
+		valor, hay := tiene[p.Nombre]
+		if !hay {
+			if !p.Opcional {
+				t.Errorf("%s no manda %q, que %s declara obligatorio en web/src/lib/tipos.ts",
+					quien, p.Nombre, interfaz)
+			} else if tambienOpcionales {
+				t.Errorf("%s no manda %q, que %s declara en web/src/lib/tipos.ts",
+					quien, p.Nombre, interfaz)
+			}
+			continue
+		}
+		valen := clasesQueValen(t, p.Tipo)
+		if valen == nil {
+			continue
+		}
+		if got := clase(valor); !valen[got] {
+			t.Errorf("%s manda %q como %s y %s.%s es %s en web/src/lib/tipos.ts: %s",
+				quien, p.Nombre, got, interfaz, p.Nombre, strings.TrimSpace(p.Tipo), valor)
+		}
 	}
 }
 
@@ -201,6 +397,16 @@ func TestElServidorMandaLoQueLaInterfazPinta(t *testing.T) {
 	if nombre, ok := reglas[0]["titulo"].(string); !ok || nombre == "" {
 		t.Fatalf("Regla.titulo tiene que ser el nombre en texto, como en tipos.ts: %v", reglas[0]["titulo"])
 	}
+	// Y la regla entera, campo a campo: `dias_restantes`, `releva_a`,
+	// `live_source_id` y las demás, que antes nadie comparaba.
+	exige(t, "GET /reglas (una regla)", primero(t, w.Body.Bytes()), "Regla")
+
+	// El canal, que pinta el menú y media pantalla de Ajustes.
+	w = c.do("GET", "/api/v1/canal", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("/canal dio %d: %s", w.Code, w.Body.String())
+	}
+	exige(t, "GET /canal", w.Body.Bytes(), "Canal")
 
 	// Estado. `salidas` ya se sirve desde T2 de F2; `retorno_de_aire` y
 	// `control_manual` son de tandas que todavía no están y la interfaz los
@@ -731,5 +937,264 @@ func TestLaBitacoraMandaLoQueLaPantallaPinta(t *testing.T) {
 	}
 	if w := c.do("GET", "/api/v1/incidentes?desde=ayer", nil); w.Code != http.StatusBadRequest {
 		t.Errorf("una fecha mal escrita tenía que ser 400 con frase en cristiano: %d %s", w.Code, w.Body.String())
+	}
+}
+
+// ── el empujón del WebSocket contra GET /estado ────────────────────────
+
+// TestElEmpujonDelWebSocketEsElEstadoEntero: la interfaz fusiona cada empujón
+// con lo que ya tenía (`{...antes, ...e}` en lib/estado.tsx), así que una clave
+// que el empujón omite se queda con el valor viejo para siempre. Con un hueco
+// —nada al aire ahora mismo— eso dejaba en pantalla el programa anterior hasta
+// la próxima recarga. El empujón manda el contrato entero de `Estado`, y
+// `al_aire`/`siguiente` van siempre, en `null` cuando no hay nada.
+func TestElEmpujonDelWebSocketEsElEstadoEntero(t *testing.T) {
+	c := nuevo(t).conClave().entrar()
+	marco := primerMarcoDelWS(t, c)
+
+	crudo, err := json.Marshal(marco)
+	if err != nil {
+		t.Fatalf("el marco no se puede volver a serializar: %v", err)
+	}
+	// Lo mismo que exige GET /estado: lo que falta son opcionales de tandas
+	// que no están (`retorno_de_aire`, `control_manual`) y los tres que la
+	// interfaz solo necesita del primer /estado.
+	exige(t, "el empujón del WebSocket", crudo, "Estado")
+
+	for _, clave := range []string{"al_aire", "siguiente"} {
+		valor, hay := marco[clave]
+		if !hay {
+			t.Fatalf("el empujón no manda %q; con un hueco la pantalla se queda con el programa anterior", clave)
+		}
+		if clase(valor) != "nulo" {
+			t.Errorf("sin nada al aire, %q tenía que ser nulo y llegó %s: %s", clave, clase(valor), valor)
+		}
+	}
+}
+
+// primerMarcoDelWS abre el WebSocket como lo abriría el navegador y devuelve
+// el primer marco de estado. Hace falta un servidor de verdad: el empujón
+// necesita quedarse con la conexión (Hijack) y httptest.NewRecorder no puede.
+func primerMarcoDelWS(t *testing.T, c *cliente) map[string]json.RawMessage {
+	t.Helper()
+	srv := httptest.NewServer(c.s)
+	t.Cleanup(srv.Close)
+
+	conn, err := net.Dial("tcp", strings.TrimPrefix(srv.URL, "http://"))
+	if err != nil {
+		t.Fatalf("no pude conectar: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	peticion := "GET /api/v1/ws HTTP/1.1\r\n" +
+		"Host: " + strings.TrimPrefix(srv.URL, "http://") + "\r\n" +
+		"Upgrade: websocket\r\nConnection: Upgrade\r\n" +
+		"Sec-WebSocket-Version: 13\r\n" +
+		"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" +
+		"Cookie: " + c.cookie.Name + "=" + c.cookie.Value + "\r\n\r\n"
+	if _, err := conn.Write([]byte(peticion)); err != nil {
+		t.Fatalf("no pude mandar el apretón: %v", err)
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+
+	br := bufio.NewReader(conn)
+	resp, err := http.ReadResponse(br, nil)
+	if err != nil {
+		t.Fatalf("no llegó respuesta al apretón: %v", err)
+	}
+	if resp.StatusCode != http.StatusSwitchingProtocols {
+		t.Fatalf("el apretón dio %d, se esperaba 101", resp.StatusCode)
+	}
+	// La firma del RFC 6455 para esa clave de ejemplo.
+	if got := resp.Header.Get("Sec-WebSocket-Accept"); got != "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=" {
+		t.Fatalf("la firma del apretón es %q", got)
+	}
+
+	var head [2]byte
+	if _, err := io.ReadFull(br, head[:]); err != nil {
+		t.Fatalf("no llegó ningún marco: %v", err)
+	}
+	if op := head[0] & 0x0F; op != opText {
+		t.Fatalf("el primer marco es del tipo %d, se esperaba texto", op)
+	}
+	n := int64(head[1] & 0x7F)
+	switch n {
+	case 126:
+		var ext [2]byte
+		if _, err := io.ReadFull(br, ext[:]); err != nil {
+			t.Fatal(err)
+		}
+		n = int64(binary.BigEndian.Uint16(ext[:]))
+	case 127:
+		var ext [8]byte
+		if _, err := io.ReadFull(br, ext[:]); err != nil {
+			t.Fatal(err)
+		}
+		n = int64(binary.BigEndian.Uint64(ext[:]))
+	}
+	carga := make([]byte, n)
+	if _, err := io.ReadFull(br, carga); err != nil {
+		t.Fatalf("el marco vino cortado: %v", err)
+	}
+	var marco map[string]json.RawMessage
+	if err := json.Unmarshal(carga, &marco); err != nil {
+		t.Fatalf("el marco no es JSON: %s", carga)
+	}
+	return marco
+}
+
+// ── importar la hoja y confirmar un relevo ────────────────────────────
+
+// TestConfirmarUnRelevoDeLaHoja es el viaje completo del importador: se pega
+// la hoja de CAtv, el servidor propone un relevo, la pantalla devuelve la
+// propuesta tal cual y la regla queda con `releva_a` puesto.
+//
+// El nombre de los campos es el contrato: mientras el servidor mandó
+// `regla_que_vence`/`regla_que_releva` y la interfaz esperaba `regla`/
+// `releva_a`, cada clic mandaba dos `undefined` y contestaba 400 «no encuentro
+// la regla 0» (auditoría de contrato, 11 sept 2026). Aquí el cuerpo se manda
+// **tal como llegó**: si los nombres se separan otra vez, esto falla.
+func TestConfirmarUnRelevoDeLaHoja(t *testing.T) {
+	c := nuevo(t).conClave().entrar()
+	raw, err := os.ReadFile(hojaPath)
+	if err != nil {
+		t.Fatalf("no pude leer la hoja de CAtv: %v", err)
+	}
+	w := c.do("POST", "/api/v1/importar/hoja", map[string]string{"texto": string(raw)})
+	if w.Code != http.StatusOK {
+		t.Fatalf("importar la hoja dio %d: %s", w.Code, w.Body.String())
+	}
+	exige(t, "POST /importar/hoja", w.Body.Bytes(), "ResumenDeImportacion")
+
+	propuestas := campo(t, w.Body.Bytes(), "relevos_propuestos")
+	uno := primero(t, propuestas)
+	exige(t, "POST /importar/hoja (un relevo propuesto)", uno, "RelevoPropuesto")
+
+	// La propuesta, devuelta sin tocar nada: es lo que hace la pantalla.
+	w = c.do("POST", "/api/v1/importar/confirmar-relevos", json.RawMessage(propuestas))
+	if w.Code != http.StatusOK {
+		t.Fatalf("confirmar los relevos dio %d: %s", w.Code, w.Body.String())
+	}
+
+	var rel struct {
+		Regla   int64 `json:"regla"`
+		RelevaA int64 `json:"releva_a"`
+		Texto   string
+	}
+	if err := json.Unmarshal(uno, &rel); err != nil {
+		t.Fatalf("el relevo propuesto no se entiende: %v", err)
+	}
+	if rel.Regla == 0 || rel.RelevaA == 0 {
+		t.Fatalf("el relevo propuesto tiene que traer las dos reglas de la base: %s", uno)
+	}
+
+	// Y la regla quedó con el relevo puesto, con nombre y todo.
+	w = c.do("GET", "/api/v1/reglas", nil)
+	var reglas []struct {
+		ID            int64  `json:"id"`
+		RelevaA       *int64 `json:"releva_a"`
+		RelevaATitulo string `json:"releva_a_titulo"`
+	}
+	c.json(w, &reglas)
+	encontrada := false
+	for _, r := range reglas {
+		if r.ID != rel.Regla {
+			continue
+		}
+		encontrada = true
+		if r.RelevaA == nil || *r.RelevaA != rel.RelevaA {
+			t.Fatalf("la regla %d no quedó relevando a la %d: %+v", r.ID, rel.RelevaA, r.RelevaA)
+		}
+		if r.RelevaATitulo == "" {
+			t.Error("la regla releva a otra y el servidor no dice a qué programa: la etiqueta «releva a …» queda en blanco")
+		}
+	}
+	if !encontrada {
+		t.Fatalf("la regla %d del relevo no está en /reglas", rel.Regla)
+	}
+}
+
+// ── las alarmas y los ajustes ─────────────────────────────────────────
+
+// TestUnaAlarmaLlegaComoLaPantallaLaPinta: Al aire pinta cada alarma con su
+// nivel, su frase y, si la hay, el camino a la pantalla donde se arregla.
+func TestUnaAlarmaLlegaComoLaPantallaLaPinta(t *testing.T) {
+	c := nuevo(t).conClave().entrar()
+	c.enCuarentena("/medios/promo-verano.mov", "No se pudo leer el archivo.")
+	c.a.RefreshCuarentena(context.Background())
+
+	w := c.do("GET", "/api/v1/estado", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("/estado dio %d", w.Code)
+	}
+	alarmas := campo(t, w.Body.Bytes(), "alarmas")
+	una := primero(t, alarmas)
+	// `detalle` es opcional de verdad: la cuarentena no lo manda.
+	exigeTodas(t, "GET /estado (una alarma)", una, "Alarma", "detalle")
+
+	accion := objetoDe(t, campo(t, una, "accion"))
+	for _, clave := range []string{"texto", "ruta"} {
+		if clase(accion[clave]) != "texto" {
+			t.Errorf("el botón de la alarma no trae %q como texto: %s", clave, una)
+		}
+	}
+}
+
+// TestLosAjustesQueLaPantallaLeeLosManadaElServidor es la prueba de humo de
+// `Ajustes`, que no se puede comparar con `exige` porque el tipo de la
+// interfaz es `Record<string, string>`, no una interfaz con propiedades.
+//
+// Comprueba lo que de verdad se rompió: media pantalla de Ajustes leía claves
+// que el servidor no tiene ni tendrá (`respaldo_ultimo`, `aceleracion_tarjeta`,
+// `dias_al_aire`…) y quedaba en blanco, o pintaba «hace NaN días». Así que
+// aquí se leen las claves que la pantalla pide de verdad y se exige que el
+// servidor las conozca.
+func TestLosAjustesQueLaPantallaLeeLosManadaElServidor(t *testing.T) {
+	const pantalla = "../../web/src/pantallas/Ajustes.tsx"
+	raw, err := os.ReadFile(pantalla)
+	if err != nil {
+		t.Fatalf("no pude leer la pantalla de Ajustes: %v", err)
+	}
+	// Las claves que el servidor conoce: las de app.Key* que se guardan desde
+	// Ajustes, más los tres de fábrica del detector.
+	conocidas := map[string]bool{}
+	for _, k := range []string{
+		app.KeyCountry, app.KeyQuality, app.KeySubtitulosEstado, app.KeyAudioLanguage,
+		app.KeyNoticeChannel, app.KeyTelegramToken, app.KeyTelegramChat, app.KeyNoticeMailTo,
+		app.KeySMTPServer, app.KeySMTPUser, app.KeySMTPPass, app.KeyOnlineInfo, app.KeyTMDBKey,
+		app.KeyGuideHTTP, app.KeyGuidePMCPHTTP,
+		app.KeySilencioUmbral, app.KeyNegroUmbral, app.KeySilencioDevuelveControl,
+	} {
+		conocidas[k] = true
+	}
+	// asistente_ia es memoria pura del interruptor de Ajustes: nadie la lee en
+	// el servidor, pero el almacén de ajustes es clave→texto libre (ajustesPut
+	// no la rechaza), así que guardarla y devolverla ya funciona sin que el
+	// servidor tenga que saber qué significa.
+	conocidas["asistente_ia"] = true
+	reLee := regexp.MustCompile(`ajustes\.(\w+)`)
+	pedidas := map[string]bool{}
+	for _, m := range reLee.FindAllStringSubmatch(string(raw), -1) {
+		pedidas[m[1]] = true
+		if !conocidas[m[1]] {
+			t.Errorf("Ajustes.tsx lee el ajuste %q y el servidor no lo manda nunca: "+
+				"o lo manda el servidor, o la pantalla no lo pinta", m[1])
+		}
+	}
+	if len(pedidas) == 0 {
+		t.Fatal("no encontré ni un ajuste leído en la pantalla: ¿cambió la forma de leerlos?")
+	}
+
+	// Y los tres de fábrica llegan siempre, desde la primera vez que se abre.
+	c := nuevo(t).conClave().entrar()
+	w := c.do("GET", "/api/v1/ajustes", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("/ajustes dio %d: %s", w.Code, w.Body.String())
+	}
+	ajustes := objetoDe(t, w.Body.Bytes())
+	for _, k := range []string{app.KeySilencioUmbral, app.KeyNegroUmbral, app.KeySilencioDevuelveControl} {
+		if clase(ajustes[k]) != "texto" {
+			t.Errorf("GET /ajustes no manda %q como texto: los ajustes viajan como clave→texto", k)
+		}
 	}
 }

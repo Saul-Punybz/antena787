@@ -216,9 +216,15 @@ export function cuentaRegresiva(ms: number): string {
   return `${m}:${String(seg).padStart(2, '0')}`
 }
 
-/** "hace 6 minutos", "hace 41 minutos", "hace 2 horas". */
-export function haceCuanto(instante: string, ahora: number): string {
-  const ms = ahora - new Date(instante).getTime()
+/**
+ * "hace 6 minutos", "hace 41 minutos", "hace 2 horas". Sin instante, o con uno
+ * que no se puede leer, devuelve «—»: antes salía «hace NaN días» en pantalla
+ * (auditoría de contrato, 11 sept 2026).
+ */
+export function haceCuanto(instante: string | null | undefined, ahora: number): string {
+  const cuando = instante ? new Date(instante).getTime() : NaN
+  if (!Number.isFinite(cuando) || !Number.isFinite(ahora)) return '—'
+  const ms = ahora - cuando
   const min = Math.round(ms / 60_000)
   if (min < 1) return 'hace un momento'
   if (min === 1) return 'hace 1 minuto'

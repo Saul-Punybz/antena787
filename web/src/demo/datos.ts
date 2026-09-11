@@ -438,41 +438,22 @@ export const cuarentena: EnCuarentena[] = [
   },
 ]
 
+/**
+ * Los ajustes de la demo son los que el servidor de verdad puede tener: las
+ * claves de `app.Key*` más los tres de fábrica del detector. Nada de datos
+ * bonitos que el servidor no manda —así era antes y escondía que media
+ * pantalla de Ajustes leía claves que no existen (auditoría de contrato,
+ * 11 sept 2026).
+ */
 export const ajustes: Ajustes = {
-  version: '1.0.0',
-  sistema_operativo: 'Windows 10 Pro',
-  dias_al_aire: '34',
-  hora_servidor: 'time.nist.gov',
-  hora_desvio_s: '0.08',
-  hora_aviso_si_pasa_de_s: '1',
-  aceleracion_tarjeta: 'NVIDIA',
-  aceleracion_probada: 'al arrancar',
-  aceleracion_resultado: 'OK',
   silencio_devuelve_control: 'si',
   silencio_umbral_s: '15',
   negro_umbral_s: '15',
-  antivirus_exclusiones: 'sí',
-  energia_plan: 'sí',
-  arranque_tras_corte: 'sí',
-  rutas_largas: 'sí',
-  actualizaciones_windows: 'no',
-  respaldo_ultimo: '2026-09-04T17:04:00Z',
-  respaldo_cada: '1 hora',
-  respaldo_copias: '168 · 7 días',
-  respaldo_tamano: '12.4 MB',
-  tailscale: 'conectado',
-  tailscale_direccion: 'antena787-catv',
-  puertos_abiertos: 'ninguno',
-  actualizaciones_disponible: '1.0.1',
-  actualizaciones_instalar_sola: 'nunca',
   pais: 'Estados Unidos',
-  perfil: 'FCC · ATSC',
-  volumen: 'volumen de televisión de EE. UU.',
-  subtitulos: 'se conservan',
+  calidad: 'hd',
   // El ajuste de tres estados del perfil us-fcc (COMPLIANCE.md): "no_se" es
   // el default, y mientras esté así /estado avisa (F1-77).
   subtitulos_estado: 'no_se',
-  equipo_de_alertas: 'Sage ENDEC · por red',
   asistente_ia: 'apagado',
   // Avisos: por dónde sale el aviso de que una regla se vence sin relevo.
   avisos_canal: 'ninguno',

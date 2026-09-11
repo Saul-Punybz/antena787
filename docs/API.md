@@ -22,7 +22,7 @@ asistente está abierto.
 | `GET /estado` | `{canal, modo, ahora, dia_emision, al_aire: plan_item\|null, siguiente, alarmas[], salidas[], version, entraste, instalacion_completa, hay_anunciantes}`. `alarmas` son objetos: `{"tipo","nivel":"bien"\|"aviso"\|"problema","texto","detalle","accion":{"texto","ruta"}}`. `hay_anunciantes` enciende la sexta entrada del menú (Anuncios). `salidas` son las salidas del canal con su estado (ver más abajo). `retorno_de_aire` y `control_manual` son de tandas de F2 que todavía no están y no se sirven. |
 | `GET /canal` · `PUT /canal` | El canal (modelo `Channel`). Cambiar `zona_horaria` u `hora_inicio_dia_emision` recalcula el plan. |
 | `GET /ajustes` · `PUT /ajustes` | Mapa clave→valor de `settings` (sin la clave de estación). Los secretos (`clave_tmdb`, `avisos_telegram_token`, `avisos_smtp_clave`) salen tapados con `••••••`; devolverlos tapados en un `PUT` no los cambia. |
-| `WS /ws` | Empuja `{"tipo":"estado", ...}` cada segundo y `{"tipo":"evento", ...}` en cada incidente o cambio de plan. El empujón lleva `salidas` igual que `GET /estado`. |
+| `WS /ws` | Empuja `{"tipo":"estado", ...}` cada segundo y `{"tipo":"evento", ...}` en cada incidente o cambio de plan. El empujón lleva `salidas`, `al_aire` y `siguiente` igual que `GET /estado`: las dos últimas van siempre, con `null` cuando no hay nada al aire. |
 
 ## Salidas — a dónde manda el canal su señal (§10, F2-46, F2-50, F2-114)
 
@@ -155,7 +155,7 @@ sobre la misma ficha, sin que nadie tenga que apretar nada.
 | | |
 |---|---|
 | `POST /importar/hoja` | `{"texto": "<pegado desde Sheets/Excel>"}` → `{"reglas_creadas": n, "titulos_creados": n, "relevos_propuestos": [...], "repeticiones_propuestas": [...], "filas_con_error": [{"fila": 12, "texto": "...", "motivo": "fin antes que inicio"}], "fechas_corridas": [...], "posibles_duplicados": [...], "avisos": [...], "titulos_sin_emparejar": [...], "resumen": "..."}`. Nunca rechaza la hoja entera. |
-| `POST /importar/confirmar-relevos` | `[{"regla": id, "releva_a": id}]`. |
+| `POST /importar/confirmar-relevos` | `[{"regla": id, "releva_a": id, "repite_a": id}]`. Es la propuesta de `relevos_propuestos` devuelta tal cual: cada `relevo_propuesto` viaja ya como `{"regla", "releva_a", "hora", "texto"}`, donde `regla` es la que entra y `releva_a` la que vence. |
 
 `titulos_creados` cuenta solo fichas de verdad: un título que quedó **por
 emparejar** no es una ficha del catálogo todavía y no se cuenta ahí, sino en

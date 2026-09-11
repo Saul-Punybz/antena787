@@ -85,7 +85,6 @@ export interface ElementoDelPlan {
   schedule_rule_id?: number | null
   // embebidos que el servidor añade para la interfaz
   titulo?: string
-  temporada?: number | null
   /** «T4 E1 · Nombre» tal como lo escribe el servidor (o un número en la demo). */
   episodio?: string | number | null
   /** «1 h 25 min», ya escrito por el servidor. */
@@ -174,9 +173,14 @@ export interface Regla {
   dias_restantes: number
   episodios_por_corrida: number
   releva_a: number | null
-  releva_a_titulo?: string | null
+  /**
+   * Cómo se llama el programa de `releva_a`, para la etiqueta «releva a …».
+   * El servidor lo manda solo cuando esa regla existe y tiene ficha.
+   */
+  releva_a_titulo?: string
   repite_a: number | null
-  repite_a_titulo?: string | null
+  /** Lo mismo para `repite_a`. */
+  repite_a_titulo?: string
   activa: boolean
 }
 
