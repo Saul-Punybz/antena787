@@ -59,8 +59,13 @@ principio 3 del PRD: `driver`, `códec`, `GOP`, `LKFS`, `transport stream`).
 Decisión del orquestador: **«Salidas» sale del menú principal** —configurar a
 dónde va la señal es instalación, no operación diaria— y se entra desde
 Ajustes, conservando la ruta. La jerga se arregla renombrando identificadores
-en la capa de interfaz (`driver` → `tipo`), no tocando la prueba. En marcha en
-`agente/jerga-y-menu`; **`main` no se pushea hasta que esté verde.**
+en la capa de interfaz (`driver` → `tipo`), dejando `driver: tipo` y
+`salida.driver` en la frontera de la API, y reescribiendo los tres textos que de
+verdad la enseñaban —incluido uno que decía «el driver no se le enseña a nadie»
+usando la palabra que prometía no usar—. Fusionado desde `agente/jerga-y-menu`.
+**Verificado en navegador** (Playwright, modo demo): menú de cinco entradas,
+entrada desde Ajustes, y crear / cambiar / borrar una salida, que era justo lo
+que nunca se había probado.
 
 **Lo que se corrigió del plan:** el **monitor de salida (F2-117) no cabe en una
 tanda de pantalla.** Pide servir la salida real por `http-ts`/HLS con menos de
@@ -87,6 +92,20 @@ El estimado de «1 tanda» de `docs/auditoria/07-desde-cero.md` §3 estaba mal.
 `~/Desktop/PunyOS/06_Claude/skills/obra/` (`/obra arranque` · `/obra mitad` ·
 `/obra cierre`) — ocho invariantes, precios por modelo, y las seis pasadas de
 verificación de cierre con sus comandos.
+
+**Nota sobre el presupuesto, para la próxima sesión de Claude Code.** Esta tanda
+se repartió con un techo de **$30 / 2 horas**, pero Saul está en la **membresía
+de Claude de $100 al mes**: ahí el uso va contra los límites del plan y **no se
+descuentan credits**. Los dólares de esta obra son **equivalencias en precio de
+lista de la API** —una vara para decidir cuántos agentes y de qué tamaño caben
+en una hora—, no un cargo. La vara sirve porque las dos formas de pagar se
+cobran sobre lo mismo, tokens, así que bajar de modelo en lo no esencial, dar
+rutas en vez de mandar a descubrir, no hacer fan-out de solo lectura y poner
+techo a la salida reducen las dos a la vez. El gasto real solo se ve en la
+cuenta (uso del Claude Console si es cuenta de API con credits, vista de uso del
+plan si es la suscripción); no lo inventes, y no le digas «gastamos $X de
+credits» estando en la membresía. Detalle en el skill,
+`references/presupuesto.md` § «Léelo primero».
 
 ## Dónde estamos
 
