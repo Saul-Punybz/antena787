@@ -9,6 +9,9 @@
 
 import { responder, suscribirDemo } from '../demo/servidor'
 import type {
+  AjustesDePreset,
+  Preset,
+  PresetsDelCanal,
   Ajustes,
   CambioDeMaterial,
   CambioDePlan,
@@ -144,6 +147,22 @@ export const api = {
     pedir<Salida>(`/salidas/${id}`, conCuerpo('PUT', cambio)),
   borrarSalida: (id: number) => pedir<SalidaBorrada>(`/salidas/${id}`, conCuerpo('DELETE')),
   ajustes: () => pedir<Ajustes>('/ajustes'),
+  // Los presets de preparación (esquema v10). `ajustes` viaja como objeto:
+  // la pantalla no serializa nada a mano.
+  presets: () => pedir<PresetsDelCanal>('/presets'),
+  crearPreset: (nombre: string, ajustes: AjustesDePreset) =>
+    pedir<Preset>('/presets', conCuerpo('POST', { nombre, ajustes })),
+  guardarPreset: (id: number, nombre: string, ajustes: AjustesDePreset) =>
+    pedir<Preset>(`/presets/${id}`, conCuerpo('PUT', { nombre, ajustes })),
+  borrarPreset: (id: number) =>
+    pedir<{ borrado: number; aviso: string }>(`/presets/${id}`, conCuerpo('DELETE', {})),
+  // Cambiar un preset no rehace solo lo ya convertido: hay que pedirlo.
+  volverAPreparar: (id: number) =>
+    pedir<{ encolado: number; texto: string }>(
+      `/material/${id}/volver-a-preparar`,
+      conCuerpo('POST', {}),
+    ),
+
   guardarAjustes: (a: Ajustes) => pedir<Ajustes>('/ajustes', conCuerpo('PUT', a)),
 
   instalacion: () => pedir<Instalacion>('/instalacion'),

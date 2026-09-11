@@ -673,3 +673,90 @@ func (a *App) HilosParaPreparar(ctx context.Context) int {
 	}
 	return 1
 }
+
+// ── el volumen sale del perfil regulatorio (pieza 1) ──────────────────
+
+// Volúmenes de referencia. No son gustos: son los números que cada sitio
+// espera de una estación, y por eso salen del perfil del canal y no de una
+// cajita donde alguien escribe lo que le parezca.
+const (
+	// VolumenFCC son los −24 LKFS que el CALM Act manda en Estados Unidos
+	// para televisión (y el ATSC A/85 detrás de él). Una Class A con licencia
+	// de la FCC emite a esto.
+	VolumenFCC = -24.0
+	// VolumenEBU son los −23 LUFS de la EBU R128, que es lo que espera casi
+	// todo el resto del mundo. Un decibelio de diferencia con el de la FCC,
+	// pero es el número correcto fuera de Estados Unidos.
+	VolumenEBU = -23.0
+	// VolumenInternet son los −16 LUFS de las plataformas de streaming: más
+	// alto, porque se escucha en un teléfono y no en una sala.
+	VolumenInternet = -16.0
+	// PicoMaximo es el pico verdadero que no se pasa, en dBTP. Lo mismo en
+	// todos los perfiles: es lo que impide que el sonido recorte.
+	PicoMaximo = -2.0
+)
+
+// VolumenDelPerfil dice a cuánto se normaliza el material de este canal, y
+// **por qué** — esa frase se le enseña a la persona, porque un número solo no
+// dice si se puede tocar o no.
+//
+// Sale del perfil regulatorio del canal, no de un ajuste suelto: en Estados
+// Unidos el CALM Act manda −24 LKFS para televisión, así que dejar una cajita
+// abierta sería darle a quien opera una forma fácil de meterse en un problema
+// legal sin enterarse. Se puede cambiar con un preset —una emisora de otro
+// país tiene otro número— pero entonces el aviso lo dice.
+func (a *App) VolumenDelPerfil(ctx context.Context) (lkfs, pico float64, porque string) {
+	if a.setting(ctx, KeyPlannedMode) == "internet" {
+		return VolumenInternet, PicoMaximo,
+			"−16 LUFS es lo que esperan las plataformas de internet: se escucha en un teléfono, no en una sala."
+	}
+	ch, err := a.Store.Channel.Get(ctx, a.ChannelID)
+	if err == nil && ch.RegProfile == "us-fcc" {
+		return VolumenFCC, PicoMaximo,
+			"−24 LKFS es lo que la FCC espera de una estación con licencia en Estados Unidos (CALM Act). Se puede cambiar, pero conviene saber que se está cambiando."
+	}
+	return VolumenEBU, PicoMaximo,
+		"−23 LUFS es el estándar de la EBU (R128), que es lo que espera casi todo el mundo fuera de Estados Unidos."
+}
+
+// AvisoDeVolumen contesta si un volumen escrito a mano se sale de lo que el
+// perfil del canal espera, y con qué frase decirlo. Cadena vacía = no hay nada
+// que avisar. Nunca prohíbe: el cumplimiento se ofrece, no se exige.
+func (a *App) AvisoDeVolumen(ctx context.Context, pedido float64) string {
+	esperado, _, _ := a.VolumenDelPerfil(ctx)
+	if pedido == esperado {
+		return ""
+	}
+	ch, err := a.Store.Channel.Get(ctx, a.ChannelID)
+	if err == nil && ch.RegProfile == "us-fcc" {
+		return fmt.Sprintf(
+			"Estás poniendo %.0f LKFS y la FCC espera %.0f de una estación con licencia en Estados Unidos (CALM Act). Tú decides; solo que quede dicho.",
+			pedido, esperado)
+	}
+	return fmt.Sprintf("Estás poniendo %.0f y lo normal para tu perfil es %.0f.", pedido, esperado)
+}
+
+// VolverAPreparar manda un archivo otra vez a la cola de preparación y
+// devuelve, en una frase, qué va a pasar. Hace falta porque cambiar un preset
+// no rehace solo lo que ya estaba convertido: lo hecho se queda como estaba
+// hasta que alguien lo pida.
+//
+// No convierte nada aquí: encola. La cola ordena por hora de aire y se aparta
+// cuando el aire sufre, así que pedir esto nunca puede costarle la señal a
+// nadie (ADR 0008). Y el archivo **no se saca del aire mientras tanto**: sigue
+// puesta la versión que ya estaba preparada hasta que la nueva esté lista, que
+// es lo mismo que se hace con la guía.
+func (a *App) VolverAPreparar(ctx context.Context, assetID int64) (string, error) {
+	asset, err := a.Store.Media.Get(ctx, assetID)
+	if err != nil {
+		return "", err
+	}
+	asset.NormalizeState = ingest.NormalizePending
+	if err := a.Store.Media.Update(ctx, &asset); err != nil {
+		return "", err
+	}
+	a.Queue.Enqueue(assetID, a.airsAt(ctx, assetID))
+	a.Publish("normalizacion", "encolado",
+		"se va a volver a preparar "+asset.Path+" con los ajustes de ahora")
+	return "queda en la fila; sale al aire con lo que tiene hasta que la nueva versión esté lista", nil
+}

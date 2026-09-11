@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"antena787/internal/model"
 )
@@ -470,4 +471,130 @@ func (r *TitleRepo) NombreDelArchivo(ctx context.Context, assetID int64) (string
 		out += " " + epNombre
 	}
 	return out, nil
+}
+
+// ── los presets de preparación (esquema v10) ──────────────────────────
+
+// PresetRepo lee y escribe los presets: cómo quiere el dueño del canal que
+// suene y se vea su material.
+type PresetRepo struct{ db *sql.DB }
+
+const presetCols = `id, channel_id, nombre, ajustes, creado`
+
+func scanPreset(sc interface{ Scan(...any) error }) (model.Preset, error) {
+	var p model.Preset
+	var canal sql.NullInt64
+	var creado string
+	if err := sc.Scan(&p.ID, &canal, &p.Name, &p.Settings, &creado); err != nil {
+		return model.Preset{}, err
+	}
+	p.ChannelID = ptrInt64(canal)
+	p.Created, _ = time.Parse(time.RFC3339, creado)
+	return p, nil
+}
+
+// List devuelve los presets del canal, por nombre.
+func (r *PresetRepo) List(ctx context.Context, channelID int64) ([]model.Preset, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT `+presetCols+`
+		FROM preset WHERE channel_id IS NULL OR channel_id = ? ORDER BY nombre`, channelID)
+	if err != nil {
+		return nil, translate("listar los presets", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := []model.Preset{}
+	for rows.Next() {
+		p, err := scanPreset(rows)
+		if err != nil {
+			return nil, translate("listar los presets", err)
+		}
+		out = append(out, p)
+	}
+	return out, translate("listar los presets", rows.Err())
+}
+
+// Get busca un preset por id.
+func (r *PresetRepo) Get(ctx context.Context, id int64) (model.Preset, error) {
+	row := r.db.QueryRowContext(ctx, `SELECT `+presetCols+` FROM preset WHERE id = ?`, id)
+	p, err := scanPreset(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return model.Preset{}, fmt.Errorf("preset %d: %w", id, ErrNotFound)
+	}
+	return p, translate("leer el preset", err)
+}
+
+// Insert crea un preset y deja el id en p.
+func (r *PresetRepo) Insert(ctx context.Context, p *model.Preset) error {
+	if p == nil {
+		return errors.New("hace falta el preset")
+	}
+	if p.Created.IsZero() {
+		p.Created = time.Now().UTC()
+	}
+	if strings.TrimSpace(p.Settings) == "" {
+		p.Settings = "{}"
+	}
+	res, err := r.db.ExecContext(ctx, `
+		INSERT INTO preset (channel_id, nombre, ajustes, creado) VALUES (?, ?, ?, ?)`,
+		nullInt64(p.ChannelID), p.Name, p.Settings, p.Created.Format(time.RFC3339))
+	if err != nil {
+		return translate("guardar el preset", err)
+	}
+	p.ID, _ = res.LastInsertId()
+	return nil
+}
+
+// Update guarda los cambios de un preset.
+func (r *PresetRepo) Update(ctx context.Context, p model.Preset) error {
+	if strings.TrimSpace(p.Settings) == "" {
+		p.Settings = "{}"
+	}
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE preset SET nombre = ?, ajustes = ? WHERE id = ?`, p.Name, p.Settings, p.ID)
+	if err != nil {
+		return translate("guardar el preset", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("preset %d: %w", p.ID, ErrNotFound)
+	}
+	return nil
+}
+
+// Delete borra un preset y suelta a quien lo estuviera usando: un archivo o
+// un título que se quede sin preset **hereda del nivel de arriba**, que es lo
+// que ya pasaba antes de que ese preset existiera. Borrar no puede dejar nada
+// apuntando a un preset que ya no está.
+func (r *PresetRepo) Delete(ctx context.Context, id int64) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return translate("borrar el preset", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, q := range []string{
+		`UPDATE channel     SET preset_id = NULL WHERE preset_id = ?`,
+		`UPDATE title       SET preset_id = NULL WHERE preset_id = ?`,
+		`UPDATE media_asset SET preset_id = NULL WHERE preset_id = ?`,
+	} {
+		if _, err := tx.ExecContext(ctx, q, id); err != nil {
+			return translate("borrar el preset", err)
+		}
+	}
+	res, err := tx.ExecContext(ctx, `DELETE FROM preset WHERE id = ?`, id)
+	if err != nil {
+		return translate("borrar el preset", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("preset %d: %w", id, ErrNotFound)
+	}
+	return tx.Commit()
+}
+
+// EnUso dice a cuántas cosas se les está aplicando este preset. Es lo que la
+// pantalla enseña antes de dejar borrarlo: «esto lo usan 12 programas».
+func (r *PresetRepo) EnUso(ctx context.Context, id int64) (canal, titulos, archivos int, err error) {
+	q := `SELECT
+		(SELECT COUNT(*) FROM channel     WHERE preset_id = ?),
+		(SELECT COUNT(*) FROM title       WHERE preset_id = ?),
+		(SELECT COUNT(*) FROM media_asset WHERE preset_id = ?)`
+	err = r.db.QueryRowContext(ctx, q, id, id, id).Scan(&canal, &titulos, &archivos)
+	return canal, titulos, archivos, translate("contar dónde se usa el preset", err)
 }

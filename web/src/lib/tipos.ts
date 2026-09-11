@@ -818,3 +818,55 @@ export interface ParamsHTTPTS {
   bitrate_mux_kbs?: number
   audio?: string
 }
+
+// ── los presets de preparación (esquema v10) ──────────────────────────
+
+/**
+ * Las perillas de un preset. **Todo es opcional a propósito**: lo que no esté
+ * escrito se hereda del nivel de arriba —archivo manda sobre título, y título
+ * sobre canal—, y lo que no esté en ninguno cae en los valores de fábrica.
+ * Por eso nada lleva valor por defecto aquí: «cero» y «no dicho» son cosas
+ * distintas.
+ */
+export interface AjustesDePreset {
+  /** Deja el archivo como viene: no se convierte ni se vuelve a comprimir. */
+  no_tocar?: boolean
+  /** Corrige un archivo que viene bajo o alto, además de la normalización. */
+  volumen_relativo_db?: number
+  /**
+   * A cuánto se normaliza. **Ojo con éste:** sale del perfil regulatorio del
+   * canal y cambiarlo a mano viene con aviso — en Estados Unidos el CALM Act
+   * manda −24 LKFS para televisión.
+   */
+  objetivo_volumen_lkfs?: number
+  recorte_cabeza_ms?: number
+  recorte_cola_ms?: number
+  calidad?: 'alta' | 'normal' | 'baja'
+  /** Cada cuántos segundos va un cuadro clave. Uno es lo de fábrica. */
+  gop_segundos?: number
+  codec_video?: string
+  codec_audio?: string
+  bitrate_audio?: string
+}
+
+/** Un preset como sale del servidor, con dónde se está usando. */
+export interface Preset {
+  id: number
+  nombre: string
+  ajustes: AjustesDePreset
+  creado: Instante
+  /** Se le aplica al canal entero. */
+  en_canal: boolean
+  /** A cuántos programas y a cuántos archivos sueltos se les aplica. */
+  titulos: number
+  archivos: number
+}
+
+/** Cuerpo de `GET /presets`: los presets y el volumen que gobierna el canal. */
+export interface PresetsDelCanal {
+  presets: Preset[]
+  volumen_lkfs: number
+  pico_db: number
+  /** Por qué es ése y no otro, ya escrito para que lo lea una persona. */
+  volumen_porque: string
+}

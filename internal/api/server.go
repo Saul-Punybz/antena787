@@ -104,6 +104,18 @@ func (s *Server) routes() {
 	api("PUT /api/v1/salidas/{id}", s.salidasPut)
 	api("DELETE /api/v1/salidas/{id}", s.salidasDelete)
 
+	// Los presets de preparación: cómo quiere el dueño del canal que suene y
+	// se vea su material. Se aplican en tres niveles —canal, título, archivo—
+	// y gana el más específico (esquema v10).
+	api("GET /api/v1/presets", s.presetsList)
+	api("POST /api/v1/presets", s.presetsPost)
+	api("PUT /api/v1/presets/{id}", s.presetsPut)
+	api("DELETE /api/v1/presets/{id}", s.presetsDelete)
+	// Volver a preparar: cambiar un preset no rehace solo lo que ya estaba
+	// convertido, así que hace falta poder pedirlo. Se apoya en la cola, que
+	// ordena por hora de aire y se aparta cuando el aire sufre.
+	api("POST /api/v1/material/{id}/volver-a-preparar", s.volverAPreparar)
+
 	// Reglas y plan
 	api("GET /api/v1/reglas", s.reglasList)
 	api("POST /api/v1/reglas", s.reglasPost)
