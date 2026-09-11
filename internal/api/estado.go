@@ -14,19 +14,22 @@ import (
 
 // estadoBody es lo que contesta GET /estado (docs/API.md).
 type estadoBody struct {
-	Canal        model.Channel `json:"canal"`
-	Modo         string        `json:"modo"`
-	Ahora        time.Time     `json:"ahora"`
-	DiaEmision   model.Day     `json:"dia_emision"`
-	AlAire       *planRow      `json:"al_aire"`
-	Siguiente    *planRow      `json:"siguiente"`
-	Alarmas      []app.Alarma  `json:"alarmas"`
-	Version      string        `json:"version"`
-	Instalacion  bool          `json:"necesita_instalacion,omitempty"`
-	Completa     bool          `json:"instalacion_completa"`
-	FFmpeg       bool          `json:"ffmpeg"`
-	GuiaGenerada *time.Time    `json:"guia_generada,omitempty"`
-	Entraste     bool          `json:"entraste"`
+	Canal      model.Channel `json:"canal"`
+	Modo       string        `json:"modo"`
+	Ahora      time.Time     `json:"ahora"`
+	DiaEmision model.Day     `json:"dia_emision"`
+	AlAire     *planRow      `json:"al_aire"`
+	Siguiente  *planRow      `json:"siguiente"`
+	Alarmas    []app.Alarma  `json:"alarmas"`
+	// Salidas es a dónde está saliendo la señal, con el estado que dejó cada
+	// driver (F2-46, F2-49). Al aire lo pinta con un punto por salida.
+	Salidas      []app.SalidaEnPantalla `json:"salidas"`
+	Version      string                 `json:"version"`
+	Instalacion  bool                   `json:"necesita_instalacion,omitempty"`
+	Completa     bool                   `json:"instalacion_completa"`
+	FFmpeg       bool                   `json:"ffmpeg"`
+	GuiaGenerada *time.Time             `json:"guia_generada,omitempty"`
+	Entraste     bool                   `json:"entraste"`
 	// HayAnunciantes enciende la sexta entrada del menú, Anuncios: sin un
 	// solo anunciante registrado el menú se queda en cinco (PRD §13, F1-57).
 	HayAnunciantes bool `json:"hay_anunciantes"`
@@ -59,6 +62,7 @@ func (s *Server) estado(w http.ResponseWriter, r *http.Request) {
 		FFmpeg:      s.App.FFmpeg != "" && s.App.FFprobe != "",
 	}
 	body.HayAnunciantes = s.hayAnunciantes(ctx)
+	body.Salidas = []app.SalidaEnPantalla{}
 	if al := s.App.AlarmaSubtitulos(ctx); al != nil {
 		body.Alarmas = append(body.Alarmas, *al)
 	}
@@ -70,9 +74,13 @@ func (s *Server) estado(w http.ResponseWriter, r *http.Request) {
 	}
 	_, body.Entraste = s.author(r)
 
-	// El plan de ahora mismo solo se enseña a quien entró: es información
-	// del canal, no una tarjeta de presentación.
+	// El plan de ahora mismo y a dónde sale la señal solo se enseñan a quien
+	// entró: la dirección del multiplexor es información del canal, no una
+	// tarjeta de presentación.
 	if body.Entraste {
+		if salidas := s.App.SalidasDelCanal(ctx); salidas != nil {
+			body.Salidas = salidas
+		}
 		items, err := s.App.Store.Plan.ListRange(ctx, s.App.ChannelID, now.Add(-6*time.Hour), now.Add(12*time.Hour))
 		if err == nil {
 			for i := range items {

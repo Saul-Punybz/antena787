@@ -119,6 +119,48 @@ func (r *OutputRepo) List(ctx context.Context, channelID int64) ([]model.Output,
 	return out, translate("listar las salidas", rows.Err())
 }
 
+// Get devuelve una salida por su id.
+func (r *OutputRepo) Get(ctx context.Context, id int64) (model.Output, error) {
+	row := r.db.QueryRowContext(ctx, `SELECT `+outputCols+` FROM output WHERE id = ?`, id)
+	o, err := scanOutput(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return model.Output{}, fmt.Errorf("salida %d: %w", id, ErrNotFound)
+	}
+	if err != nil {
+		return model.Output{}, translate("leer la salida", err)
+	}
+	return o, nil
+}
+
+// Delete borra una salida. Una salida que no existe es un error, para que la
+// pantalla pueda decir «eso ya no está».
+func (r *OutputRepo) Delete(ctx context.Context, id int64) error {
+	res, err := r.db.ExecContext(ctx, `DELETE FROM output WHERE id = ?`, id)
+	if err != nil {
+		return translate("borrar la salida", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("salida %d: %w", id, ErrNotFound)
+	}
+	return nil
+}
+
+// SetConnection guarda cómo le va a una salida: si está saliendo, cuántas
+// veces se ha reintentado y el último error. Lo escribe el driver de salida
+// desde su propia goroutine (F2-48/49), así que no toca nada más de la fila.
+func (r *OutputRepo) SetConnection(ctx context.Context, id int64, estado string, reintentos int, ultimoError string) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE output SET estado_conexion = ?, reintentos = ?, ultimo_error = ? WHERE id = ?`,
+		estado, reintentos, ultimoError, id)
+	if err != nil {
+		return translate("guardar el estado de la salida", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("salida %d: %w", id, ErrNotFound)
+	}
+	return nil
+}
+
 // Upsert inserta la salida si no tiene id y la actualiza si lo tiene. Al
 // insertar deja el id nuevo en o.
 func (r *OutputRepo) Upsert(ctx context.Context, o *model.Output) error {
@@ -165,6 +207,28 @@ func (r *OutputRepo) Upsert(ctx context.Context, o *model.Output) error {
 // DeckRepo son las cuatro capas del plan: manual, comercial, programa y
 // relleno, en ese orden de prioridad.
 type DeckRepo struct{ db *sql.DB }
+
+// List devuelve los cuatro decks de un canal, en orden de prioridad: manual,
+// comercial, programa, relleno. Es lo que el motor necesita para saber quién
+// tiene el aire cuando dos bloques quieren salir a la vez (PRD §9 paso 4).
+func (r *DeckRepo) List(ctx context.Context, channelID int64) ([]model.Deck, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, channel_id, tipo, prioridad FROM deck WHERE channel_id = ? ORDER BY prioridad, id`, channelID)
+	if err != nil {
+		return nil, translate("listar los decks", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []model.Deck
+	for rows.Next() {
+		var d model.Deck
+		if err := rows.Scan(&d.ID, &d.ChannelID, &d.Kind, &d.Priority); err != nil {
+			return nil, translate("listar los decks", err)
+		}
+		out = append(out, d)
+	}
+	return out, translate("listar los decks", rows.Err())
+}
 
 // ByKind devuelve el deck de un canal por su tipo.
 func (r *DeckRepo) ByKind(ctx context.Context, channelID int64, kind model.DeckKind) (model.Deck, error) {

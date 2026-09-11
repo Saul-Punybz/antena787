@@ -134,6 +134,9 @@ func (s *Server) pushStatus(ws *wsConn, r *http.Request) error {
 		"dia_emision": ch.BroadcastDay(now),
 		"alarmas":     alarmas,
 		"version":     s.App.Version,
+		// A dónde está saliendo, con el estado de cada salida: la pantalla de
+		// Al aire lo repinta con cada empujón (F2-46, F2-49).
+		"salidas": s.App.SalidasDelCanal(ctx),
 		// El menú lee esto en cada empujón, no solo en el primer /estado: si
 		// no fuera, la sexta entrada aparecería y desaparecería sola.
 		"hay_anunciantes": s.hayAnunciantes(ctx),

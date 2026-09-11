@@ -610,16 +610,34 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   14:00:00 · Cuando el reloj llega a las 14:00:00 · Entonces el aire pasa al
   deck comercial en ese instante, sin esperar a que el `plan_item` de
   programa termine su propio corte natural.
+  Construido en T2 (10 sept 2026): `internal/app/motor.go:queToca` elige por
+  prioridad de deck (`prioridadDe`, de la tabla `deck`), y `corteDe` corta el
+  programa en el instante del corte comercial en vez de en su fin. Prueba:
+  `TestF2_06y07ElCorteDeLasDosEntraEnPuntoYElProgramaReanudaDondeIba`.
 - **F2-07** [AUTO] — Dado un espacio de 30 minutos compuesto por 24 minutos
   de programa (origen archivo) y 6 minutos de cortes en las marcas
   `marcas_de_corte_ms` del archivo · Cuando el motor llega a una de esas
   marcas · Entonces **pausa** el programa, reproduce el corte, y **reanuda
   el programa exactamente donde iba** al terminar el corte.
+  Construido en T2 (10 sept 2026): `internal/app/motor.go:tomaElAire` y
+  `cierraLoQueSalia` llevan la cuenta de por dónde va cada bloque sobre su
+  propia línea de tiempo, y `posicionDe` devuelve ese punto como `Clip.SeekMs`
+  al volver (no la hora de pared). Dos cortes seguidos acumulan. Prueba:
+  `TestF2_06y07ElCorteDeLasDosEntraEnPuntoYElProgramaReanudaDondeIba`.
+  Pendiente menor: las marcas vienen hoy como `plan_item` del deck comercial
+  a su hora; sacar los cortes de `media_asset.marcas_de_corte_ms` al resolver
+  es trabajo del resolver, no del motor.
 - **F2-08** [AUTO] — Dado un `plan_item` cuyo origen es un `live_source` en
   curso, y un corte pautado dentro de esa misma franja · Cuando llega la
   hora del corte · Entonces la señal en vivo **sigue corriendo por debajo**
   (no se pausa) y, al terminar el corte, el aire regresa a la señal en el
   **instante actual** de esa señal, no al punto en que se interrumpió.
+  Construido en T2 (10 sept 2026): `internal/app/motor.go:posicionDe` no
+  acumula avance de un `plan_item` cuyo origen es `live_source` —se vuelve a
+  la señal en su instante actual— y `corteDe` deja el fin del bloque donde
+  estaba: no se extiende. Prueba:
+  `TestF2_08ElVivoNoSePausaYElBloqueNoSeExtiende` (el driver de vivo, que abre
+  la señal de verdad, es T4).
 - **F2-09** [AUTO] — Dado que termina un `plan_item` de programa y no hay
   relleno cargado para el canal · Cuando el motor necesita producir salida
   para el siguiente instante · Entonces cae a **cartel (Slate)**, nunca a
@@ -883,25 +901,57 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   transmisor y salida a archivo simultáneamente · Cuando el motor produce
   su flujo continuo · Entonces ambas salidas reciben la señal al mismo
   tiempo, cada una con su propio estado de conexión.
+  Construido en T2 (10 sept 2026): `internal/drivers/salida` (driver `udp-ts`
+  y driver `archivo`, contrato `Driver{Abrir, Vigilar}`),
+  `internal/app/salidas.go:App.abrirSalidas` —que las abre todas contra el
+  **mismo** encoder persistente— y `internal/engine/encoder.go:Output.argsMPEG2TS`.
+  Prueba de punta a punta con ffmpeg de verdad, leyendo el UDP en la propia
+  prueba: `TestF2_46ElTSQueSalePorUDPCumpleLoQueElMultiplexorExige` (4.000 Mb/s
+  ±0.00 %, PCR máx 30.5 ms, CC 0, programa 7, tsid 99, PMT 480, video 512,
+  audio 513) y `TestF2_47y49CadaSalidaConSuVolumenYUnaRotaNoCallaALasDemas`.
 - **F2-47** [AUTO] — Dado el mismo contenido saliendo por dos salidas, una
   configurada a −24 LKFS (transmisor, perfil `us-fcc`) y otra a −16 LUFS
   (internet) · Cuando se mide el volumen de cada salida por separado ·
   Entonces cada una está en su propio objetivo, no en un volumen único
   compartido.
+  Construido en T2 (10 sept 2026): `internal/drivers/salida:Ganancia`
+  (`objetivo_volumen` de la salida menos el volumen al que está normalizada la
+  biblioteca) y `engine.Output.GainDB`, que el encoder aplica con un
+  `volume=` por salida. Pruebas: `TestCadaSalidaVaASuPropioVolumen` y
+  `TestF2_47y49CadaSalidaConSuVolumenYUnaRotaNoCallaALasDemas`.
 - **F2-48** [AUTO] — Dado una salida de internet (ej. RTMP a un servidor) que
   se desconecta · Cuando el driver de salida detecta la caída · Entonces
   reintenta reconectar automáticamente y sin intervención humana, con
   **espera progresiva de 1, 2, 4… segundos y tope de 60**, y cada intento
   queda contabilizado en `reintentos` con su `ultimo_error`. El backoff nunca
   se rinde ni deja de reintentar.
+  Construido a medias en T2 (10 sept 2026), solo lo que toca a `udp-ts`: la
+  espera progresiva (`salida.EsperaDe`: 1, 2, 4… tope 60 s) y el conteo en
+  `estado_conexion`/`reintentos`/`ultimo_error` (`salida.vigilar` →
+  `store.OutputRepo.SetConnection`). Una salida `udp-ts` a un multiplexor no
+  reconecta por su cuenta —el UDP no sabe si alguien escucha (PRD §9 paso 4)—:
+  lo que se reintenta es el encoder. La reconexión de verdad, la de las
+  salidas de internet, sigue siendo **T7**. Prueba:
+  `TestElVigilanteDejaEscritoComoLeVaALaSalida`.
 - **F2-49** [AUTO] — Dado dos salidas activas del mismo canal, y una de ellas
   cae · Cuando se mide la continuidad de la salida que **no** cayó ·
   Entonces sigue produciéndose sin interrupción ni degradación mientras la
   otra reconecta.
+  Construido en T2 (10 sept 2026): `internal/app/salidas.go:App.abrirSalidas`
+  salta la salida que no abre —`salidaNoAbre` la deja apuntada con su motivo en
+  cristiano y publica el aviso— y el canal sale por las demás; al ser ramas del
+  mismo encoder, ninguna puede cortar a otra. Prueba:
+  `TestF2_47y49CadaSalidaConSuVolumenYUnaRotaNoCallaALasDemas`.
 - **F2-50** [AUTO] — Dado un canal recién configurado sin salida elegida
   todavía · Cuando se listan los drivers de salida disponibles · Entonces
   `udp-ts` está entre los disponibles desde F2 (confirmado como el primero
   que CAtv necesita, §25).
+  Construido en T2 (10 sept 2026): `salida.Disponibles` (con nombre de
+  pantalla y explicación, nunca la clave sola) servido en
+  `GET /api/v1/salidas` → `drivers_disponibles`
+  (`internal/api/salidas.go:salidasList`). Pruebas:
+  `TestUnDriverQueNoExisteTodaviaSeDice` y
+  `TestLasSalidasSeEscribenSeCambianYSeQuitan`.
 
 ### Paridad con VLC: los huecos que el diseño no tenía (§10, `docs/VLC-PARIDAD.md`)
 
@@ -913,6 +963,16 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   disponible sin cambiar de driver — la pantalla pregunta en lenguaje llano
   **"¿a un receptor o a un grupo?"**, nunca `multicast`/`TTL` como flags
   sueltos (`docs/VLC-PARIDAD.md`, §1).
+  Construido en T2 (10 sept 2026): el mismo driver `udp-ts`
+  (`internal/drivers/salida/udpts.go`) reconoce el grupo por la propia
+  dirección (`esGrupo`), le pone 1 salto si nadie escribió cuántos, y
+  `internal/engine/encoder.go:Output.urlUDP` saca el `ttl=` en la dirección
+  udp. La frase que ve la persona es «al grupo 239.1.1.1:1234, 4 salto(s) de
+  red», no un flag. Pruebas:
+  `TestElMismoDriverMandaAUnGrupoMulticastConSuTTL`,
+  `TestLosArgumentosDelMultiplexorSonExactos` y
+  `TestLasSalidasSeEscribenSeCambianYSeQuitan`. **Falta la prueba en la red de
+  CAtv**: aquí se verificó con un receptor en la propia máquina.
 - **F2-115** [AUTO] — Dado un canal con salida `http-ts` levantada en un
   puerto (por ejemplo `:8080/stream.ts`) · Cuando dos clientes distintos
   —un VLC remoto y un segundo lector— se conectan a la vez a esa URL ·

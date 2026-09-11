@@ -3,10 +3,14 @@
 // aire, y la fuente que traduce el plan a clips. Es la tanda T1 de
 // docs/f2/PLAN-F2.md.
 //
-// Un solo carril: aquí todavía no hay decks ni prioridad —eso es T2—. Lo que
-// hay es la promesa del §9 paso 4 del PRD: sale lo que dice el plan, y cuando
-// el plan no tiene nada sale el relleno; si no hay relleno, el cartel de la
-// estación. Nunca negro, nunca silencio.
+// Desde T2 hay cuatro carriles, los decks del §9 paso 4 del PRD, y en cada
+// instante el aire lo tiene el de más prioridad que tenga algo que poner:
+// manual > comercial > programa > relleno. Un corte pautado a las 14:00:00
+// entra a esa hora exacta, el programa que venía de un archivo **se pausa y
+// reanuda donde iba** (F2-06, F2-07), y una señal en vivo no se pausa: sigue
+// corriendo por debajo y se vuelve a ella en su instante actual (F2-08).
+// Cuando ningún deck tiene nada sale el relleno; si no hay relleno, el cartel
+// de la estación. Nunca negro, nunca silencio.
 //
 // En modo sombra este archivo no hace nada más que decirlo una vez: F1 no
 // cambia de conducta porque F2 exista.
@@ -14,7 +18,6 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -151,10 +154,11 @@ func (a *App) correrMotor(ctx context.Context, ch model.Channel) error {
 		return a.FFmpegErr
 	}
 	formato := FormatOf(ch.FormatProfile)
-	salidas, err := a.salidasDelMotor(ctx)
+	salidas, err := a.abrirSalidas(ctx, formato)
 	if err != nil {
 		return err
 	}
+	defer salidas.cerrar()
 
 	// Lo que quedó cargado de la vida anterior vuelve a planeado: el motor
 	// recalcula desde el instante real y entra al archivo por donde toca,
@@ -167,10 +171,15 @@ func (a *App) correrMotor(ctx context.Context, ch model.Channel) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	enc, err := engine.StartEncoder(ctx, a.FFmpeg, formato, salidas)
+	// Los vigilantes de las salidas arrancan antes que el encoder: si el
+	// encoder no llega a encender, cada salida queda con su motivo escrito.
+	salidas.vigilar(ctx)
+	enc, err := engine.StartEncoder(ctx, a.FFmpeg, formato, salidas.outs)
 	if err != nil {
+		salidas.avisar(err)
 		return fmt.Errorf("no se pudo encender la salida: %w", err)
 	}
+	salidas.avisar(nil)
 	// Si el encoder se muere por su cuenta, el servidor de cuadros no puede
 	// seguir escribiendo a un caño roto: se para y quien llama lo relanza.
 	// El vigilante suelta enc.Done() en cuanto se cancela el contexto, porque
@@ -196,7 +205,7 @@ func (a *App) correrMotor(ctx context.Context, ch model.Channel) error {
 		defer func() { _ = f.Close() }()
 	}
 
-	a.Publish("motor", "aire", fmt.Sprintf("el canal está al aire por %s", nombresDeSalidas(salidas)))
+	a.Publish("motor", "aire", fmt.Sprintf("el canal está al aire %s", salidas.texto()))
 	runErr := srv.Run(ctx, 0)
 	cancel()
 	<-vigilado
@@ -204,8 +213,10 @@ func (a *App) correrMotor(ctx context.Context, ch model.Channel) error {
 	case err := <-muerto:
 		// El encoder ya no está: no hay nada que cerrar bien.
 		if err != nil {
+			salidas.avisar(err)
 			return fmt.Errorf("el encoder murió: %w", err)
 		}
+		salidas.avisar(errors.New("el encoder terminó solo"))
 		return errors.New("el encoder terminó solo")
 	default:
 	}
@@ -229,61 +240,6 @@ func (a *App) registroDelMotor() (*os.File, error) {
 	return os.OpenFile(filepath.Join(dir, nombre), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 }
 
-// ── a dónde sale ──────────────────────────────────────────────────────
-
-// salidasDelMotor traduce las salidas configuradas del canal a lo que el
-// encoder entiende. En T1 hay una sola y es la misma que midió la F0: MPEG-2
-// TS por UDP para el multiplexor, o a un archivo. El traductor de verdad
-// —`internal/drivers/salida`, con PIDs, programa, multicast y TTL— es T2.
-func (a *App) salidasDelMotor(ctx context.Context) ([]engine.Output, error) {
-	salidas, err := a.Store.Output.List(ctx, a.ChannelID)
-	if err != nil {
-		return nil, err
-	}
-	for _, s := range salidas {
-		out := engine.Output{Name: s.Name, Kind: "mpeg2-ts", VideoKbs: 8000, MuxKbs: 10000}
-		var p struct {
-			Destino string `json:"destino"`
-			Ruta    string `json:"ruta"`
-		}
-		if s.Params != "" {
-			_ = json.Unmarshal([]byte(s.Params), &p)
-		}
-		switch {
-		case p.Destino != "":
-			out.UDP = p.Destino
-		case p.Ruta != "":
-			out.File = p.Ruta
-		default:
-			continue // una salida sin destino no es una salida
-		}
-		return []engine.Output{out}, nil
-	}
-
-	// Nadie ha dicho todavía a qué dirección va la señal. En vez de no
-	// emitir —y dejar el canal callado sin explicar por qué— se graba en la
-	// carpeta de datos y se dice. La retención de esa grabación es T7.
-	ruta := filepath.Join(a.DataDir, "aire", fmt.Sprintf("aire-%s.ts", a.Now().Format("20060102-1504")))
-	if err := os.MkdirAll(filepath.Dir(ruta), 0o755); err != nil {
-		return nil, err
-	}
-	a.Publish("motor", "salida", "todavía no me has dicho a qué dirección mandar la señal: por ahora se graba en "+ruta)
-	return []engine.Output{{Name: "archivo", Kind: "mpeg2-ts", File: ruta, VideoKbs: 8000, MuxKbs: 10000}}, nil
-}
-
-// nombresDeSalidas dice a dónde está saliendo, en cristiano.
-func nombresDeSalidas(outs []engine.Output) string {
-	for _, o := range outs {
-		if o.UDP != "" {
-			return o.UDP
-		}
-		if o.File != "" {
-			return o.File
-		}
-	}
-	return "ninguna salida"
-}
-
 // ── la fuente: del plan a clips ───────────────────────────────────────
 
 // fuenteDelPlan es el engine.ClipSource de verdad. Contesta tres preguntas y
@@ -298,9 +254,17 @@ type fuenteDelPlan struct {
 	cartel  engine.Clip // el cartel de la estación, hecho al arrancar el motor
 
 	mu      sync.Mutex
-	cargado map[int64]bool      // plan_item ya marcado como cargado
-	fallos  map[int64]time.Time // último fallo por media_asset (F2-12)
-	dicho   map[string]bool     // lo que ya se dijo una vez
+	cargado map[int64]bool          // plan_item ya marcado como cargado
+	fallos  map[int64]time.Time     // último fallo por media_asset (F2-12)
+	dicho   map[string]bool         // lo que ya se dijo una vez
+	decks   map[int64]model.Deck    // deck_id → deck, para saber quién manda
+	avance  map[int64]time.Duration // por dónde va cada bloque que ya salió (F2-07)
+	// Quién tiene el aire ahora mismo, para saber cuándo se pausa un bloque
+	// y cuándo cambia de deck.
+	sirviendo int64
+	desde     time.Time     // instante del aire en que lo tomó
+	posDesde  time.Duration // por dónde iba el bloque cuando lo tomó
+	deck      model.DeckKind
 }
 
 // nuevaFuenteDelPlan deja la fuente lista, con un cartel de la estación a
@@ -312,13 +276,42 @@ func (a *App) nuevaFuenteDelPlan(ctx context.Context, formato engine.Format) *fu
 		cargado: map[int64]bool{},
 		fallos:  map[int64]time.Time{},
 		dicho:   map[string]bool{},
+		decks:   map[int64]model.Deck{},
+		avance:  map[int64]time.Duration{},
+	}
+	// Los cuatro decks del canal. Si la base no los tiene —una base a medio
+	// migrar—, el motor sigue: sin decks, todo se trata como programa.
+	if decks, err := a.Store.Deck.List(ctx, a.ChannelID); err == nil {
+		for _, d := range decks {
+			f.decks[d.ID] = d
+		}
 	}
 	f.cartel = a.cartelALaMano(ctx, formato)
 	return f
 }
 
+// prioridadDe es la prioridad del deck de un bloque: menor número, más
+// prioridad (manual 0, comercial 1, programa 2, relleno 3 — PRD §9 paso 4).
+// Un bloque cuyo deck no está en la base cuenta como programa, que es lo
+// menos sorprendente.
+func (f *fuenteDelPlan) prioridadDe(it model.PlanItem) int {
+	if d, hay := f.decks[it.DeckID]; hay {
+		return d.Priority
+	}
+	return model.DeckPriority[model.DeckProgram]
+}
+
+// deckDe es el tipo de deck de un bloque, para decirlo en la bitácora.
+func (f *fuenteDelPlan) deckDe(it model.PlanItem) model.DeckKind {
+	if d, hay := f.decks[it.DeckID]; hay {
+		return d.Kind
+	}
+	return model.DeckProgram
+}
+
 // Next devuelve el clip que le toca al instante del aire y cuándo hay que
-// volver a preguntar. Un solo carril: el plan_item que cubre ese instante.
+// volver a preguntar: el bloque del deck de más prioridad que cubra ese
+// instante y, como corte, lo primero que le vaya a quitar el aire.
 func (f *fuenteDelPlan) Next(now time.Time) (engine.Clip, time.Time, error) {
 	items, err := f.app.Store.Plan.ListRange(f.ctx, f.app.ChannelID,
 		now.Add(-VentanaAtras), now.Add(VentanaAdelante))
@@ -329,6 +322,7 @@ func (f *fuenteDelPlan) Next(now time.Time) (engine.Clip, time.Time, error) {
 	item, hay := f.queToca(items, now)
 	if !hay {
 		// Hueco: sale el relleno hasta que empiece lo siguiente.
+		f.sueltaElAire(now, model.DeckFiller, "relleno")
 		return f.Filler(), f.hastaLoSiguiente(items, now), nil
 	}
 	hasta := f.corteDe(items, item, now)
@@ -336,17 +330,99 @@ func (f *fuenteDelPlan) Next(now time.Time) (engine.Clip, time.Time, error) {
 	clip, err := f.clipDe(item, now)
 	if err != nil {
 		f.registrarFallo(item, err.Error())
+		f.sueltaElAire(now, model.DeckFiller, "relleno")
 		return f.Filler(), hasta, nil
 	}
+	f.tomaElAire(item, now, clip.Name)
 	f.cargar(item)
 	return clip, hasta, nil
 }
 
-// queToca elige el plan_item que cubre el instante. Con un solo carril la
-// regla es corta: el que empezó y no ha terminado. Si hay dos —el esquema lo
-// impide, esto es el cinturón además del tirante— sale el de menor id y queda
-// el incidente (PRD §9 paso 4). Un elemento programado `dentro_de` otro manda
-// sobre el que lo contiene: mientras suena, tiene el aire (F2-16).
+// tomaElAire apunta que este bloque tiene el aire desde este instante, y
+// cierra lo que salía antes: los milisegundos que de verdad salieron del
+// bloque anterior quedan guardados, que es lo que hace que un programa pausado
+// por un corte reanude donde iba (F2-07).
+//
+// Cada cambio de deck queda dicho una vez, con la hora: es la constancia de
+// quién tenía el aire cuando algo pasó (PRD §9 paso 4).
+func (f *fuenteDelPlan) tomaElAire(item model.PlanItem, now time.Time, nombre string) {
+	deck := f.deckDe(item)
+	pos := f.posicionDe(item, now)
+	f.mu.Lock()
+	if f.sirviendo == item.ID {
+		f.mu.Unlock()
+		return
+	}
+	f.cierraLoQueSalia(now)
+	f.sirviendo, f.desde, f.posDesde = item.ID, now, pos
+	cambio := f.deck != deck
+	f.deck = deck
+	f.mu.Unlock()
+
+	if cambio {
+		f.app.Publish("motor", "deck", fmt.Sprintf("a las %s el aire lo toma el deck %s: %s",
+			now.Format("15:04:05"), deck, nombre))
+	}
+}
+
+// sueltaElAire apunta que ningún bloque del plan tiene el aire: lo que sale es
+// el relleno.
+func (f *fuenteDelPlan) sueltaElAire(now time.Time, deck model.DeckKind, nombre string) {
+	f.mu.Lock()
+	f.cierraLoQueSalia(now)
+	f.sirviendo = 0
+	cambio := f.deck != deck
+	f.deck = deck
+	f.mu.Unlock()
+
+	if cambio {
+		f.app.Publish("motor", "deck", fmt.Sprintf("a las %s el aire lo toma el deck %s: %s",
+			now.Format("15:04:05"), deck, nombre))
+	}
+}
+
+// cierraLoQueSalia apunta por dónde se quedó el bloque que salía: por donde
+// iba cuando tomó el aire más lo que estuvo al aire. Se cuenta sobre la línea
+// del propio bloque y no sobre la hora de pared, que es lo que hace que
+// pausar y reanudar cuadre al milisegundo. Se llama con el candado tomado.
+func (f *fuenteDelPlan) cierraLoQueSalia(now time.Time) {
+	if f.sirviendo == 0 || f.desde.IsZero() {
+		return
+	}
+	if d := now.Sub(f.desde); d > 0 {
+		f.avance[f.sirviendo] = f.posDesde + d
+	}
+}
+
+// posicionDe es por dónde tiene que entrar un bloque: por donde se quedó si ya
+// salió antes —un corte comercial lo pausó (F2-07)— y, si nunca salió, por lo
+// que haya pasado desde su hora, que es el caso del servicio que se reinició a
+// mitad de programa (F2-13).
+//
+// Una señal en vivo no se pausa nunca: mientras sale el corte sigue corriendo
+// por debajo, así que al volver se entra por su instante actual y esos minutos
+// se pierden (F2-08).
+func (f *fuenteDelPlan) posicionDe(item model.PlanItem, now time.Time) time.Duration {
+	if item.Origin == model.OriginLiveSource {
+		return 0
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if d, ya := f.avance[item.ID]; ya {
+		return d
+	}
+	return now.Sub(item.PlannedAt)
+}
+
+// queToca elige el plan_item que cubre el instante. La regla es la de los
+// decks (PRD §9 paso 4): de todo lo que está en curso, el aire lo tiene el
+// **deck de más prioridad** —manual, comercial, programa, relleno—, y por eso
+// un corte pautado a las 14:00:00 le quita el aire al programa a esa hora
+// exacta sin esperar a que el programa llegue a su corte natural (F2-06).
+//
+// Dentro del mismo deck: un elemento programado `dentro_de` otro manda sobre
+// el que lo contiene (F2-16) y, si quedan dos —el esquema lo impide, esto es
+// el cinturón además del tirante—, sale el de menor id y queda el incidente.
 func (f *fuenteDelPlan) queToca(items []model.PlanItem, now time.Time) (model.PlanItem, bool) {
 	var elegido model.PlanItem
 	var hay, solapa bool
@@ -358,8 +434,13 @@ func (f *fuenteDelPlan) queToca(items []model.PlanItem, now time.Time) (model.Pl
 			elegido, hay = it, true
 			continue
 		}
-		// Uno dentro del otro no es un solape: es el elemento que interrumpe.
 		switch {
+		case f.prioridadDe(it) < f.prioridadDe(elegido):
+			elegido = it
+		case f.prioridadDe(it) > f.prioridadDe(elegido):
+			// se queda el que ya estaba: su deck manda sobre este
+		// Del mismo deck: uno dentro del otro no es un solape, es el
+		// elemento que interrumpe.
 		case it.Inside != nil && elegido.Inside == nil:
 			elegido = it
 		case it.Inside == nil && elegido.Inside != nil:
@@ -387,16 +468,24 @@ func enCurso(it model.PlanItem, now time.Time) bool {
 	return !it.PlannedAt.After(now) && it.End().After(now)
 }
 
-// corteDe es hasta cuándo se puede dar por bueno lo que sale: el fin del
-// ítem o, si algo empieza antes —un ID programado dentro del bloque—, ese
-// instante.
+// corteDe es hasta cuándo se puede dar por bueno lo que sale: el fin del ítem
+// o, si algo le va a quitar el aire antes, ese instante. Quitan el aire tres
+// cosas: un bloque de un deck de más prioridad —el corte comercial de las
+// 14:00 sobre el programa (F2-06)—, el siguiente del mismo deck, y un elemento
+// programado dentro de este (F2-16). Un bloque de menos prioridad que empiece
+// en medio no corta nada: espera su turno.
 func (f *fuenteDelPlan) corteDe(items []model.PlanItem, item model.PlanItem, now time.Time) time.Time {
 	corte := item.End()
+	mio := f.prioridadDe(item)
 	for _, it := range items {
 		if it.ID == item.ID || it.State != model.Planned && it.State != model.Cued {
 			continue
 		}
-		if it.PlannedAt.After(now) && it.PlannedAt.Before(corte) {
+		if !it.PlannedAt.After(now) || !it.PlannedAt.Before(corte) {
+			continue
+		}
+		dentro := it.Inside != nil && *it.Inside == item.ID
+		if dentro || f.prioridadDe(it) <= mio {
 			corte = it.PlannedAt
 		}
 	}
@@ -465,10 +554,13 @@ func (f *fuenteDelPlan) clipDe(item model.PlanItem, now time.Time) (engine.Clip,
 	}
 
 	clip := engine.Clip{Path: ruta, Name: f.app.TituloDelArchivo(f.ctx, asset), Ref: item.ID}
-	// Entrar por el medio: el bloque empezó antes de ahora porque el
-	// servicio se reinició, o porque un elemento de dentro le quitó el aire
-	// un momento (F2-13, F2-16).
-	if dentro := now.Sub(item.PlannedAt); dentro >= SeekMinimo {
+	// Entrar por el medio: el bloque se pausó porque entró un corte (F2-07),
+	// un elemento de dentro le quitó el aire un momento (F2-16), o el
+	// servicio se reinició a mitad de programa (F2-13). En los tres casos se
+	// entra por donde el bloque iba, no por la hora de pared.
+	// Al milisegundo más cercano: el reloj del aire trae fracciones y truncar
+	// iría dejando un milisegundo de menos en cada pausa.
+	if dentro := f.posicionDe(item, now).Round(time.Millisecond); dentro >= SeekMinimo {
 		clip.SeekMs = dentro.Milliseconds()
 	}
 	return clip, nil

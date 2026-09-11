@@ -19,10 +19,58 @@ asistente está abierto.
 
 | Método y ruta | Qué hace |
 |---|---|
-| `GET /estado` | `{canal, modo, ahora, dia_emision, al_aire: plan_item\|null, siguiente, alarmas[], version, entraste, instalacion_completa, hay_anunciantes}`. `alarmas` son objetos: `{"tipo","nivel":"bien"\|"aviso"\|"problema","texto","detalle","accion":{"texto","ruta"}}`. `hay_anunciantes` enciende la sexta entrada del menú (Anuncios). `salidas`, `retorno_de_aire` y `control_manual` son de F2 y no se sirven todavía. |
+| `GET /estado` | `{canal, modo, ahora, dia_emision, al_aire: plan_item\|null, siguiente, alarmas[], salidas[], version, entraste, instalacion_completa, hay_anunciantes}`. `alarmas` son objetos: `{"tipo","nivel":"bien"\|"aviso"\|"problema","texto","detalle","accion":{"texto","ruta"}}`. `hay_anunciantes` enciende la sexta entrada del menú (Anuncios). `salidas` son las salidas del canal con su estado (ver más abajo). `retorno_de_aire` y `control_manual` son de tandas de F2 que todavía no están y no se sirven. |
 | `GET /canal` · `PUT /canal` | El canal (modelo `Channel`). Cambiar `zona_horaria` u `hora_inicio_dia_emision` recalcula el plan. |
 | `GET /ajustes` · `PUT /ajustes` | Mapa clave→valor de `settings` (sin la clave de estación). Los secretos (`clave_tmdb`, `avisos_telegram_token`, `avisos_smtp_clave`) salen tapados con `••••••`; devolverlos tapados en un `PUT` no los cambia. |
-| `WS /ws` | Empuja `{"tipo":"estado", ...}` cada segundo y `{"tipo":"evento", ...}` en cada incidente o cambio de plan. |
+| `WS /ws` | Empuja `{"tipo":"estado", ...}` cada segundo y `{"tipo":"evento", ...}` en cada incidente o cambio de plan. El empujón lleva `salidas` igual que `GET /estado`. |
+
+## Salidas — a dónde manda el canal su señal (§10, F2-46, F2-50, F2-114)
+
+| Método y ruta | Qué hace |
+|---|---|
+| `GET /salidas` | `{salidas:[Salida], drivers_disponibles:[{driver, nombre, explicacion}]}`. `drivers_disponibles` es lo que se le puede ofrecer hoy, con su nombre de pantalla: la persona nunca ve la clave sola. En esta versión son la salida al multiplexor (`udp-ts`) y la grabación a un archivo (`archivo`); las de internet y `http-ts` llegan con T7 de F2. |
+| `POST /salidas` | Crea una salida: `{nombre, driver, parametros, objetivo_volumen}`. `parametros` es una **cadena JSON** con lo que ese driver necesita (abajo). Se prueba antes de guardar: `400` con `{"error":"…","campo":"parametros"}` y el texto en cristiano del driver si algo no cuadra —un PCR que un multiplexor descartaría, un PID que no es de nadie, una dirección a medias—, y no se guarda nada. `201` con la salida creada. |
+| `PUT /salidas/{id}` | Cambia lo que venga; lo que no venga se queda. Cambiar `parametros` o `driver` deja `estado_conexion` en `sin_probar`: lo que decía antes era de la dirección anterior. `404` si no existe. |
+| `DELETE /salidas/{id}` | `{"borrada": id, "aviso": "…"}`. Quitar la última no se prohíbe: el aviso dice que, mientras no haya otra, lo que salga se graba en la carpeta de datos. |
+
+Una `Salida` (igual en `/estado`, en el empujón del WebSocket y aquí):
+
+```json
+{
+  "id": 1, "nombre": "Transmisor", "driver": "udp-ts",
+  "parametros": "{\"destino\":\"239.1.1.1:1234\",\"ttl\":4}",
+  "objetivo_volumen": -24,
+  "estado_conexion": "conectada",
+  "reintentos": 0, "ultimo_error": "",
+  "texto": "al grupo 239.1.1.1:1234, 4 salto(s) de red · MPEG-2 8000 kb/s de imagen, 10000 kb/s en total · programa 1, PID 512/513, sonido MPEG capa II"
+}
+```
+
+`estado_conexion` es `sin_probar` · `conectada` · `reintentando` · `apagada`, y
+lo escribe el motor mientras emite (`reintentos` y `ultimo_error` con él).
+`texto` es la frase que pinta Al aire: la escribe el servidor para que ninguna
+pantalla tenga que interpretar los `parametros`.
+
+**`parametros` de `udp-ts`** (todo tiene valor de ejemplo menos `destino`, y un
+cero quiere decir «esto no lo escribí»). Son las mismas preguntas que hace el
+`sout` de VLC, con nombres de persona (`docs/VLC-PARIDAD.md`):
+
+| Campo | Qué es | De ejemplo |
+|---|---|---|
+| `destino` | `192.168.1.50:1234` para un receptor, `239.1.1.1:1234` para un grupo. Con o sin `udp://` | — (hace falta) |
+| `ttl` | Saltos de red que vive el paquete. Solo hace falta en un grupo; en un grupo sin nada escrito se pone 1, que no sale de la propia red (F2-114) | 1 en grupo, ninguno en unicast |
+| `bitrate_mux_kbs` | La tasa constante de la señal entera, la que el multiplexor espera | 10000 |
+| `bitrate_video_kbs` | La de la imagen. Tiene que dejar al menos 500 kb/s por debajo de la anterior para el audio y las tablas | 8000 |
+| `pid_video` · `pid_audio` | Del 32 al 8190, distintos entre sí | 512 · 513 |
+| `pid_pmt` | Del 16 al 8190 | 480 |
+| `program` · `tsid` | Número de programa e identificador de la señal, del 1 al 65535 | 1 · 1 |
+| `pcr_ms` | Cada cuánto se repite el PCR. **Nunca más de 40**: un multiplexor descarta lo que llega más tarde (PRD §10) | 20 |
+| `audio` | `mp2` (MPEG capa II, lo que CAtv emite hoy) o `ac3` | `mp2` |
+| `video` | `mpeg2`. Un multiplexor de ATSC 1.0 no acepta otra cosa; el H.264 sale por una salida de internet | `mpeg2` |
+
+**`parametros` de `archivo`**: `{"ruta": "C:\\aire\\salida.ts"}` y, si se
+quieren distintas de las de arriba, `bitrate_mux_kbs`, `bitrate_video_kbs` y
+`audio`. La carpeta se crea sola. La retención de esas grabaciones es T7 de F2.
 
 ## Reglas y plan
 

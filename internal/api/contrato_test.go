@@ -202,13 +202,14 @@ func TestElServidorMandaLoQueLaInterfazPinta(t *testing.T) {
 		t.Fatalf("Regla.titulo tiene que ser el nombre en texto, como en tipos.ts: %v", reglas[0]["titulo"])
 	}
 
-	// Estado. `salidas`, `retorno_de_aire` y `control_manual` son de F2: en
-	// F1 no hay motor y la interfaz los pinta vacíos.
+	// Estado. `salidas` ya se sirve desde T2 de F2; `retorno_de_aire` y
+	// `control_manual` son de tandas que todavía no están y la interfaz los
+	// pinta vacíos.
 	w = c.do("GET", "/api/v1/estado", nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("/estado dio %d", w.Code)
 	}
-	exige(t, "GET /estado", w.Body.Bytes(), "Estado", "salidas")
+	exige(t, "GET /estado", w.Body.Bytes(), "Estado")
 
 	// Un elemento del plan.
 	w = c.do("GET", "/api/v1/plan?dia="+string(hoy(c)), nil)

@@ -91,6 +91,12 @@ func (s *Server) routes() {
 	open("POST /api/v1/entrar", s.entrar)
 	open("POST /api/v1/salir", s.salir)
 
+	// Salidas: a dónde manda el canal su señal (§10, F2-46, F2-50)
+	api("GET /api/v1/salidas", s.salidasList)
+	api("POST /api/v1/salidas", s.salidasPost)
+	api("PUT /api/v1/salidas/{id}", s.salidasPut)
+	api("DELETE /api/v1/salidas/{id}", s.salidasDelete)
+
 	// Reglas y plan
 	api("GET /api/v1/reglas", s.reglasList)
 	api("POST /api/v1/reglas", s.reglasPost)

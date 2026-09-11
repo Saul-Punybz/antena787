@@ -17,6 +17,13 @@ import (
 // Output describe una salida del encoder persistente. En F0 hay dos clases:
 // la que recibe el multiplexor de CAtv (MPEG-2 CBR por UDP y a archivo) y
 // una de internet (H.264) con otro volumen, para probar dos a la vez.
+//
+// Lo que sigue a GainDB es lo que un multiplexor de transmisor exige y la
+// persona escribe una vez (PRD §10): PID y número de programa fijos, PCR a
+// tiempo, un códec de audio elegido. Nadie lo arma a mano: lo traduce
+// internal/drivers/salida desde los parámetros de la salida configurada
+// (T2). En cero, cada campo cae en el valor de fábrica de abajo, que es lo
+// que ya emitía la F0.
 type Output struct {
 	Name string
 	Kind string // "mpeg2-ts" | "h264-ts"
@@ -28,7 +35,39 @@ type Output struct {
 	VideoKbs int
 	MuxKbs   int     // tasa constante del TS (solo mpeg2-ts)
 	GainDB   float64 // ajuste de volumen relativo (0 = ninguno)
+
+	PIDVideo int // PID del video dentro del TS
+	PIDAudio int // PID del audio
+	PIDPMT   int // PID donde viaja la tabla del programa
+	Programa int // número de programa (el service_id del TS)
+	TSID     int // identificador del transport stream
+	PCRms    int // cada cuánto se repite el PCR, en ms: nunca más de 40
+	// Audio es el códec del audio de esta salida: "mp2" (MPEG capa II, lo
+	// que CAtv emite hoy) o "ac3". Vacío saca las dos pistas, que es lo que
+	// medía la F0 cuando había que decidir cuál se quedaba.
+	Audio string
+	// TTL y PktSize son de la propia red: cuántos saltos vive el paquete
+	// —hace falta para multicast (F2-114)— y de qué tamaño sale.
+	TTL     int
+	PktSize int
 }
+
+// Valores de fábrica de una salida de TS. Los tres primeros son los que ya
+// emitía la F0; los demás son lo que un multiplexor espera encontrar cuando
+// nadie le dijo otra cosa, y se pueden cambiar todos (PRD §10: nunca fijos).
+const (
+	// PCRmsPorDefecto es cada cuánto se repite el PCR. El PRD pide 40 ms o
+	// menos; 20 deja la mitad de margen y no cuesta nada.
+	PCRmsPorDefecto = 20
+	// PCRmsMaximo es lo que el PRD §10 permite como máximo.
+	PCRmsMaximo = 40
+	// PktSizePorDefecto son 7 paquetes de TS por datagrama UDP: 1316 bytes,
+	// lo que cabe en una trama Ethernet sin fragmentar. Es lo mismo que pone
+	// VLC.
+	PktSizePorDefecto = 1316
+	// PATPeriodo es cada cuánto se repiten PAT y PMT, en segundos.
+	PATPeriodo = "0.1"
+)
 
 // Encoder es el único ffmpeg de larga vida: recibe cuadros crudos y PCM por
 // dos conexiones TCP locales y produce todas las salidas a la vez.
@@ -132,44 +171,162 @@ func StartEncoder(parent context.Context, ffmpeg string, f Format, outs []Output
 func (e *Encoder) outputArgs() []string {
 	var args []string
 	for _, o := range e.Outputs {
-		vol := fmt.Sprintf("volume=%.2fdB", o.GainDB)
 		switch o.Kind {
 		case "mpeg2-ts":
-			// Lo que ATSC 1.0 transmite y lo que un multiplexor exige (PRD §10):
-			// MPEG-2 a tasa constante, audio MPEG capa II y AC-3, TS con
-			// muxrate fijo y PCR frecuente.
-			kb := o.VideoKbs
-			args = append(args,
-				"-map", "0:v", "-map", "1:a", "-map", "1:a",
-				"-filter:a:0", vol, "-filter:a:1", vol,
-				"-c:v", "mpeg2video", "-pix_fmt", "yuv420p", "-g", "30", "-bf", "2",
-				"-b:v", fmt.Sprintf("%dk", kb), "-minrate", fmt.Sprintf("%dk", kb), "-maxrate", fmt.Sprintf("%dk", kb),
-				"-bufsize", fmt.Sprintf("%dk", kb/2),
-				"-c:a:0", "mp2", "-b:a:0", "192k", "-c:a:1", "ac3", "-b:a:1", "192k",
-				"-max_muxing_queue_size", "1024")
-			mux := fmt.Sprintf("f=mpegts:muxrate=%d:pcr_period=20:pat_period=0.1", o.MuxKbs*1000)
-			switch {
-			case o.UDP != "" && o.File != "":
-				args = append(args, "-f", "tee", fmt.Sprintf("[%s:onfail=ignore]%s?pkt_size=1316|[%s]%s", mux, o.UDP, mux, o.File))
-			case o.UDP != "":
-				args = append(args, "-f", "mpegts", "-muxrate", strconv.Itoa(o.MuxKbs*1000), "-pcr_period", "20", "-pat_period", "0.1", o.UDP+"?pkt_size=1316")
-			default:
-				args = append(args, "-f", "mpegts", "-muxrate", strconv.Itoa(o.MuxKbs*1000), "-pcr_period", "20", "-pat_period", "0.1", o.File)
-			}
+			args = append(args, o.argsMPEG2TS()...)
 		case "h264-ts":
-			args = append(args,
-				"-map", "0:v", "-map", "1:a",
-				"-filter:a:0", vol,
-				"-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-g", "60",
-				"-b:v", fmt.Sprintf("%dk", o.VideoKbs), "-maxrate", fmt.Sprintf("%dk", o.VideoKbs), "-bufsize", fmt.Sprintf("%dk", o.VideoKbs*2),
-				"-c:a", "aac", "-b:a", "128k",
-				"-max_muxing_queue_size", "1024",
-				"-f", "mpegts", o.File)
+			args = append(args, o.argsH264TS()...)
 		default:
 			panic("salida desconocida: " + o.Kind)
 		}
 	}
 	return args
+}
+
+// argsMPEG2TS es lo que ATSC 1.0 transmite y lo que un multiplexor exige
+// (PRD §10): MPEG-2 a tasa constante rellenada con paquetes nulos, audio
+// MPEG capa II o AC-3, y un transport stream con los PID, el número de
+// programa y el PCR que la persona escribió una vez.
+func (o Output) argsMPEG2TS() []string {
+	vol := fmt.Sprintf("volume=%.2fdB", o.GainDB)
+	kb := o.VideoKbs
+	// Un códec de audio, el que se eligió; los dos cuando nadie eligió, que
+	// es como la F0 medía cuál se quedaba.
+	codecs := []string{o.Audio}
+	if o.Audio == "" {
+		codecs = []string{"mp2", "ac3"}
+	}
+
+	args := []string{"-map", "0:v"}
+	for range codecs {
+		args = append(args, "-map", "1:a")
+	}
+	for i := range codecs {
+		args = append(args, fmt.Sprintf("-filter:a:%d", i), vol)
+	}
+	args = append(args,
+		"-c:v", "mpeg2video", "-pix_fmt", "yuv420p", "-g", "30", "-bf", "2",
+		"-b:v", fmt.Sprintf("%dk", kb), "-minrate", fmt.Sprintf("%dk", kb), "-maxrate", fmt.Sprintf("%dk", kb),
+		"-bufsize", fmt.Sprintf("%dk", kb/2))
+	for i, c := range codecs {
+		args = append(args, fmt.Sprintf("-c:a:%d", i), c, fmt.Sprintf("-b:a:%d", i), "192k")
+	}
+	args = append(args, "-max_muxing_queue_size", "1024")
+	args = append(args, o.streamIDs(len(codecs))...)
+
+	switch {
+	case o.UDP != "" && o.File != "":
+		// El mismo TS a la red y al disco. onfail=ignore en la rama de red:
+		// que nadie escuche el UDP no puede parar la grabación.
+		mux := o.especDelTee()
+		args = append(args, "-f", "tee",
+			fmt.Sprintf("[%s:onfail=ignore]%s|[%s]%s", mux, o.urlUDP(), mux, o.File))
+	case o.UDP != "":
+		args = append(args, o.flagsDelMux()...)
+		args = append(args, o.urlUDP())
+	default:
+		args = append(args, o.flagsDelMux()...)
+		args = append(args, o.File)
+	}
+	return args
+}
+
+// argsH264TS es la salida de internet: H.264 y AAC. Las de verdad —RTMP, HLS,
+// SRT, y el http-ts de paridad con VLC— son T7; esto es lo que la F0 usaba
+// para medir dos salidas con volúmenes distintos a la vez.
+func (o Output) argsH264TS() []string {
+	return []string{
+		"-map", "0:v", "-map", "1:a",
+		"-filter:a:0", fmt.Sprintf("volume=%.2fdB", o.GainDB),
+		"-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-g", "60",
+		"-b:v", fmt.Sprintf("%dk", o.VideoKbs), "-maxrate", fmt.Sprintf("%dk", o.VideoKbs),
+		"-bufsize", fmt.Sprintf("%dk", o.VideoKbs*2),
+		"-c:a", "aac", "-b:a", "128k",
+		"-max_muxing_queue_size", "1024",
+		"-f", "mpegts", o.File,
+	}
+}
+
+// opcionesDelMux son las opciones del multiplexor de TS, en el mismo orden
+// siempre: es lo que en VLC se escribe como pid-video, pid-audio, pid-pmt,
+// tsid, program y pcr (docs/VLC-PARIDAD.md, fila «Opciones del mux TS»). Lo
+// que vale cero no se pone: ffmpeg pone entonces lo que trae de fábrica.
+func (o Output) opcionesDelMux() [][2]string {
+	pcr := o.PCRms
+	if pcr <= 0 {
+		pcr = PCRmsPorDefecto
+	}
+	opts := [][2]string{
+		{"muxrate", strconv.Itoa(o.MuxKbs * 1000)},
+		{"pcr_period", strconv.Itoa(pcr)},
+		{"pat_period", PATPeriodo},
+	}
+	if o.PIDPMT > 0 {
+		opts = append(opts, [2]string{"mpegts_pmt_start_pid", strconv.Itoa(o.PIDPMT)})
+	}
+	if o.PIDVideo > 0 {
+		opts = append(opts, [2]string{"mpegts_start_pid", strconv.Itoa(o.PIDVideo)})
+	}
+	if o.Programa > 0 {
+		opts = append(opts, [2]string{"mpegts_service_id", strconv.Itoa(o.Programa)})
+	}
+	if o.TSID > 0 {
+		opts = append(opts, [2]string{"mpegts_transport_stream_id", strconv.Itoa(o.TSID)})
+	}
+	return opts
+}
+
+// flagsDelMux son esas mismas opciones como banderas de una salida suelta.
+func (o Output) flagsDelMux() []string {
+	args := []string{"-f", "mpegts"}
+	for _, kv := range o.opcionesDelMux() {
+		args = append(args, "-"+kv[0], kv[1])
+	}
+	return args
+}
+
+// especDelTee son esas mismas opciones como las quiere el multiplexor tee,
+// que las lleva dentro de los corchetes de cada rama.
+func (o Output) especDelTee() string {
+	spec := "f=mpegts"
+	for _, kv := range o.opcionesDelMux() {
+		spec += ":" + kv[0] + "=" + kv[1]
+	}
+	return spec
+}
+
+// streamIDs fija el PID de cada flujo. mpegts_start_pid solo mueve el
+// primero y va numerando; VLC deja escribir el del video y el del audio por
+// separado, así que aquí también (docs/VLC-PARIDAD.md).
+func (o Output) streamIDs(audios int) []string {
+	var args []string
+	if o.PIDVideo > 0 {
+		args = append(args, "-streamid", "0:"+strconv.Itoa(o.PIDVideo))
+	}
+	if o.PIDAudio > 0 {
+		for i := 0; i < audios; i++ {
+			args = append(args, "-streamid", fmt.Sprintf("%d:%d", i+1, o.PIDAudio+i))
+		}
+	}
+	return args
+}
+
+// urlUDP es el destino con lo que la red necesita: el tamaño del datagrama y,
+// cuando va a un grupo multicast, los saltos que vive el paquete (F2-114). Si
+// alguien ya escribió sus propias opciones en la dirección, se respetan.
+func (o Output) urlUDP() string {
+	if o.UDP == "" || strings.Contains(o.UDP, "?") {
+		return o.UDP
+	}
+	pkt := o.PktSize
+	if pkt <= 0 {
+		pkt = PktSizePorDefecto
+	}
+	url := fmt.Sprintf("%s?pkt_size=%d", o.UDP, pkt)
+	if o.TTL > 0 {
+		url += fmt.Sprintf("&ttl=%d", o.TTL)
+	}
+	return url
 }
 
 // WriteFrame manda un cuadro yuv420p al encoder.

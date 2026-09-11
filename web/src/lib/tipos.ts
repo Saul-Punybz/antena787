@@ -29,9 +29,32 @@ export interface Salida {
   id: number
   nombre: string
   driver: string // interno: nunca se muestra tal cual (PRD §4.3)
-  estado_conexion: string // conectada | apagada | reintentando
+  estado_conexion: string // conectada | apagada | reintentando | sin_probar
   reintentos: number
   ultimo_error: string
+  /**
+   * A dónde va, en cristiano y ya escrito por el servidor: «al grupo
+   * 239.1.1.1:1234, 4 salto(s) de red · MPEG-2 8000 kb/s …». Cuando lo
+   * guardado no se puede abrir, es el motivo.
+   */
+  texto?: string
+  /** Los parámetros del driver, el mismo JSON que se guarda. */
+  parametros?: string
+  /** El volumen de esta salida: −24 LKFS al transmisor, −16 a internet (F2-47). */
+  objetivo_volumen?: number
+}
+
+/** Un driver de salida como se le ofrece a una persona: nunca la clave sola. */
+export interface DriverDeSalida {
+  driver: string
+  nombre: string
+  explicacion: string
+}
+
+/** Cuerpo de `GET /salidas`: lo que hay y lo que se puede elegir. */
+export interface SalidasDelCanal {
+  salidas: Salida[]
+  drivers_disponibles: DriverDeSalida[]
 }
 
 export type EstadoPlan =

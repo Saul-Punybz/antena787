@@ -1200,6 +1200,26 @@ export async function responder(ruta: string, init?: RequestInit): Promise<Respo
     return json({ ok: true })
   }
   if (p === '/estado') return json(estado())
+  // Las salidas del canal (§10, F2-46): en demo se contestan tal cual, con los
+  // dos drivers que esta versión sabe abrir.
+  if (p === '/salidas' && metodo === 'GET') {
+    return json({
+      salidas,
+      drivers_disponibles: [
+        {
+          driver: 'udp-ts',
+          nombre: 'Al transmisor (multiplexor)',
+          explicacion:
+            'La señal MPEG-2 por la red, a la dirección y el puerto que espera tu multiplexor.',
+        },
+        {
+          driver: 'archivo',
+          nombre: 'A un archivo',
+          explicacion: 'Guarda lo que sale, tal cual, en el disco.',
+        },
+      ],
+    })
+  }
   if (p === '/canal') {
     if (metodo === 'PUT') Object.assign(canal, cuerpo)
     return json(canal)

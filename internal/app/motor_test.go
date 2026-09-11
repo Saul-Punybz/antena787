@@ -293,7 +293,11 @@ func TestF2_16ElElementoDeDentroTomaElAireYElDeFueraVuelveSolo(t *testing.T) {
 		t.Fatalf("el corte es %s y tenía que ser el fin del elemento (%s)", hasta, dentro.End())
 	}
 
-	// Y al terminar, el de fuera vuelve solo, por el minuto en el que va.
+	// Y al terminar, el de fuera vuelve solo, por donde iba. Ojo: el bloque de
+	// fuera de esta prueba es un archivo, así que **se pausa** mientras el de
+	// dentro tiene el aire y reanuda donde se quedó (F2-07, construido en T2);
+	// antes de T2 volvía por la hora de pared, que es lo que hace una señal en
+	// vivo de verdad (F2-08, su propia prueba).
 	vuelta := dentro.End()
 	clip, _, err = f.Next(vuelta)
 	if err != nil {
@@ -302,8 +306,8 @@ func TestF2_16ElElementoDeDentroTomaElAireYElDeFueraVuelveSolo(t *testing.T) {
 	if clip.Ref != bloque.ID {
 		t.Fatalf("el bloque de fuera no volvió: salió el %d", clip.Ref)
 	}
-	if quiere := vuelta.Sub(bloque.PlannedAt).Milliseconds(); clip.SeekMs != quiere {
-		t.Fatalf("vuelve por el milisegundo %d y tocaba por el %d", clip.SeekMs, quiere)
+	if quiere := dentro.PlannedAt.Sub(bloque.PlannedAt).Milliseconds(); clip.SeekMs != quiere {
+		t.Fatalf("vuelve por el milisegundo %d y tocaba por el %d, donde se quedó", clip.SeekMs, quiere)
 	}
 }
 

@@ -46,6 +46,11 @@ export const salidas: Salida[] = [
     estado_conexion: 'conectada',
     reintentos: 0,
     ultimo_error: '',
+    parametros:
+      '{"destino":"192.168.1.50:1234","bitrate_mux_kbs":10000,"bitrate_video_kbs":8000,"pid_video":512,"pid_audio":513,"pid_pmt":480,"program":1,"tsid":1,"pcr_ms":20,"audio":"mp2","video":"mpeg2"}',
+    objetivo_volumen: -24,
+    texto:
+      'al receptor 192.168.1.50:1234 · MPEG-2 8000 kb/s de imagen, 10000 kb/s en total · programa 1, PID 512/513, sonido MPEG capa II',
   },
   {
     id: 2,
@@ -54,6 +59,8 @@ export const salidas: Salida[] = [
     estado_conexion: 'conectada',
     reintentos: 0,
     ultimo_error: '',
+    objetivo_volumen: -16,
+    texto: 'a YouTube',
   },
   {
     id: 3,
@@ -62,6 +69,8 @@ export const salidas: Salida[] = [
     estado_conexion: 'apagada',
     reintentos: 0,
     ultimo_error: '',
+    objetivo_volumen: -16,
+    texto: 'a Facebook',
   },
 ]
 

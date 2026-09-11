@@ -24,7 +24,7 @@ ninguna tanda de este plan.**
 | `internal/store/channel.go` | `DeckRepo.ByKind`, `OutputRepo` (esqueleto) | `DeckRepo` | `OutputRepo` — completar CRUD y reconexión | Repos de `CaptureInput`, `AlertEvent`, `AirRecording`; purgas de retención (F2-43/85/91-95) |
 | `internal/app/app.go` | `App.guard/Incident/Publish`, `resolverLoop/ingestLoop/normalizeLoop/backupLoop/diskLoop/clockLoop`, `MarkAired` (existe, nadie la llama) | El patrón `guard` (pánico → incidente → relanza) es la base de todo lo nuevo | `Start()` es donde cada tanda añade su `a.guard(...)` — punto de fusión, ver riesgos | `motorLoop`, `manualLoop`/estado de retención, `vivoLoop`, `watchdogLoop`, `grabacionLoop`, `diferidoLoop` |
 | `internal/api/*` | HTTP+WS, `estado.go`, `ws.go` (`pushStatus`), `reglas.go`/`plan.go` | El patrón de endpoints y el WebSocket de eventos | — | Endpoints de tomar/soltar control, CRUD de fuentes en vivo y salidas, reproducción de grabación, exportación de as-run |
-| `internal/drivers/` | **No existe.** `docs/drivers/README.md` lo dice explícito: hoy un driver "empieza por una propuesta, no por código" | — | — | Todo: salida (`udp-ts`, `internet`, `http-ts`, `archivo`), vivo (`srt-listen`, `rtmp-listen`, `url`, `captura`), captura de retorno, ENDEC/telemetría |
+| `internal/drivers/` | `salida/` construido en T2: `udp-ts` (unicast, multicast y TTL, PID/programa/tsid/PCR) y `archivo`, con `Driver{Abrir, Vigilar, Descripcion}` | `salida.Driver` como patrón para los demás | — | Falta: salida `internet` y `http-ts` (T7), vivo (`srt-listen`, `rtmp-listen`, `url`, `captura`, T4), captura de retorno y ENDEC/telemetría (T8) |
 | `web/src/pantallas/AlAire.tsx` | Hoy dice "Aquí se vería tu señal"; ya tiene `Bitacora.tsx` y alarmas reales de F1 | El patrón de alarmas y el WebSocket | — | Panel de disparo manual, ventana local, grabación/diferido, tablero real |
 
 ---
@@ -86,7 +86,55 @@ vez de `Playlist []Clip` fija — ver §3), `internal/app/motor.go` (nuevo),
 veces a la vez desde otra tanda es el error más caro. Ninguna otra tanda
 debe tocar `frameserver.go` hasta que T1 esté fusionada.
 
-### T2 · Decks, prioridad y salida `udp-ts`
+### T2 · Decks, prioridad y salida `udp-ts` — **HECHA** (10 sept 2026)
+
+> Rama `agente/t2-decks-udpts`, un solo commit. Lo construido está criterio por
+> criterio en `docs/ACEPTACION.md` (F2-06, 07, 08, 46, 47, 49, 50, 114, y la
+> parte de F2-48 que toca a `udp-ts`). F0 corta después del cambio: 7572
+> cuadros, 0 FALLA, TS a 10.000 Mb/s ±0.00 % con PCR máx 20.3 ms.
+>
+> **Decisiones del agente, y lo que T4/T5/T6/T7 heredan:**
+>
+> - `internal/drivers/salida` con el contrato del plan más un tercer método,
+>   `Descripcion() string`: la frase en cristiano de a dónde va una salida
+>   («al grupo 239.1.1.1:1234, 4 salto(s) de red · MPEG-2 8000 kb/s de
+>   imagen…»), que es lo que pinta Al aire y lo que contesta la API. Sin ella,
+>   cada pantalla tendría que volver a interpretar los `parametros`.
+>   `Vigilar` recibe un `Registro` (lo cumple `store.OutputRepo.SetConnection`)
+>   en el constructor `salida.Para(model.Output, Registro)`.
+> - **`engine.Output` creció** con `PIDVideo`, `PIDAudio`, `PIDPMT`,
+>   `Programa`, `TSID`, `PCRms`, `Audio`, `TTL` y `PktSize`. En cero, cada uno
+>   cae en lo que ya emitía la F0 (incluidas las dos pistas de audio, mp2 y
+>   ac3, cuando nadie elige códec de audio), así que el arnés de `f0` no
+>   cambió. Los PID se fijan con `-streamid` por flujo, no solo con
+>   `mpegts_start_pid`: VLC deja escribir el del video y el del audio por
+>   separado y aquí también.
+> - **Los valores de ejemplo** (mux 10000 kb/s, video 8000, PMT 480, video
+>   512, audio 513, programa 1, tsid 1, PCR 20 ms, audio mp2) viven en
+>   constantes de `internal/drivers/salida`, nunca en el motor, y se cambian
+>   por `PUT /api/v1/salidas/{id}`. Un cero en los `parametros` quiere decir
+>   «esto no lo escribí».
+> - **Varias salidas** son ramas del mismo encoder persistente, no varios
+>   ffmpeg: `App.abrirSalidas` abre todas las que puede y **salta la que no**
+>   —la deja apuntada con su motivo y avisa—, que es lo que hace F2-49 cierto
+>   por construcción.
+> - **Decks:** el motor lee la tabla `deck` y elige por `prioridad`.
+>   `fuenteDelPlan` lleva la cuenta de por dónde va cada bloque **sobre su
+>   propia línea de tiempo** (`avance`, `tomaElAire`, `posicionDe`), que es lo
+>   que hace que pausar y reanudar cuadre al milisegundo; un bloque cuyo
+>   origen es `live_source` no acumula: se vuelve a la señal en su instante
+>   actual. Cada cambio de deck se publica una vez, con la hora.
+> - **Cambio de conducta heredado de T1:** un bloque de archivo interrumpido
+>   ya **no** vuelve por la hora de pared sino por donde se quedó, así que la
+>   prueba de F2-16 cambió de expectativa (está dicho en el propio archivo de
+>   prueba).
+> - `internal/ts` aprendió a leer **PAT y PMT** (programa, tsid, PID de la
+>   PMT, del PCR y de cada flujo): sin eso no se puede verificar F2-46/114 sin
+>   depender de ffprobe, y el informe de la F0 lo enseña de paso.
+> - **Lo que T2 no hizo:** el watchdog de 3 s (T6), `internet`/`http-ts` (T7),
+>   la pantalla de salidas del asistente (T9) y sacar los cortes de
+>   `media_asset.marcas_de_corte_ms` en el resolver.
+
 **Objetivo:** que el motor elija el aire por prioridad de deck (manual >
 comercial > programa > relleno) y que salga por `udp-ts` con lo que el
 multiplexor de CAtv exige.
