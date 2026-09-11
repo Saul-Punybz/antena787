@@ -67,6 +67,11 @@ type Driver interface {
 
 // Registro es donde el driver deja el estado de la conexión. internal/store
 // lo cumple con OutputRepo; una prueba lo cumple con un mapa.
+//
+// SetConnection se llama **desde la goroutine del vigilante**, no desde
+// quien abrió la salida: quien lo implemente tiene que aguantar que lo
+// llamen mientras otro lee lo que escribió. OutputRepo lo cumple porque
+// escribe en la base; un doble de prueba necesita su candado.
 type Registro interface {
 	SetConnection(ctx context.Context, id int64, estado string, reintentos int, ultimoError string) error
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,7 +18,11 @@ import (
 // que un multiplexor no perdonaría se diga antes de encender nada.
 
 // registro de mentira: se queda con lo último que le dijo el driver.
+// registro es el doble de prueba de salida.Registro. Lleva candado porque
+// el vigilante escribe desde su propia goroutine mientras la prueba lee, que
+// es justo lo que el contrato advierte.
 type registro struct {
+	mu         sync.Mutex
 	estado     string
 	reintentos int
 	error      string
@@ -26,15 +31,25 @@ type registro struct {
 }
 
 func (r *registro) SetConnection(_ context.Context, _ int64, estado string, reintentos int, ultimo string) error {
+	r.mu.Lock()
 	r.estado, r.reintentos, r.error = estado, reintentos, ultimo
 	r.veces++
-	if r.avisa != nil {
+	avisa := r.avisa
+	r.mu.Unlock()
+	if avisa != nil {
 		select {
-		case r.avisa <- struct{}{}:
+		case avisa <- struct{}{}:
 		default:
 		}
 	}
 	return nil
+}
+
+// lee devuelve lo último que quedó escrito, sin carreras.
+func (r *registro) lee() (estado string, reintentos int, ultimo string, veces int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.estado, r.reintentos, r.error, r.veces
 }
 
 // F2-46 — la salida al multiplexor sale con lo que el multiplexor exige, y lo
@@ -239,18 +254,18 @@ func TestElVigilanteDejaEscritoComoLeVaALaSalida(t *testing.T) {
 
 	listo <- nil
 	<-reg.avisa
-	if reg.estado != Conectada || reg.reintentos != 0 {
-		t.Fatalf("con el encoder encendido la salida quedó en %q con %d reintentos", reg.estado, reg.reintentos)
+	if estado, reintentos, _, _ := reg.lee(); estado != Conectada || reintentos != 0 {
+		t.Fatalf("con el encoder encendido la salida quedó en %q con %d reintentos", estado, reintentos)
 	}
 	listo <- errSuelto("el cable de red está desconectado")
 	<-reg.avisa
-	if reg.estado != Reintentando || reg.reintentos != 1 ||
-		!strings.Contains(reg.error, "cable de red") {
+	if estado, reintentos, ultimo, _ := reg.lee(); estado != Reintentando || reintentos != 1 ||
+		!strings.Contains(ultimo, "cable de red") {
 		t.Fatalf("tras la caída la salida quedó en %q, %d reintentos, error %q",
-			reg.estado, reg.reintentos, reg.error)
+			estado, reintentos, ultimo)
 	}
 	cancel()
-	esperar(t, func() bool { return reg.estado == Apagada }, "la salida no quedó apagada al parar el motor")
+	esperar(t, func() bool { estado, _, _, _ := reg.lee(); return estado == Apagada }, "la salida no quedó apagada al parar el motor")
 }
 
 // errSuelto es un error de una línea, para las pruebas.
