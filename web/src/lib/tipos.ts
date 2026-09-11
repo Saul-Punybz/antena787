@@ -795,3 +795,20 @@ export class ErrorDeApi extends Error {
     this.campo = campo
   }
 }
+
+/**
+ * Parámetros de una salida `http-ts` (F2-115): la misma señal servida por
+ * HTTP para que otro programa tire de ella. `puerto` es dónde escucha y
+ * `ruta` cómo se pide; el resto de la URL lo arma el servidor y llega ya
+ * escrito en `Salida.texto`.
+ */
+export interface ParamsHTTPTS {
+  puerto: number
+  /** Con la barra delante, p. ej. «/stream.ts». */
+  ruta: string
+  /** mpeg2 para un VLC remoto; h264 para que lo pueda pintar un navegador. */
+  codec: 'mpeg2' | 'h264'
+  bitrate_video_kbs?: number
+  bitrate_mux_kbs?: number
+  audio?: string
+}

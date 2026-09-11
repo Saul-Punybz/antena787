@@ -50,6 +50,14 @@ type Output struct {
 	// —hace falta para multicast (F2-114)— y de qué tamaño sale.
 	TTL     int
 	PktSize int
+	// TCP es «127.0.0.1:puerto» de una escucha de ESTE proceso a la que
+	// ffmpeg entrega el transport stream para que Go lo reparta a varios
+	// clientes por HTTP (F2-115). Es el tercer destino posible, junto a UDP
+	// y File: ffmpeg escribe a un sitio, no a tres protocolos distintos.
+	//
+	// Va aquí y no dentro de File porque un archivo se cierra y esto no: la
+	// conexión vive lo que vive el encoder.
+	TCP string
 	// Accel es con qué se comprime el video de esta salida. En blanco sale
 	// exactamente lo que salía antes de que el campo existiera: el
 	// procesador. Lo pone App igual en todas las salidas del canal, y el

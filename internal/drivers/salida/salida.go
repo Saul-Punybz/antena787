@@ -31,6 +31,15 @@ import (
 const (
 	DriverUDPTS   = "udp-ts"
 	DriverArchivo = "archivo"
+	// DriverHTTPTS sirve el mismo transport stream por HTTP, para que otro
+	// programa tire de él: un VLC remoto, MistServer, o el monitor de la
+	// propia pantalla (F2-115, F2-117). Es el `http{mux=ts,dst=…}` de VLC.
+	//
+	// No lo sirve ffmpeg: su protocolo http solo acepta UN cliente a la vez y
+	// el criterio pide dos. ffmpeg entrega el TS por TCP a este mismo proceso
+	// —el truco que el encoder ya usa para recibir video y audio— y Go lo
+	// reparte.
+	DriverHTTPTS = "http-ts"
 )
 
 // Los tres estados de conexión que la interfaz pinta (web/src/lib/tipos.ts).
