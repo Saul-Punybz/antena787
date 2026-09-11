@@ -598,3 +598,141 @@ func (r *PresetRepo) EnUso(ctx context.Context, id int64) (canal, titulos, archi
 	err = r.db.QueryRowContext(ctx, q, id, id, id).Scan(&canal, &titulos, &archivos)
 	return canal, titulos, archivos, translate("contar dónde se usa el preset", err)
 }
+
+// ── la configuración de los drivers, con sus credenciales ─────────────
+
+// DriverConfigRepo guarda cómo se conecta el canal a algo de fuera. Es la
+// única parte del store que cifra: las credenciales entran y salen en claro
+// por esta puerta, y en la base no hay más que bytes.
+type DriverConfigRepo struct {
+	db  *sql.DB
+	sec *Secretos
+}
+
+const driverConfigCols = `id, channel_id, tipo, driver, parametros, credenciales`
+
+// List devuelve las configuraciones de un tipo. **No descifra nada**: para
+// listar no hace falta la clave, y no sacarla de la base es la forma más
+// barata de que no se escape por un log o por una respuesta de la API.
+func (r *DriverConfigRepo) List(ctx context.Context, channelID int64, tipo string) ([]model.DriverConfig, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT `+driverConfigCols+`
+		FROM driver_config
+		WHERE (channel_id IS NULL OR channel_id = ?) AND (? = '' OR tipo = ?)
+		ORDER BY tipo, driver`, channelID, tipo, tipo)
+	if err != nil {
+		return nil, translate("listar las conexiones", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := []model.DriverConfig{}
+	for rows.Next() {
+		c, _, err := scanDriverConfig(rows)
+		if err != nil {
+			return nil, translate("listar las conexiones", err)
+		}
+		out = append(out, c)
+	}
+	return out, translate("listar las conexiones", rows.Err())
+}
+
+// Get devuelve una configuración **con su credencial ya descifrada**. Es la
+// única función que lo hace, y la llama el driver justo antes de conectar:
+// cuanto menos viaje el secreto, mejor.
+func (r *DriverConfigRepo) Get(ctx context.Context, id int64) (model.DriverConfig, error) {
+	row := r.db.QueryRowContext(ctx, `SELECT `+driverConfigCols+` FROM driver_config WHERE id = ?`, id)
+	c, cifrado, err := scanDriverConfig(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return model.DriverConfig{}, fmt.Errorf("conexión %d: %w", id, ErrNotFound)
+	}
+	if err != nil {
+		return model.DriverConfig{}, translate("leer la conexión", err)
+	}
+	if len(cifrado) > 0 {
+		claro, err := r.sec.Descifrar(cifrado)
+		if err != nil {
+			// Que no se pueda leer la clave NO tumba la fila: quien llama
+			// decide si puede seguir sin ella o si tiene que avisar.
+			return c, fmt.Errorf("la conexión %q existe pero su clave no se pudo leer: %w", c.Driver, err)
+		}
+		c.Secret = claro
+	}
+	return c, nil
+}
+
+// Upsert guarda una configuración. `secreto` vacío **no borra** el que ya
+// había: eso deja que la pantalla mande el formulario entero sin tener que
+// reenviar la clave cada vez, que es cómo se filtran las claves. Para quitarla
+// está BorrarSecreto.
+func (r *DriverConfigRepo) Upsert(ctx context.Context, c *model.DriverConfig, secreto string) error {
+	if c == nil {
+		return errors.New("hace falta la conexión")
+	}
+	if strings.TrimSpace(c.Params) == "" {
+		c.Params = "{}"
+	}
+	var cifrado []byte
+	if secreto != "" {
+		var err error
+		if cifrado, err = r.sec.Cifrar(secreto); err != nil {
+			return fmt.Errorf("no se pudo guardar la clave: %w", err)
+		}
+	}
+	if c.ID == 0 {
+		res, err := r.db.ExecContext(ctx, `
+			INSERT INTO driver_config (channel_id, tipo, driver, parametros, credenciales)
+			VALUES (?, ?, ?, ?, ?)`,
+			nullInt64(c.ChannelID), c.Kind, c.Driver, c.Params, cifrado)
+		if err != nil {
+			return translate("guardar la conexión", err)
+		}
+		c.ID, _ = res.LastInsertId()
+		return nil
+	}
+	q := `UPDATE driver_config SET channel_id = ?, tipo = ?, driver = ?, parametros = ?`
+	args := []any{nullInt64(c.ChannelID), c.Kind, c.Driver, c.Params}
+	if cifrado != nil {
+		q += `, credenciales = ?`
+		args = append(args, cifrado)
+	}
+	q += ` WHERE id = ?`
+	args = append(args, c.ID)
+	res, err := r.db.ExecContext(ctx, q, args...)
+	if err != nil {
+		return translate("guardar la conexión", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("conexión %d: %w", c.ID, ErrNotFound)
+	}
+	return nil
+}
+
+// BorrarSecreto quita la clave y deja la conexión. Es lo que hace falta cuando
+// un proveedor deja de pedir contraseña, y la única forma de vaciarla a
+// propósito: Upsert con el secreto vacío conserva el que había.
+func (r *DriverConfigRepo) BorrarSecreto(ctx context.Context, id int64) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE driver_config SET credenciales = NULL WHERE id = ?`, id)
+	return translate("quitar la clave", err)
+}
+
+// Delete borra una conexión entera.
+func (r *DriverConfigRepo) Delete(ctx context.Context, id int64) error {
+	res, err := r.db.ExecContext(ctx, `DELETE FROM driver_config WHERE id = ?`, id)
+	if err != nil {
+		return translate("borrar la conexión", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("conexión %d: %w", id, ErrNotFound)
+	}
+	return nil
+}
+
+func scanDriverConfig(sc interface{ Scan(...any) error }) (model.DriverConfig, []byte, error) {
+	var c model.DriverConfig
+	var canal sql.NullInt64
+	var cred []byte
+	if err := sc.Scan(&c.ID, &canal, &c.Kind, &c.Driver, &c.Params, &cred); err != nil {
+		return model.DriverConfig{}, nil, err
+	}
+	c.ChannelID = ptrInt64(canal)
+	c.TieneSecreto = len(cred) > 0
+	return c, cred, nil
+}

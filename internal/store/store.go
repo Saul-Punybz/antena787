@@ -50,11 +50,17 @@ const busyTimeout = 5 * time.Second
 type Store struct {
 	db   *sql.DB
 	path string
+	// sec cifra y descifra las credenciales de driver_config. errLlave dice
+	// por qué no hay llave, si no la hay: eso no impide arrancar, pero sí hay
+	// que poder explicarlo cuando alguien pregunte por qué no se lee una clave.
+	sec      *Secretos
+	errLlave error
 
 	Channel  *ChannelRepo
 	Output   *OutputRepo
 	Media    *MediaAssetRepo
 	Preset   *PresetRepo
+	Conexion *DriverConfigRepo
 	Title    *TitleRepo
 	Alias    *AliasRepo
 	Episode  *EpisodeRepo
@@ -96,6 +102,14 @@ func Open(path string) (*Store, error) {
 	}
 
 	s := &Store{db: db, path: path}
+	// La llave de las credenciales vive al lado de la base. Que no se pueda
+	// abrir NO impide arrancar: sin ella no se leen las claves guardadas, pero
+	// el canal sigue emitiendo, que es lo que manda (ADR 0008).
+	if sec, err := AbrirSecretos(filepath.Dir(path)); err == nil {
+		s.sec = sec
+	} else {
+		s.errLlave = err
+	}
 	s.wire()
 
 	if err := s.CheckIntegrity(ctx); err != nil {
@@ -147,6 +161,7 @@ func (s *Store) wire() {
 	// sonido que va al aire), así que necesita la cadena de auditoría.
 	s.Media = &MediaAssetRepo{db: s.db, audit: s.Audit}
 	s.Preset = &PresetRepo{db: s.db}
+	s.Conexion = &DriverConfigRepo{db: s.db, sec: s.sec}
 	// El catálogo anota en la bitácora lo que se empareja a mano (F1-66,
 	// F1-67), así que necesita la cadena de auditoría.
 	s.Title = &TitleRepo{db: s.db, audit: s.Audit}
@@ -425,3 +440,8 @@ func parseInts(s string) []int {
 	}
 	return v
 }
+
+// ErrorDeLaLlave dice por qué no se pudo abrir la llave de las credenciales, o
+// nil si todo está bien. El canal arranca igual sin ella —el aire manda— pero
+// quien pregunte tiene que poder saber qué pasó.
+func (s *Store) ErrorDeLaLlave() error { return s.errLlave }

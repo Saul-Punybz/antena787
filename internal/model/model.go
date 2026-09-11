@@ -588,3 +588,32 @@ type AjustesDePreset struct {
 	CodecAudio   string `json:"codec_audio,omitempty"`
 	BitrateAudio string `json:"bitrate_audio,omitempty"`
 }
+
+// ── la configuración de un driver, con sus credenciales ───────────────
+
+// DriverConfig es cómo se conecta el canal a algo de fuera: un proveedor de
+// streaming, un servidor de alertas, un servicio de fichas. Existe en el
+// esquema desde la versión 1 y no se había construido nunca.
+//
+// Lo que la separa de una salida o de una fuente es que **aquí viven las
+// credenciales**, y viven cifradas: la base se respalda cada hora y esos
+// respaldos se copian, así que una clave de proveedor en texto plano se va de
+// la máquina sin que nadie lo note (internal/store/secretos.go explica qué
+// protege eso y qué no).
+type DriverConfig struct {
+	ID        int64  `json:"id" db:"id"`
+	ChannelID *int64 `json:"channel_id" db:"channel_id"` // nulo = vale para todos
+	// Kind es para qué es: salida | alerta | cobro | fichas | entrada |
+	// avisos | transmisor | respaldo | retorno.
+	Kind   string `json:"tipo" db:"tipo"`
+	Driver string `json:"driver" db:"driver"`
+	// Params es el JSON del driver, lo que NO es secreto.
+	Params string `json:"parametros" db:"parametros"`
+	// Secret es lo que sí lo es, ya descifrado. **Nunca lleva etiqueta json:
+	// esto no sale por la API ni por accidente.** Lo que la pantalla ve es si
+	// hay algo guardado, no qué es.
+	Secret string `json:"-" db:"-"`
+	// TieneSecreto es lo único que la interfaz necesita saber: si hay una
+	// clave guardada o el campo está vacío.
+	TieneSecreto bool `json:"tiene_secreto" db:"-"`
+}
