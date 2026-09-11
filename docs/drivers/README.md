@@ -96,6 +96,32 @@ local es una forma bastante directa de poner cualquier cosa al aire (§19).
 | `hls-daterange` | Salida web |
 | `ninguna` | |
 
+**El protocolo de `scte104-tcp` ya está escrito** (11 sept 2026), en
+[`internal/drivers/senal/scte104`](../../internal/drivers/senal/scte104): los
+dos sobres del estándar (`single_operation_message` y
+`multiple_operation_message`), el encuadre de TCP —donde el largo va **dentro**
+del mensaje, en su `message_size`, y no como un prefijo aparte—, y los mensajes
+que hacen falta para el diálogo completo con un inyector: `init_request`,
+`alive_request` cada 10 s, `splice_request_data` en sus cinco tipos (empezar y
+terminar, normal e inmediato, y cancelar), `time_signal_request`, `insert_DTMF`,
+`inject_section` y `proprietary_command`. El `Cliente` es el *automation system*
+de la jerga del estándar: sostiene el enlace, reconecta con espera progresiva
+1, 2, 4… con tope de 60 s sin rendirse nunca, y cuenta reintentos y último
+error para la pantalla con el mismo vocabulario que las salidas (F2-48). **No
+está cableado al motor ni al plan**: eso es otra tanda. Como no hay biblioteca
+de SCTE-104 en ningún lenguaje salvo una en TypeScript, y el estándar está tras
+registro, la forma de cada mensaje se sacó de las dos únicas implementaciones
+libres que existen —`astronautlabs/scte104` (TypeScript) y el SCTE-104 de
+`stoth68000/libklvanc` (C, en producción en Open Broadcast Encoder)— leídas byte
+a byte y comparadas entre sí; **el `splice_request_data` está verificado de ida
+y vuelta contra un vector de bytes ajeno** y el resto solo contra la estructura
+que documentan las dos fuentes, que es lo que queda anotado en el código, campo
+por campo. Los dos desacuerdos encontrados también: el `pre_roll_time` del corte
+va en milisegundos (no en décimas, como dice un comentario de libklvanc) y el
+segundo vector de prueba de la referencia de TypeScript tiene dos bytes de
+sobra. La prueba contra un inyector real, con su soak de 48-72 horas, sigue
+pendiente.
+
 **`inyeccion-ts` no está en la versión 1.** Inyectar las secciones aguas abajo,
 en el flujo ya multiplexado, cuesta de tres a cuatro veces lo que cuesta el
 crawl de clasificados, es en la práctica escribir un remuxer, y **no tiene un
