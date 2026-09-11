@@ -1,6 +1,92 @@
 # CONTINUAR — dónde quedamos y qué sigue
 
-_Última sesión: 9 de septiembre de 2026 (ocho tandas; la octava con agentes en paralelo). Siguiente: T2 y T3 de F2 en paralelo._
+_Última sesión: 11 de septiembre de 2026 (la tanda del rescate: cinco ramas de agentes, cuatro fusionadas). Siguiente: la cadena `sout` de Rolando, y el watchdog de 3 s (F2-11)._
+
+## Lo último · 11 de septiembre de 2026 · la tanda del rescate
+
+La sesión empezó con tres worktrees que tenían horas de trabajo **sin un solo
+commit** en sus ramas. Se rescataron los tres antes de construir nada nuevo, y
+cada agente commiteó y pusheó su propia rama antes de reportar. La fusión la
+hizo el orquestador, que se reservó `web/src/lib/api.ts`, `tipos.ts` y el
+router para que dos worktrees no inventaran el mismo nombre por separado.
+
+**Lo que entró en `main`:**
+
+1. **La puerta del aire** (`agente/salir-de-sombra`). Murió el
+   `nuevo.Mode = "sombra"` de `internal/api/estado.go`, la línea de F1 que
+   mantenía apagado todo lo que se construyó para encenderlo. `PUT /canal` ya
+   **no toca el modo nunca** —un cliente rancio reencendería el transmisor con
+   un modo viejo—; la transición vive en `POST /canal/al-aire` y `/a-sombra`
+   (`internal/api/aire.go`, `internal/app/aire.go`), con seis comprobaciones
+   previas (ffmpeg · salidas · que las salidas abran · plan de 30 min ·
+   cobertura · retorno), 409 con la lista entera cuando falta algo, y
+   confirmación escrita. Volver a sombra cancela el ctx del encoder, así que
+   apagar apaga de verdad, y una parada a propósito ya no cuenta como caída.
+   El botón vive en `web/src/componentes/PuertaDelAire.tsx`. Criterio F2-118
+   nuevo. **Dos tipos de incidente nuevos** heredados del diff: `al_aire` y
+   `a_sombra` — Saul decide si se quedan.
+2. **La pantalla de salidas** (`agente/pantalla-salidas`).
+   `web/src/pantallas/Salidas.tsx`, 678 líneas contra la API que T2 dejó
+   completa y sin cliente. Con esto el canal **se puede apuntar a la TP1000**,
+   que era la otra mitad del P0: un interruptor para salir de sombra sin sitio
+   donde escribir una IP no sirve de nada. Sin valores precargados a propósito,
+   porque la cadena `sout` de Rolando sigue sin respuesta.
+3. **Los dos bugs de contrato** (`agente/contrato-arreglos`). El importador de
+   la hoja de CAtv mandaba `regla_que_vence`/`regla_que_releva` y la pantalla
+   leía `regla`/`releva_a`: cada clic en «confirmar relevos» contestaba 400.
+   Alineado, con la prueba del viaje entero hoja→propuesta→confirmación. Y
+   **la prueba de contrato ahora compara tipos, no presencia de clave**, que
+   era el agujero por el que ese bug vivió dos días. Ajustes deja de leer
+   **27 claves** que ningún `.go` manda; las tarjetas de salud y respaldo
+   explican por qué no hay dato en vez de fingirlo. La sesión heredada había
+   intentado lo contrario —inventar las claves y construir el respaldo para
+   alimentarlas—; se revirtió.
+4. **`internal/ts` de 0% a 100% de cobertura** (`agente/pruebas-que-faltan`).
+   Sostiene F0-04 y F2-114, y no tenía una sola prueba. Se auditó mutando
+   `ts.go` en tres rutas para confirmar que las aserciones revientan de verdad.
+   Y se arregló `TestAbrirCerrarDetieneLaReconexion` en `hdhomerun`, que
+   **nunca llegaba a su aserción**.
+5. **El Resumen de `docs/ACEPTACION.md`** decía «F2: 110 · total 184» con la
+   lista trayendo F2-01 a F2-118. Contado sobre el archivo: **F0 9 · F1 80 ·
+   F2 118 · total 207**, de ellos 176 `[AUTO]`, 30 `[MANUAL]` y **uno `[DOC]`**
+   (F1-74), una tercera etiqueta que el Resumen nunca mencionó.
+
+**Lo que la fusión destapó, y es la lección de la tanda:** la pantalla nueva
+puso `main` en rojo en dos criterios de F1 que ninguna prueba de la rama
+detectaba — **F1-57** (el menú tiene que traer cinco entradas, seis con el
+primer anunciante) y **F1-56** (la lista cerrada de jerga prohibida del
+principio 3 del PRD: `driver`, `códec`, `GOP`, `LKFS`, `transport stream`).
+Decisión del orquestador: **«Salidas» sale del menú principal** —configurar a
+dónde va la señal es instalación, no operación diaria— y se entra desde
+Ajustes, conservando la ruta. La jerga se arregla renombrando identificadores
+en la capa de interfaz (`driver` → `tipo`), no tocando la prueba. En marcha en
+`agente/jerga-y-menu`; **`main` no se pushea hasta que esté verde.**
+
+**Lo que se corrigió del plan:** el **monitor de salida (F2-117) no cabe en una
+tanda de pantalla.** Pide servir la salida real por `http-ts`/HLS con menos de
+3 s de retraso, y `http-ts` **no existe**: está marcado como T7 en
+`internal/drivers/salida/salida.go:9`. Necesita el driver antes que la vista.
+El estimado de «1 tanda» de `docs/auditoria/07-desde-cero.md` §3 estaba mal.
+
+**Lo que sigue, en orden:**
+
+1. **Mandar los bloques 1 y 2 de `docs/PARA-ROLANDO-WHATSAPP.md`.** Es gratis,
+   es una acción humana, y es el punto de más apalancamiento del proyecto: sin
+   la cadena `sout` los PIDs de T2 y los campos de la pantalla nueva siguen
+   siendo valores de ejemplo.
+2. **Watchdog de 3 s sobre el encoder y cascada a relleno** (F2-11). Es el
+   código que sostiene el aire cuando Rolando lo rompe.
+3. **Tomar y soltar el control a mano sin quedarse pegado** (T5).
+4. **Grabar lo que salió** (`air_recording` existe y está vacía).
+5. **Corregir `docs/PARA-ROLANDO.md`**, que hoy vende la pantalla «Anuncios» y
+   los 518,400 segundos vendibles, justo lo que se pospuso el 11 de
+   septiembre. Una expectativa mal puesta cuesta más que una función que falta.
+6. El monitor (F2-117) **después** del driver `http-ts` de T7.
+
+**Cómo se corrió esta tanda** quedó escrito como skill reutilizable:
+`~/Desktop/PunyOS/06_Claude/skills/obra/` (`/obra arranque` · `/obra mitad` ·
+`/obra cierre`) — ocho invariantes, precios por modelo, y las seis pasadas de
+verificación de cierre con sus comandos.
 
 ## Dónde estamos
 
