@@ -104,6 +104,9 @@ type Channel struct {
 	// una instalación nueva no lo sabe todavía, y en CAtv lo asigna el
 	// multiplexor. La guía avisa antes que inventarlo.
 	VirtualChannel string `json:"numero_canal" db:"numero_canal"`
+	// PresetID es el preset de preparación del canal entero: el nivel más
+	// general de los tres. Nulo = los valores de fábrica del código.
+	PresetID *int64 `json:"preset_id" db:"preset_id"`
 	// Accel es con qué se comprime el video: la tarjeta o el procesador.
 	// Los valores son los de engine.Acelerador; 'auto' —el de fábrica— deja
 	// que se escoja el mejor que haya en esta máquina, que es lo que pasaba
@@ -180,6 +183,10 @@ type MediaAsset struct {
 	Thumbnail        string     `json:"cuadro_miniatura" db:"cuadro_miniatura"`
 	State            AssetState `json:"estado" db:"estado"`
 	PlainReason      string     `json:"motivo_claro" db:"motivo_claro"`
+	// PresetID es el preset de este archivo en concreto: el nivel más
+	// específico de los tres, el que gana sobre todos. Nulo = hereda del
+	// título, y si el título tampoco tiene, del canal.
+	PresetID *int64 `json:"preset_id" db:"preset_id"`
 	MotivoCodigo     string     `json:"motivo_codigo" db:"motivo_codigo"`               // por qué se paró, en clave: sin_audio, duracion_av_no_coincide, normalizacion_fallida; vacío en lo demás
 	NormalizeState   string     `json:"estado_normalizacion" db:"estado_normalizacion"` // pendiente | en_curso | listo | fallido
 	NormalizedPath   string     `json:"ruta_normalizada" db:"ruta_normalizada"`
@@ -294,6 +301,9 @@ type Title struct {
 	// las 156 horas al año y el reporte del Form 2100 Schedule H llegan con el
 	// reporte de emisión (F4).
 	InfantilCore bool `json:"infantil_core" db:"infantil_core"`
+	// PresetID es el preset de preparación de este programa: manda sobre el
+	// del canal y cede ante el de un archivo suelto. Nulo = hereda.
+	PresetID *int64 `json:"preset_id" db:"preset_id"`
 }
 
 // TitleAlias es cómo llama la hoja a una ficha del catálogo: «Samurai X» es
@@ -527,3 +537,54 @@ const (
 
 // Ready dice si un asset puede salir al aire: ingerido y normalizado.
 func (a MediaAsset) Ready() bool { return a.State == AssetReady && a.NormalizeState == NormalizeReady }
+
+// ── los presets de preparación ────────────────────────────────────────
+
+// Preset es cómo quiere el dueño del canal que suene y se vea su material:
+// volumen, recortes, calidad. Se aplica en tres niveles —canal, título,
+// archivo— y gana el más específico (esquema v10).
+//
+// La palabra «preset» se usa tal cual a propósito: es la que dice la gente que
+// trabaja en una estación, y la explicación va debajo en español.
+type Preset struct {
+	ID        int64     `json:"id" db:"id"`
+	ChannelID *int64    `json:"channel_id" db:"channel_id"`
+	Name      string    `json:"nombre" db:"nombre"`
+	Settings  string    `json:"ajustes" db:"ajustes"` // JSON de AjustesDePreset
+	Created   time.Time `json:"creado" db:"creado"`
+}
+
+// AjustesDePreset son las perillas. **Todo es opcional a propósito**: lo que no
+// esté escrito se hereda del nivel de arriba, y lo que no esté escrito en
+// ninguno cae en los valores de fábrica del código. Por eso son punteros y no
+// valores: «cero» y «no dicho» son cosas distintas, y confundirlas haría que
+// un preset con un campo vacío pisara el del canal con un cero.
+type AjustesDePreset struct {
+	// NoTocar deja el archivo como viene: no se convierte, no se reencodea.
+	// Para material que ya llega en el formato de casa y no hay por qué
+	// empeorarlo pasándolo otra vez por un encoder.
+	NoTocar *bool `json:"no_tocar,omitempty"`
+	// VolumenRelativoDB corrige un archivo concreto que viene bajo o alto,
+	// además de la normalización. «Este viene 3 dB bajito.»
+	VolumenRelativoDB *float64 `json:"volumen_relativo_db,omitempty"`
+	// ObjetivoVolumenLKFS es a cuánto se normaliza. **Ojo con éste**: en
+	// Estados Unidos el CALM Act manda −24 LKFS para televisión, así que el
+	// valor sale del perfil regulatorio del canal y cambiarlo a mano tiene
+	// que venir con su aviso. No se prohíbe —una emisora de otro país tiene
+	// otro número— pero no se cambia sin saber lo que se hace.
+	ObjetivoVolumenLKFS *float64 `json:"objetivo_volumen_lkfs,omitempty"`
+	// RecorteCabezaMs y RecorteColaMs son el negro y el silencio que se
+	// quitan de los extremos, por encima de lo que el ingest detecta solo.
+	RecorteCabezaMs *int64 `json:"recorte_cabeza_ms,omitempty"`
+	RecorteColaMs   *int64 `json:"recorte_cola_ms,omitempty"`
+	// Calidad es "alta", "normal" o "baja". Se traduce a CRF dentro: el
+	// número no se le enseña a nadie.
+	Calidad string `json:"calidad,omitempty"`
+	// GOPSegundos es cada cuántos segundos va un cuadro clave. Uno es lo de
+	// fábrica y es lo que hace posible copiar bits sin decodificar.
+	GOPSegundos *int `json:"gop_segundos,omitempty"`
+	// Los códecs, para quien sepa lo que pide. Vacío = lo de fábrica.
+	CodecVideo   string `json:"codec_video,omitempty"`
+	CodecAudio   string `json:"codec_audio,omitempty"`
+	BitrateAudio string `json:"bitrate_audio,omitempty"`
+}

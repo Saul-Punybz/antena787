@@ -33,6 +33,7 @@ var migrations = []Migration{
 	{Version: 7, SQL: migracion7},
 	{Version: 8, SQL: migracion8},
 	{Version: 9, SQL: migracion9},
+	{Version: 10, SQL: migracion10},
 }
 
 // migracion2 cierra tres huecos de integridad del plan (F1-12, F1-22, F1-26
@@ -231,6 +232,38 @@ ALTER TABLE media_asset RENAME COLUMN motivo_en_cristiano TO motivo_claro;
 // guía avisa en vez de inventarlo.
 const migracion9 = `
 ALTER TABLE channel ADD COLUMN numero_canal TEXT NOT NULL DEFAULT '';
+`
+
+// migracion10 le da al canal sus presets de preparación: cómo quiere su dueño
+// que suene y se vea el material que entra. Hasta aquí todo estaba cableado en
+// el código —volumen, calidad, GOP, recortes— y no había forma de corregir un
+// archivo que viene bajito ni de decir «este ya está bien, no lo toques».
+//
+// Los ajustes van en JSON, como los de una salida (`output.parametros`), y por
+// la misma razón: son un puñado de perillas que se leen juntas y siempre a la
+// vez. Una columna por perilla obligaría a migrar el esquema cada vez que se
+// añada una.
+//
+// Se aplican en tres niveles y gana el más específico: el archivo manda sobre
+// el título, y el título sobre el canal. Un nivel sin preset no tapa al de
+// arriba: hereda.
+const migracion10 = `
+CREATE TABLE preset (
+  id          INTEGER PRIMARY KEY,
+  channel_id  INTEGER REFERENCES channel(id),
+  nombre      TEXT NOT NULL,
+  -- Las perillas, en JSON. Lo que no esté escrito se hereda del nivel de
+  -- arriba: por eso los campos opcionales y no valores por defecto aquí.
+  ajustes     TEXT NOT NULL DEFAULT '{}',
+  creado      TEXT NOT NULL,
+  UNIQUE (channel_id, nombre)
+);
+
+-- A qué se le aplica. NULL en los tres niveles es lo de hoy: los valores de
+-- fábrica del código, que siguen siendo los correctos para casi todo el mundo.
+ALTER TABLE channel     ADD COLUMN preset_id INTEGER REFERENCES preset(id);
+ALTER TABLE title       ADD COLUMN preset_id INTEGER REFERENCES preset(id);
+ALTER TABLE media_asset ADD COLUMN preset_id INTEGER REFERENCES preset(id);
 `
 
 // SchemaVersion es la versión a la que lleva este binario.

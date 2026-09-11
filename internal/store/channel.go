@@ -18,14 +18,14 @@ type ChannelRepo struct{ db *sql.DB }
 const channelCols = `id, nombre, tipo, perfil_de_formato, perfil_regulatorio, modo,
 	zona_horaria, hora_inicio_dia_emision, carga_maxima_por_hora,
 	identificativo, comunidad_licencia, clase_licencia, acelerador,
-	numero_canal`
+	numero_canal, preset_id`
 
 func scanChannel(sc interface{ Scan(...any) error }) (model.Channel, error) {
 	var c model.Channel
 	var minutos int64
 	err := sc.Scan(&c.ID, &c.Name, &c.Kind, &c.FormatProfile, &c.RegProfile, &c.Mode,
 		&c.TimeZone, &minutos, &c.MaxLoadPerHour,
-		&c.CallSign, &c.LicenseCity, &c.LicenseClass, &c.Accel, &c.VirtualChannel)
+		&c.CallSign, &c.LicenseCity, &c.LicenseClass, &c.Accel, &c.VirtualChannel, &c.PresetID)
 	if err != nil {
 		return model.Channel{}, err
 	}
@@ -72,11 +72,11 @@ func (r *ChannelRepo) Update(ctx context.Context, c model.Channel) error {
 			perfil_regulatorio = ?, modo = ?, zona_horaria = ?,
 			hora_inicio_dia_emision = ?, carga_maxima_por_hora = ?,
 			identificativo = ?, comunidad_licencia = ?, clase_licencia = ?,
-			acelerador = ?, numero_canal = ?
+			acelerador = ?, numero_canal = ?, preset_id = ?
 		WHERE id = ?`,
 		c.Name, string(c.Kind), c.FormatProfile, c.RegProfile, c.Mode, c.TimeZone,
 		int64(c.BroadcastDayAt), c.MaxLoadPerHour,
-		c.CallSign, c.LicenseCity, c.LicenseClass, c.Accel, c.VirtualChannel, c.ID)
+		c.CallSign, c.LicenseCity, c.LicenseClass, c.Accel, c.VirtualChannel, c.PresetID, c.ID)
 	if err != nil {
 		return translate("guardar el canal", err)
 	}

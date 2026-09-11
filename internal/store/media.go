@@ -24,7 +24,7 @@ const mediaCols = `id, channel_id, ruta, hash, codec, resolucion, fps, canales_a
 	cuadro_miniatura, estado, motivo_claro, motivo_codigo, estado_normalizacion,
 	ruta_normalizada, negro_intencional, sin_logo, dejado_pasar_por,
 	pistas_audio, pista_audio_aire, pista_audio_sap, audio_sidecar,
-	subtitulos_sidecar, creado_ms, actualizado_ms`
+	subtitulos_sidecar, creado_ms, actualizado_ms, preset_id`
 
 func scanMedia(sc interface{ Scan(...any) error }) (model.MediaAsset, error) {
 	var a model.MediaAsset
@@ -45,7 +45,7 @@ func scanMedia(sc interface{ Scan(...any) error }) (model.MediaAsset, error) {
 		&a.Thumbnail, &a.State, &a.PlainReason, &a.MotivoCodigo, &a.NormalizeState,
 		&a.NormalizedPath, &a.IntentionalBlack, &a.NoLogo, &a.LetThroughBy,
 		&pistas, &a.PistaAudioAire, &sap, &a.AudioSidecar, &a.SubtitulosSidecar,
-		&creado, &actualizad)
+		&creado, &actualizad, &a.PresetID)
 	if err != nil {
 		return model.MediaAsset{}, err
 	}
@@ -87,8 +87,8 @@ func (r *MediaAssetRepo) Insert(ctx context.Context, a *model.MediaAsset) error 
 			marcas_de_corte_ms, cuadro_miniatura, estado, motivo_claro,
 			motivo_codigo, estado_normalizacion, ruta_normalizada, negro_intencional, sin_logo,
 			dejado_pasar_por, pistas_audio, pista_audio_aire, pista_audio_sap,
-			audio_sidecar, subtitulos_sidecar, creado_ms, actualizado_ms)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			audio_sidecar, subtitulos_sidecar, creado_ms, actualizado_ms, preset_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		nullInt64(a.ChannelID), a.Path, a.Hash, a.Codec, a.Resolution, a.FPS,
 		a.AudioChannels, a.DurationMs, nullFloat64(a.LUFS), nullFloat64(a.TruePeak),
 		a.HasCaptions, a.CaptionFormat, nullString(a.ExternalCaptions),
@@ -97,7 +97,7 @@ func (r *MediaAssetRepo) Insert(ctx context.Context, a *model.MediaAsset) error 
 		a.IntentionalBlack, a.NoLogo, a.LetThroughBy,
 		jsonPistasAudio(a.PistasAudio), a.PistaAudioAire, nullInt(a.PistaAudioSAP),
 		a.AudioSidecar, a.SubtitulosSidecar,
-		model.Ms(a.CreatedAt), model.Ms(a.UpdatedAt))
+		model.Ms(a.CreatedAt), model.Ms(a.UpdatedAt), nullInt64(a.PresetID))
 	if err != nil {
 		return translate("guardar el archivo", err)
 	}
@@ -124,7 +124,8 @@ func (r *MediaAssetRepo) Update(ctx context.Context, a *model.MediaAsset) error 
 			motivo_claro = ?, motivo_codigo = ?, estado_normalizacion = ?, ruta_normalizada = ?,
 			negro_intencional = ?, sin_logo = ?, dejado_pasar_por = ?,
 			pistas_audio = ?, pista_audio_aire = ?, pista_audio_sap = ?,
-			audio_sidecar = ?, subtitulos_sidecar = ?, actualizado_ms = ?
+			audio_sidecar = ?, subtitulos_sidecar = ?, actualizado_ms = ?,
+			preset_id = ?
 		WHERE id = ?`,
 		nullInt64(a.ChannelID), a.Path, a.Hash, a.Codec, a.Resolution, a.FPS,
 		a.AudioChannels, a.DurationMs, nullFloat64(a.LUFS), nullFloat64(a.TruePeak),
@@ -133,7 +134,8 @@ func (r *MediaAssetRepo) Update(ctx context.Context, a *model.MediaAsset) error 
 		string(a.State), a.PlainReason, a.MotivoCodigo, a.NormalizeState, a.NormalizedPath,
 		a.IntentionalBlack, a.NoLogo, a.LetThroughBy,
 		jsonPistasAudio(a.PistasAudio), a.PistaAudioAire, nullInt(a.PistaAudioSAP),
-		a.AudioSidecar, a.SubtitulosSidecar, model.Ms(a.UpdatedAt), a.ID)
+		a.AudioSidecar, a.SubtitulosSidecar, model.Ms(a.UpdatedAt),
+		nullInt64(a.PresetID), a.ID)
 	if err != nil {
 		return translate("guardar el archivo", err)
 	}
