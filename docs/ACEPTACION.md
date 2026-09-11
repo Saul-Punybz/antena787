@@ -749,6 +749,23 @@ inventario sin cambiar de pantalla. No hay ruta nueva del servidor.
   QuickSync, NVENC, VAAPI y software disponibles · Cuando corre la prueba de
   10 segundos con cada encoder candidato · Entonces la pantalla de Ajustes
   muestra cuál fue elegido y el uso de CPU medido de cada uno.
+  **A medias (11 sept 2026): existe el nombre, no la prueba.** El 11 de
+  septiembre se construyó `engine.Acelerador` con sus valores, el campo
+  `channel.acelerador` (esquema v7) y el selector de Ajustes, porque F2-11 no
+  se puede escribir sin ellos: sin un nombre para el acelerador no hay nada
+  que conservar al relanzar ni a qué caer. Lo que **no** existe es esto:
+  `Acelerador.Disponible` pregunta `ffmpeg -encoders`, que responde *«este
+  binario trae el códec compilado»* y **no** *«esta máquina puede comprimir
+  con esa tarjeta»* (lo señaló Saul el 11 sept). Un ffmpeg de distribución
+  trae `h264_nvenc` compilado aunque no haya tarjeta NVIDIA ni su driver, así
+  que la validación de `PUT /canal` lo aceptaría y el fallo saldría al
+  encender el aire. Cerrarlo es comprimir unos cuadros de verdad con cada
+  candidato antes de confiarle nada — que es justo lo que pide este criterio.
+  Mientras tanto hay dos cinturones puestos: `auto` resuelve a **software**
+  (`Acelerador.Resolver`), así que nadie acaba en una tarjeta sin haberla
+  pedido; y si alguien la pide y no funciona, **F2-11 baja el canal a software
+  y lo dice en cristiano** sin sacarlo del aire. La prueba de humo evita el
+  susto; el watchdog evita que el susto tumbe la señal.
 - **F2-16** [AUTO] — Dado un ID de estación programado `dentro_de` el
   bloque de RadioOnce Live! · Cuando llega su hora · Entonces toma el aire
   (deck programa) y, al terminar, la señal en vivo regresa sola, sin
