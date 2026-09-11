@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"antena787/internal/app"
+	"antena787/internal/engine"
 	"antena787/internal/model"
 )
 
@@ -33,6 +34,46 @@ type estadoBody struct {
 	// HayAnunciantes enciende la sexta entrada del menú, Anuncios: sin un
 	// solo anunciante registrado el menú se queda en cinco (PRD §13, F1-57).
 	HayAnunciantes bool `json:"hay_anunciantes"`
+	// Acelerador es con qué se está comprimiendo el video de verdad, que no
+	// siempre es lo que el canal tiene guardado: cuando la tarjeta deja de
+	// responder dos veces en diez minutos, el canal sigue por el procesador
+	// y aquí se ve (F2-11). AceleradorPorque es la frase en cristiano de por
+	// qué cambió, vacía cuando es lo que se pidió.
+	Acelerador       string `json:"acelerador_efectivo"`
+	AceleradorPorque string `json:"acelerador_porque,omitempty"`
+	// AceleradoresDisponibles es la lista que Ajustes ofrece, con el nombre
+	// ya en cristiano y si este ffmpeg de verdad lo trae. Va aquí y no en
+	// GET /canal para no cambiarle la forma al canal, que es el modelo pelado.
+	AceleradoresDisponibles []aceleradorEnPantalla `json:"aceleradores_disponibles"`
+}
+
+// aceleradorEnPantalla es un acelerador como se le ofrece a una persona: la
+// clave nunca va sola (PRD §4.3, F1-56).
+type aceleradorEnPantalla struct {
+	Acelerador  string `json:"acelerador"`
+	Nombre      string `json:"nombre"`
+	Explicacion string `json:"explicacion"`
+	Disponible  bool   `json:"disponible"`
+}
+
+// losAceleradores arma la lista una vez por respuesta. Preguntarle a ffmpeg
+// qué códecs trae cuesta un proceso, así que solo se hace cuando ffmpeg está
+// y solo para los que no son el procesador.
+func (s *Server) losAceleradores() []aceleradorEnPantalla {
+	out := make([]aceleradorEnPantalla, 0, len(engine.Aceleradores()))
+	for _, ac := range engine.Aceleradores() {
+		hay := true
+		if s.App.FFmpeg != "" {
+			hay = ac.Disponible(s.App.FFmpeg)
+		}
+		out = append(out, aceleradorEnPantalla{
+			Acelerador:  string(ac),
+			Nombre:      ac.Nombre(),
+			Explicacion: ac.Explicacion(),
+			Disponible:  hay,
+		})
+	}
+	return out
 }
 
 // estado es la única ruta que contesta sin clave: es la que le dice a la
@@ -62,6 +103,9 @@ func (s *Server) estado(w http.ResponseWriter, r *http.Request) {
 		FFmpeg:      s.App.FFmpeg != "" && s.App.FFprobe != "",
 	}
 	body.HayAnunciantes = s.hayAnunciantes(ctx)
+	ac, porque := s.App.AceleradorEnCurso()
+	body.Acelerador, body.AceleradorPorque = string(ac), porque
+	body.AceleradoresDisponibles = s.losAceleradores()
 	body.Salidas = []app.SalidaEnPantalla{}
 	if al := s.App.AlarmaSubtitulos(ctx); al != nil {
 		body.Alarmas = append(body.Alarmas, *al)

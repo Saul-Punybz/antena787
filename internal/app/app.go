@@ -248,6 +248,17 @@ type App struct {
 	// la que pide una persona pueden coincidir.
 	resolveMu sync.Mutex
 
+	// accelMu, accelEnCurso y accelForzado son con qué se está comprimiendo
+	// el video ahora mismo (F2-11). El canal guarda cuál se pidió; esto dice
+	// cuál corre de verdad, que puede ser otro: cuando la tarjeta deja de
+	// responder dos veces en diez minutos, el watchdog escribe software aquí
+	// y el canal sigue emitiendo sin que nadie cambie lo guardado. Lo lee
+	// GET /estado para que Ajustes enseñe la verdad y no lo pedido.
+	accelMu       sync.RWMutex
+	accelEnCurso  engine.Acelerador
+	accelForzado  engine.Acelerador
+	accelPorQueEs string
+
 	mu         sync.RWMutex
 	guide      []byte
 	guidePMCP  []byte
@@ -548,4 +559,49 @@ func (a *App) setAlarms(fuente string, list []Alarma) {
 		a.alarms[fuente] = list
 	}
 	a.mu.Unlock()
+}
+
+// ── el acelerador (F2-11) ─────────────────────────────────────────────
+
+// AceleradorDelCanal es el que está guardado, ya resuelto: nunca 'auto' ni
+// vacío. Es lo que el motor le pone a cada salida al encender.
+func (a *App) AceleradorDelCanal(ctx context.Context) engine.Acelerador {
+	ch, err := a.Store.Channel.Get(ctx, a.ChannelID)
+	if err != nil {
+		return engine.AcelSoftware
+	}
+	return engine.Acelerador(ch.Accel).Resolver()
+}
+
+// AceleradorEnCurso es con qué se está comprimiendo de verdad, y por qué, si
+// no es lo que se pidió. Con el canal apagado devuelve lo guardado: es lo que
+// se usaría al encender.
+func (a *App) AceleradorEnCurso() (engine.Acelerador, string) {
+	a.accelMu.RLock()
+	defer a.accelMu.RUnlock()
+	if a.accelForzado != "" {
+		return a.accelForzado, a.accelPorQueEs
+	}
+	if a.accelEnCurso != "" {
+		return a.accelEnCurso, ""
+	}
+	return a.AceleradorDelCanal(a.Context()), ""
+}
+
+// UsandoAcelerador lo escribe el motor al encender el encoder: con éste se
+// está comprimiendo ahora.
+func (a *App) UsandoAcelerador(ac engine.Acelerador) {
+	a.accelMu.Lock()
+	defer a.accelMu.Unlock()
+	a.accelEnCurso = ac.Resolver()
+}
+
+// ForzarAcelerador es lo que llama el watchdog cuando la tarjeta dejó de
+// responder dos veces en diez minutos: a partir de aquí el canal comprime con
+// lo que diga ac —software— sin tocar lo que la persona guardó, y porque
+// explica en cristiano por qué. ForzarAcelerador("", "") lo suelta.
+func (a *App) ForzarAcelerador(ac engine.Acelerador, porque string) {
+	a.accelMu.Lock()
+	defer a.accelMu.Unlock()
+	a.accelForzado, a.accelPorQueEs = ac, porque
 }

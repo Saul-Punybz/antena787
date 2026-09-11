@@ -30,6 +30,7 @@ var migrations = []Migration{
 	{Version: 4, SQL: migracion4},
 	{Version: 5, SQL: migracion5},
 	{Version: 6, SQL: migracion6},
+	{Version: 7, SQL: migracion7},
 }
 
 // migracion2 cierra tres huecos de integridad del plan (F1-12, F1-22, F1-26
@@ -183,6 +184,20 @@ const migracion6 = `
 -- Programa de educación o información para niños. Apagado en todo lo demás:
 -- nadie queda marcado sin que una persona lo diga.
 ALTER TABLE title ADD COLUMN infantil_core INTEGER NOT NULL DEFAULT 0;
+`
+
+// migracion7 le pone nombre al acelerador: con qué se comprime el video, si
+// con la tarjeta o con el procesador (F2-11, F2-15). Hacía falta porque el
+// criterio manda relanzar el encoder «con el mismo acelerador» y caer «por
+// software» a la segunda, y hasta ahora no había dónde decir cuál era el
+// suyo: ffmpeg escogía y nadie lo sabía.
+//
+// 'auto' es el valor de fábrica y es lo que ya pasaba: se usa el mejor que
+// esta máquina tenga, y si no hay ninguno, el procesador. Una base vieja que
+// suba por este escalón se comporta exactamente igual que antes.
+const migracion7 = `
+-- auto | software | nvenc | qsv | vaapi | videotoolbox (engine.Acelerador).
+ALTER TABLE channel ADD COLUMN acelerador TEXT NOT NULL DEFAULT 'auto';
 `
 
 // SchemaVersion es la versión a la que lleva este binario.

@@ -10,6 +10,28 @@ export type Instante = string // RFC 3339 UTC
 export type ModoCanal = 'sombra' | 'aire'
 export type TipoCanal = 'tv' | 'radio'
 
+/**
+ * Con qué se comprime el video: la tarjeta o el procesador (F2-11). Nunca se
+ * enseña la clave: el servidor manda el nombre en cristiano en
+ * `aceleradores_disponibles`.
+ */
+export type Acelerador =
+  | 'auto'
+  | 'software'
+  | 'nvenc'
+  | 'qsv'
+  | 'vaapi'
+  | 'videotoolbox'
+
+/** Un acelerador como se le ofrece a una persona: nunca la clave sola. */
+export interface AceleradorDisponible {
+  acelerador: Acelerador
+  nombre: string
+  explicacion: string
+  /** Si este ffmpeg de verdad lo trae. Los que no, se enseñan apagados. */
+  disponible: boolean
+}
+
 export interface Canal {
   id: number
   nombre: string
@@ -23,6 +45,9 @@ export interface Canal {
   identificativo: string
   comunidad_licencia: string
   clase_licencia: string
+  /** Con qué se pidió comprimir. Lo que corre de verdad es
+   * `Estado.acelerador_efectivo`, que puede ser otro. */
+  acelerador: Acelerador
 }
 
 export interface Salida {
@@ -207,6 +232,17 @@ export interface Estado {
   control_manual?: { activo: boolean; quien?: string; vuelve_en_s?: number }
   /** Anuncios solo aparece en el menú al registrar el primer anunciante (PRD §13). */
   hay_anunciantes?: boolean
+  /**
+   * Con qué se está comprimiendo el video AHORA, que no siempre es lo que el
+   * canal tiene guardado: si la tarjeta dejó de responder dos veces en diez
+   * minutos, el canal siguió emitiendo por el procesador (F2-11). Nunca es
+   * 'auto': el servidor ya lo resolvió.
+   */
+  acelerador_efectivo?: Acelerador
+  /** Por qué cambió, en cristiano. Vacío cuando es lo que se pidió. */
+  acelerador_porque?: string
+  /** Lo que Ajustes ofrece, ya con el nombre en cristiano desde el servidor. */
+  aceleradores_disponibles?: AceleradorDisponible[]
 }
 
 // ── reglas ────────────────────────────────────────────────────────────

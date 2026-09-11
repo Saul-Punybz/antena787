@@ -26,6 +26,7 @@ export const HOY: string = '2026-09-04'
 export const canal: Canal = {
   id: 1,
   nombre: 'Caribbean Advantage TV',
+  acelerador: 'auto',
   tipo: 'tv',
   perfil_de_formato: '1080i 29.97',
   perfil_regulatorio: 'us-fcc',

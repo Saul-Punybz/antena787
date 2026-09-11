@@ -98,6 +98,11 @@ type Channel struct {
 	CallSign       string      `json:"identificativo" db:"identificativo"`
 	LicenseCity    string      `json:"comunidad_licencia" db:"comunidad_licencia"`
 	LicenseClass   string      `json:"clase_licencia" db:"clase_licencia"`
+	// Accel es con qué se comprime el video: la tarjeta o el procesador.
+	// Los valores son los de engine.Acelerador; 'auto' —el de fábrica— deja
+	// que se escoja el mejor que haya en esta máquina, que es lo que pasaba
+	// antes de que el campo existiera (F2-11).
+	Accel string `json:"acelerador" db:"acelerador"`
 }
 
 // Location resuelve la zona horaria del canal.

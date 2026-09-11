@@ -50,6 +50,12 @@ type Output struct {
 	// —hace falta para multicast (F2-114)— y de qué tamaño sale.
 	TTL     int
 	PktSize int
+	// Accel es con qué se comprime el video de esta salida. En blanco sale
+	// exactamente lo que salía antes de que el campo existiera: el
+	// procesador. Lo pone App igual en todas las salidas del canal, y el
+	// watchdog lo baja a software cuando la tarjeta falla dos veces en diez
+	// minutos (F2-11).
+	Accel Acelerador
 }
 
 // Valores de fábrica de una salida de TS. Los tres primeros son los que ya
@@ -68,6 +74,123 @@ const (
 	// PATPeriodo es cada cuánto se repiten PAT y PMT, en segundos.
 	PATPeriodo = "0.1"
 )
+
+// Acelerador es con qué se comprime el video: la tarjeta de video o el
+// procesador. Existe porque F2-11 manda relanzar el encoder colgado «con el
+// mismo acelerador», y caer «por software» si falla dos veces en diez
+// minutos: sin un nombre para eso, no hay nada que conservar ni a qué caer.
+//
+// Nunca se le enseña la clave a nadie (PRD §4.3): la pantalla usa Nombre().
+type Acelerador string
+
+const (
+	// AcelAuto es el de fábrica. Hoy resuelve a software a propósito —ver
+	// Resolver—: cambiar solo el encoder de una estación que ya emite, sin
+	// haber probado que la tarjeta aguanta, es exactamente lo que no se
+	// hace. Empieza a escoger de verdad cuando exista la prueba de diez
+	// segundos por candidato (F2-15).
+	AcelAuto Acelerador = "auto"
+	// AcelSoftware es el procesador. Siempre está, siempre funciona, y es
+	// el suelo al que cae el watchdog cuando la tarjeta deja de responder.
+	AcelSoftware Acelerador = "software"
+	// Las tarjetas. Cada una es un cambio de códec y nada más: el resto de
+	// los argumentos —tasa, PIDs, mux— no depende de quién comprima.
+	AcelNVENC        Acelerador = "nvenc"        // NVIDIA
+	AcelQSV          Acelerador = "qsv"          // Intel Quick Sync
+	AcelVAAPI        Acelerador = "vaapi"        // Linux, AMD e Intel
+	AcelVideoToolbox Acelerador = "videotoolbox" // macOS
+)
+
+// Aceleradores son todos, en el orden en que se le ofrecen a una persona.
+func Aceleradores() []Acelerador {
+	return []Acelerador{AcelAuto, AcelSoftware, AcelNVENC, AcelQSV, AcelVAAPI, AcelVideoToolbox}
+}
+
+// Nombre es cómo se llama en pantalla. Sin jerga y sin la clave (F1-56).
+func (a Acelerador) Nombre() string {
+	switch a {
+	case AcelSoftware:
+		return "El procesador"
+	case AcelNVENC:
+		return "La tarjeta NVIDIA"
+	case AcelQSV:
+		return "El video del procesador Intel"
+	case AcelVAAPI:
+		return "La tarjeta de video (Linux)"
+	case AcelVideoToolbox:
+		return "La tarjeta de video (Mac)"
+	default:
+		return "Automático"
+	}
+}
+
+// Explicacion es la línea de debajo, la que dice qué pasa si se escoge.
+func (a Acelerador) Explicacion() string {
+	switch a {
+	case AcelSoftware:
+		return "Comprime con el procesador. Es el más lento y el que nunca falla; es a donde vuelve el canal solo si la tarjeta deja de responder."
+	case AcelNVENC, AcelQSV, AcelVAAPI, AcelVideoToolbox:
+		return "Comprime con la tarjeta y le quita casi todo el trabajo al procesador. Si deja de responder dos veces en diez minutos, el canal sigue emitiendo con el procesador y te avisa."
+	default:
+		return "Usa el procesador. Escoger la tarjeta sola llega cuando el sistema pueda probarla antes de confiarle el aire."
+	}
+}
+
+// Resolver dice con qué se comprime de verdad. Es el único sitio donde
+// 'auto' y el vacío se convierten en algo concreto, para que el watchdog y
+// la pantalla no lo adivinen cada uno por su lado.
+func (a Acelerador) Resolver() Acelerador {
+	switch a {
+	case "", AcelAuto:
+		return AcelSoftware
+	default:
+		return a
+	}
+}
+
+// codecVideo es el códec de este acelerador para un códec base. base es
+// "h264" o "mpeg2video"; el vacío y lo desconocido devuelven el de software,
+// que es lo que emitía la F0.
+func (a Acelerador) codecVideo(base string) string {
+	if base == "mpeg2video" {
+		// MPEG-2 comprimido por tarjeta solo existe en Intel. Todo lo demás
+		// —incluida la NVIDIA— lo hace con el procesador, así que decirle
+		// otra cosa a ffmpeg sería mentirle.
+		if a.Resolver() == AcelQSV {
+			return "mpeg2_qsv"
+		}
+		return "mpeg2video"
+	}
+	switch a.Resolver() {
+	case AcelNVENC:
+		return "h264_nvenc"
+	case AcelQSV:
+		return "h264_qsv"
+	case AcelVideoToolbox:
+		return "h264_videotoolbox"
+	case AcelVAAPI:
+		// VAAPI no es un cambio de códec: pide subir el cuadro a la tarjeta
+		// con su propio filtro y un dispositivo abierto. Se escribe con la
+		// máquina delante, no de memoria (invariante 3 de la obra).
+		return "libx264"
+	default:
+		return "libx264"
+	}
+}
+
+// Disponible dice si este ffmpeg trae el códec de este acelerador. Es una
+// pregunta al binario, no una suposición sobre la máquina: un ffmpeg sin
+// NVENC compilado no lo tiene aunque la tarjeta esté puesta.
+func (a Acelerador) Disponible(ffmpeg string) bool {
+	if a.Resolver() == AcelSoftware {
+		return true
+	}
+	out, err := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error", "-encoders").Output()
+	if err != nil {
+		return false
+	}
+	return bytes.Contains(out, []byte(a.codecVideo("h264")))
+}
 
 // Encoder es el único ffmpeg de larga vida: recibe cuadros crudos y PCM por
 // dos conexiones TCP locales y produce todas las salidas a la vez.
@@ -205,7 +328,7 @@ func (o Output) argsMPEG2TS() []string {
 		args = append(args, fmt.Sprintf("-filter:a:%d", i), vol)
 	}
 	args = append(args,
-		"-c:v", "mpeg2video", "-pix_fmt", "yuv420p", "-g", "30", "-bf", "2",
+		"-c:v", o.Accel.codecVideo("mpeg2video"), "-pix_fmt", "yuv420p", "-g", "30", "-bf", "2",
 		"-b:v", fmt.Sprintf("%dk", kb), "-minrate", fmt.Sprintf("%dk", kb), "-maxrate", fmt.Sprintf("%dk", kb),
 		"-bufsize", fmt.Sprintf("%dk", kb/2))
 	for i, c := range codecs {
@@ -238,7 +361,7 @@ func (o Output) argsH264TS() []string {
 	return []string{
 		"-map", "0:v", "-map", "1:a",
 		"-filter:a:0", fmt.Sprintf("volume=%.2fdB", o.GainDB),
-		"-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-g", "60",
+		"-c:v", o.Accel.codecVideo("h264"), "-preset", "veryfast", "-pix_fmt", "yuv420p", "-g", "60",
 		"-b:v", fmt.Sprintf("%dk", o.VideoKbs), "-maxrate", fmt.Sprintf("%dk", o.VideoKbs),
 		"-bufsize", fmt.Sprintf("%dk", o.VideoKbs*2),
 		"-c:a", "aac", "-b:a", "128k",
