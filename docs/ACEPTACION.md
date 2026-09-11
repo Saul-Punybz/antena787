@@ -564,6 +564,46 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   `exenta` la apaga sola, y ninguna de las tres respuestas cambia que los
   subtítulos que traiga un archivo se conserven y se puedan subir siempre.
 
+### El hueco de la parrilla es accionable (decisión de Saul del 11 de septiembre de 2026; §9 pasos 2 y 3)
+
+La parrilla **no** acepta poner contenido directo: sigue siendo consecuencia de
+las reglas, no una hoja de celdas. Lo que gana es el atajo a la regla y ver el
+inventario sin cambiar de pantalla. No hay ruta nueva del servidor.
+
+- **F1-78** [AUTO] — Dada una franja vacía en Parrilla · Semana o en
+  Parrilla · Día · Cuando alguien la toca —con el ratón o con el teclado, que
+  es un `button` de verdad con `aria-label` («Vacío de 1:00 PM a 6:00 PM del
+  sábado 12: poner algo aquí»)— · Entonces se abre el editor de regla con el
+  **día ya puesto** en el patrón (un solo día) y la **hora redondeada a la
+  media hora de donde se tocó**, más la fecha de inicio de ese día y la
+  duración más grande que quepa hasta lo siguiente; la fecha de fin se queda en
+  blanco a propósito, porque de ella salen los avisos de vencimiento. Al
+  guardar, la regla se crea, el plan se vuelve a armar (`POST
+  /plan/recalcular`) y la tira se refresca sin recargar la página. El botón
+  «Escoger yo» del aviso de fin de semana vacío abre el mismo flujo sobre el
+  primer vacío de una hora o más del sábado o el domingo: en esa pantalla no
+  queda ningún botón sin acción.
+- **F1-79** [MANUAL] — Dado que la Parrilla enseña una columna de biblioteca al
+  lado, plegable y con su estado recordado en el navegador · Cuando alguien
+  abre Parrilla · Semana o Parrilla · Día · Entonces arriba ve **primero lo que
+  no está programado**, con su conteo («12 títulos que no estás usando»), y
+  debajo lo que sí está, con su hora y hasta cuándo dura su regla; cada tarjeta
+  trae carátula, nombre, tipo, duración y, si es serie, cuántos episodios, hay
+  buscador, y la tarjeta de un título que ya está en la parrilla lleva el enlace
+  «ver su regla» que abre esa regla en Reglas. Con un vacío escogido, lo no
+  programado queda resaltado y escoger un título abre la regla con **título,
+  día y hora** puestos.
+- **F1-80** [MANUAL] — Dado que Parrilla tiene cuatro vistas de lo mismo ·
+  Cuando alguien entra a cualquiera de ellas · Entonces las ve en una sola fila
+  —Día · Semana · Mes · Guía—, con la que está abierta pintada en el color
+  principal y no como una pastilla tenue entre cuatro iguales, y el encabezado
+  dice qué rango se está viendo («Miércoles 10 de septiembre», «Semana del 6 al
+  12 de septiembre», «Septiembre 2026»). Parrilla · Día (`/parrilla/dia`)
+  enseña el día de emisión completo hora por hora con el título, el episodio, la
+  duración y la regla de la que sale cada bloque —con enlace a esa regla—, los
+  vacíos marcados igual que en la semana y accionables como dice F1-78, y
+  navegación al día antes, al día después y a «Hoy».
+
 ---
 
 ## F2 · Playout (motor, decks, fuentes en vivo, manual, diferido, grabación, salidas)
@@ -1401,7 +1441,7 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
 ## Resumen
 
 - **F0:** 9 criterios (F0-01 a F0-09).
-- **F1:** 76 criterios (F1-01 a F1-76; del 9 de septiembre de 2026: F1-58 a F1-63 audio de todo el material, F1-64 a F1-67 emparejar títulos, F1-68 y F1-69 cuarentena e incidentes en pantalla, F1-70 y F1-71 lo aprendido de los proyectos comparables, F1-72 y F1-73 el modo sombra con archivos reales, F1-74 a F1-77 lo señalado por la investigación de subtítulos y metadata).
+- **F1:** 80 criterios (F1-01 a F1-80; del 9 de septiembre de 2026: F1-58 a F1-63 audio de todo el material, F1-64 a F1-67 emparejar títulos, F1-68 y F1-69 cuarentena e incidentes en pantalla, F1-70 y F1-71 lo aprendido de los proyectos comparables, F1-72 y F1-73 el modo sombra con archivos reales, F1-74 a F1-77 lo señalado por la investigación de subtítulos y metadata; del 11 de septiembre de 2026: F1-78 a F1-80, el hueco accionable, la biblioteca al lado de la parrilla y la vista por día).
 - **F2:** 110 criterios (F2-01 a F2-110).
 - **Total: 184 criterios de aceptación**, de los cuales **158 son [AUTO]** y
   **26 son [MANUAL]**.

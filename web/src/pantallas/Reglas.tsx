@@ -1,17 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router'
 import { Caratula } from '../componentes/Caratula'
+import { EditorDeRegla } from '../componentes/EditorDeRegla'
 import { Panel } from '../componentes/Panel'
 import { PatronDeDias } from '../componentes/PatronDeDias'
 import { IconoMas } from '../componentes/Iconos'
 import { api } from '../lib/api'
 import { useEstado } from '../lib/estado'
-import {
-  fechaDeRegla,
-  hhMmAMinutos,
-  minutosAHhMm,
-  minutosAHora12,
-  textoDiasRestantes,
-} from '../lib/fechas'
+import { fechaDeRegla, minutosAHora12, textoDiasRestantes } from '../lib/fechas'
 import {
   ErrorDeApi,
   type DecisionDeEmparejar,
@@ -30,6 +26,7 @@ export function Reglas() {
   const [editando, setEditando] = useState<Regla | 'nueva' | null>(null)
   const [importando, setImportando] = useState(false)
   const [sinEmparejar, setSinEmparejar] = useState<TituloSinEmparejar[]>([])
+  const [busqueda, setBusqueda] = useSearchParams()
 
   const anio = Number((estado?.dia_emision ?? '2026-01-01').slice(0, 4))
 
@@ -46,6 +43,19 @@ export function Reglas() {
     cargar()
     cargarSinEmparejar()
   }, [])
+
+  /**
+   * «/reglas?titulo=Kojak» abre esa regla: es el atajo de vuelta que sale de
+   * la biblioteca al lado de la parrilla. Si no hay ninguna con ese nombre, la
+   * pantalla se queda como está en vez de decir nada raro.
+   */
+  const pedido = busqueda.get('titulo')
+  useEffect(() => {
+    if (!pedido || !reglas) return
+    const suya = reglas.find((r) => r.titulo === pedido)
+    if (suya) setEditando(suya)
+    setBusqueda({}, { replace: true })
+  }, [pedido, reglas, setBusqueda])
 
   /**
    * Ya se decidió uno: sale de la lista, las reglas cambiaron de título y la
@@ -506,221 +516,6 @@ function TarjetaSinEmparejar({
         </div>
       )}
     </div>
-  )
-}
-
-/** Validación en cristiano: la local y la que devuelva el servidor. */
-function validar(v: {
-  titulo: string
-  patron: string
-  desde: string
-  hasta: string
-}): string | null {
-  if (!v.titulo.trim()) return 'Ponle el nombre del programa.'
-  if (!/[LMJVSD]/.test(v.patron))
-    return 'Escoge por lo menos un día de la semana: sin días, la regla no sale nunca.'
-  if (!v.desde) return 'Falta la fecha en que empieza.'
-  if (!v.hasta) return 'Falta la fecha en que termina.'
-  if (v.hasta < v.desde)
-    return 'La fecha de fin cae antes que la de inicio. Revísalas: la regla terminaría antes de empezar.'
-  return null
-}
-
-function EditorDeRegla({
-  regla,
-  alCerrar,
-  alGuardar,
-}: {
-  regla: Regla | null
-  alCerrar: () => void
-  alGuardar: () => void
-}) {
-  const [titulo, setTitulo] = useState(regla?.titulo ?? '')
-  const [patron, setPatron] = useState(regla?.patron_de_dias ?? 'LMMJV__')
-  const [hora, setHora] = useState(minutosAHhMm(regla?.hora ?? 8 * 60))
-  const [slot, setSlot] = useState(String((regla?.duracion_slot_ms ?? 1_800_000) / 60_000))
-  const [desde, setDesde] = useState(regla?.fecha_inicio ?? '')
-  const [hasta, setHasta] = useState(regla?.fecha_fin ?? '')
-  const [episodios, setEpisodios] = useState(String(regla?.episodios_por_corrida ?? 1))
-  const [enVivo, setEnVivo] = useState(regla?.tipo === 'vivo')
-  const [soloHoy, setSoloHoy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [guardando, setGuardando] = useState(false)
-
-  async function guardar() {
-    const problema = validar({ titulo, patron, desde, hasta })
-    if (problema) {
-      setError(problema)
-      return
-    }
-    setError(null)
-    setGuardando(true)
-    const cuerpo = {
-      tipo: (enVivo ? 'vivo' : 'normal') as Regla['tipo'],
-      title_id: regla?.title_id ?? null,
-      live_source_id: regla?.live_source_id ?? null,
-      titulo,
-      patron_de_dias: patron,
-      hora: hhMmAMinutos(hora),
-      duracion_slot_ms: Number(slot) * 60_000,
-      fecha_inicio: desde,
-      fecha_fin: hasta,
-      episodios_por_corrida: Number(episodios) || 1,
-      releva_a: regla?.releva_a ?? null,
-      repite_a: regla?.repite_a ?? null,
-      activa: true,
-    }
-    try {
-      if (regla) await api.editarRegla(regla.id, cuerpo, soloHoy)
-      else await api.crearRegla(cuerpo)
-      // La regla sola no mueve nada: el plan se vuelve a armar aquí mismo,
-      // para que la parrilla enseñe el cambio sin esperar la corrida del reloj.
-      await api.recalcular().catch(() => {})
-      alGuardar()
-    } catch (e) {
-      // El texto del error del servidor ya viene en cristiano (docs/API.md).
-      setError(e instanceof ErrorDeApi ? e.message : 'No se pudo guardar la regla.')
-    } finally {
-      setGuardando(false)
-    }
-  }
-
-  async function borrar() {
-    if (!regla) return
-    await api.borrarRegla(regla.id).catch(() => {})
-    await api.recalcular().catch(() => {})
-    alGuardar()
-  }
-
-  return (
-    <Panel
-      titulo={regla ? regla.titulo : 'Nueva regla'}
-      descripcion="Un título, un patrón de días, una hora y dos fechas. De aquí sale la parrilla."
-      alCerrar={alCerrar}
-      pie={
-        <>
-          {regla && (
-            <button className="boton boton--peligro" onClick={borrar}>
-              Borrar
-            </button>
-          )}
-          <button className="boton" onClick={alCerrar}>
-            Cancelar
-          </button>
-          <button className="boton boton--primario" onClick={guardar} disabled={guardando}>
-            {guardando ? 'Guardando…' : 'Guardar'}
-          </button>
-        </>
-      }
-    >
-      {error && <div className="error-en-cristiano">{error}</div>}
-
-      <div className="campo">
-        <label htmlFor="r-titulo">Programa</label>
-        <input
-          id="r-titulo"
-          type="text"
-          value={titulo}
-          onChange={(e) => setTitulo(e.target.value)}
-          placeholder="Kojak"
-        />
-      </div>
-
-      <div className="campo">
-        <label>Qué días sale</label>
-        <PatronDeDias patron={patron} alCambiar={setPatron} />
-        <span className="ayuda">Toca los días. Sin ningún día, la regla no sale nunca.</span>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <div className="campo">
-          <label htmlFor="r-hora">A qué hora</label>
-          <input
-            id="r-hora"
-            type="time"
-            value={hora}
-            onChange={(e) => setHora(e.target.value)}
-          />
-        </div>
-        <div className="campo">
-          <label htmlFor="r-slot">Cuánto dura</label>
-          <select id="r-slot" value={slot} onChange={(e) => setSlot(e.target.value)}>
-            <option value="30">media hora</option>
-            <option value="60">una hora</option>
-            <option value="90">hora y media</option>
-            <option value="120">dos horas</option>
-            <option value="180">tres horas</option>
-            <option value="300">cinco horas</option>
-          </select>
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <div className="campo">
-          <label htmlFor="r-desde">Empieza</label>
-          <input
-            id="r-desde"
-            type="date"
-            value={desde}
-            onChange={(e) => setDesde(e.target.value)}
-          />
-        </div>
-        <div className="campo">
-          <label htmlFor="r-hasta">Termina</label>
-          <input
-            id="r-hasta"
-            type="date"
-            value={hasta}
-            onChange={(e) => setHasta(e.target.value)}
-          />
-          <span className="ayuda">De aquí salen los avisos de vencimiento.</span>
-        </div>
-      </div>
-
-      <div className="campo">
-        <label htmlFor="r-eps">Cuántos episodios seguidos</label>
-        <input
-          id="r-eps"
-          type="number"
-          min={1}
-          value={episodios}
-          onChange={(e) => setEpisodios(e.target.value)}
-        />
-        <span className="ayuda">
-          El sistema se acuerda de por dónde iba la serie y sigue desde ahí.
-        </span>
-      </div>
-
-      <div className="entre">
-        <div>
-          <div style={{ font: '500 14px var(--sans)' }}>Es una fuente en vivo</div>
-          <div className="ayuda">Reserva el tiempo aunque la señal todavía no llegue.</div>
-        </div>
-        <button
-          className="interruptor"
-          role="switch"
-          aria-checked={enVivo}
-          onClick={() => setEnVivo(!enVivo)}
-        />
-      </div>
-
-      {regla && (
-        <div className="entre">
-          <div>
-            <div style={{ font: '500 14px var(--sans)' }}>¿Solo hoy?</div>
-            <div className="ayuda">
-              Encendido, se crea una excepción de un día y la regla queda como está.
-            </div>
-          </div>
-          <button
-            className="interruptor"
-            role="switch"
-            aria-checked={soloHoy}
-            onClick={() => setSoloHoy(!soloHoy)}
-          />
-        </div>
-      )}
-    </Panel>
   )
 }
 

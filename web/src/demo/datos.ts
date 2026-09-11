@@ -232,6 +232,8 @@ export const reglas: Regla[] = SEMILLAS.map(
 
 // ── la biblioteca ─────────────────────────────────────────────────────
 
+// Lo que está en la biblioteca y no está en ninguna regla. Es lo primero que
+// enseña la biblioteca al lado de la parrilla: es con lo que se llena un hueco.
 const SIN_PROGRAMAR = [
   'Starsky & Hutch',
   'The Time Tunnel',
@@ -243,12 +245,18 @@ const SIN_PROGRAMAR = [
   'Kimba',
   'El Chavo animado',
   'Los Picapiedra',
+  'El Ciudadano',
+  'Nosferatu',
+  'La Isla del Tesoro',
   // Las fichas del catálogo que la hoja llama de otra manera: la hoja dice
   // «Samurai X» y «SaberMarionette», el catálogo dice esto (F1-64, F1-65).
   'Rurouni Kenshin',
   'Saber Marionette J',
   'Saber Marionette R',
 ]
+
+/** No todo lo que hay son series: una película es un solo archivo largo. */
+const PELICULAS = new Set(['El Ciudadano', 'Nosferatu', 'La Isla del Tesoro'])
 
 const SINOPSIS: Record<string, string> = {
   Kojak:
@@ -282,6 +290,9 @@ const ANIOS: Record<string, number> = {
   'Space Cobra': 1982,
   Zoids: 1999,
   'Magic Knight Rayearth': 1994,
+  'El Ciudadano': 1941,
+  Nosferatu: 1922,
+  'La Isla del Tesoro': 1950,
 }
 
 function iniciales(nombre: string): string {
@@ -342,15 +353,22 @@ export const titulos: TituloDeBiblioteca[] = [
     audio_sidecar: audio?.audio ?? '',
     subtitulos_sidecar: audio?.subtitulos ?? '',
     nombre,
-    tipo: nombre === 'RadioOnce Live!' ? 'programa' : 'serie',
+    tipo:
+      nombre === 'RadioOnce Live!'
+        ? 'programa'
+        : PELICULAS.has(nombre)
+          ? 'película'
+          : 'serie',
     sinopsis:
       SINOPSIS[nombre] ??
       `${nombre} está en la biblioteca del canal, importado de la carpeta de contenido.`,
     anio: ANIOS[nombre] ?? null,
     clasificacion_contenido: nombre === 'Kojak' ? 'TV-PG' : 'TV-G',
     caratula: iniciales(nombre),
-    episodios: nombre === 'RadioOnce Live!' ? 0 : 8 + ((i * 13) % 110),
-    duracion_ms: (regla?.duracion_slot_ms ?? 1_800_000) - 6 * 60_000,
+    episodios: nombre === 'RadioOnce Live!' || PELICULAS.has(nombre) ? 1 : 8 + ((i * 13) % 110),
+    duracion_ms: PELICULAS.has(nombre)
+      ? (94 + ((i * 7) % 26)) * 60_000
+      : (regla?.duracion_slot_ms ?? 1_800_000) - 6 * 60_000,
     estado_material: enCuarentena
       ? 'cuarentena'
       : sinNormalizar

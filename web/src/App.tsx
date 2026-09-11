@@ -7,6 +7,7 @@ import { Asistente } from './pantallas/Asistente'
 import { Biblioteca } from './pantallas/Biblioteca'
 import { Entrar } from './pantallas/Entrar'
 import { Parrilla } from './pantallas/Parrilla'
+import { ParrillaDia } from './pantallas/ParrillaDia'
 import { ParrillaGuia } from './pantallas/ParrillaGuia'
 import { ParrillaMes } from './pantallas/ParrillaMes'
 import { ParrillaSemana } from './pantallas/ParrillaSemana'
@@ -64,6 +65,7 @@ function Rutas() {
         <Route path="/al-aire" element={<AlAire />} />
         <Route path="/parrilla" element={<Parrilla />}>
           <Route index element={<ParrillaSemana />} />
+          <Route path="dia" element={<ParrillaDia />} />
           <Route path="mes" element={<ParrillaMes />} />
           <Route path="guia" element={<ParrillaGuia />} />
         </Route>

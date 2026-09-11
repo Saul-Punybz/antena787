@@ -83,6 +83,15 @@ function utcDe(dia: string, minutos: number): Date {
   return new Date(Date.UTC(a, m - 1, d, -DESFASE_H, 0, 0) + minutos * 60_000)
 }
 
+/** "1 h 25 min", como `humanMs` del servidor. */
+function duracionEnPalabras(ms: number): string {
+  const min = Math.round(ms / 60_000)
+  if (min < 60) return `${min} min`
+  const h = Math.floor(min / 60)
+  const r = min % 60
+  return r ? `${h} h ${r} min` : `${h} h`
+}
+
 function hhmm(minutos: number): string {
   return `${String(Math.floor(minutos / 60)).padStart(2, '0')}:${String(minutos % 60).padStart(2, '0')}`
 }
@@ -97,6 +106,41 @@ function diaEmisionDe(t: Date): string {
   const local = new Date(t.getTime() + DESFASE_H * 3_600_000)
   const corrido = new Date(local.getTime() - canal.hora_inicio_dia_emision * 60_000)
   return corrido.toISOString().slice(0, 10)
+}
+
+/** 0 = domingo, leído de un "AAAA-MM-DD". */
+function diaSemanaDe(dia: string): number {
+  const [a, m, d] = dia.split('-').map(Number)
+  return new Date(Date.UTC(a, m - 1, d)).getUTCDay()
+}
+
+/**
+ * Lo que pone una regla creada en esta sesión. La semana de ejemplo está
+ * escrita a mano en datos.ts; esto es lo que hace que una regla nueva —la que
+ * sale del atajo del hueco— se vea en la parrilla de una, como con el
+ * servidor de verdad.
+ */
+function reglaPuestaEn(dia: string, hhmm: string): string {
+  const [hh, mm] = hhmm.split(':').map(Number)
+  const minuto = hh * 60 + mm
+  // Las reglas se leen por día de emisión, no por día de calendario: lo que
+  // sale a la 1:00 AM del sábado es del viernes (PRD §9 paso 2).
+  const deEmision = minuto < canal.hora_inicio_dia_emision ? sumar(dia, -1) : dia
+  const i = (diaSemanaDe(deEmision) + 6) % 7 // el patrón empieza en lunes
+  for (const r of reglas) {
+    if (r.id < 1000 || !r.activa) continue // las de datos.ts ya están en la hoja
+    if ((r.patron_de_dias[i] ?? '_') === '_') continue
+    if (r.fecha_inicio && deEmision < r.fecha_inicio) continue
+    if (r.fecha_fin && deEmision > r.fecha_fin) continue
+    const largo = Math.max(30, Math.round(r.duracion_slot_ms / 60_000))
+    if (minuto >= r.hora && minuto < r.hora + largo) return r.titulo
+  }
+  return ''
+}
+
+/** La hoja de ejemplo primero; una regla nueva solo llena lo que está vacío. */
+function programaDemoEn(dia: string, hhmm: string): string {
+  return programaEn(dia, hhmm) || reglaPuestaEn(dia, hhmm)
 }
 
 // ── el plan de un día ─────────────────────────────────────────────────
@@ -123,13 +167,13 @@ function bloquesDelDia(dia: string): BloqueDemo[] {
   let i = 0
   let n = 0
   while (i < FRANJAS.length) {
-    const nombre = programaEn(dia, FRANJAS[i])
+    const nombre = programaDemoEn(dia, FRANJAS[i])
     if (!nombre) {
       i++
       continue
     }
     let j = i
-    while (j + 1 < FRANJAS.length && programaEn(dia, FRANJAS[j + 1]) === nombre) j++
+    while (j + 1 < FRANJAS.length && programaDemoEn(dia, FRANJAS[j + 1]) === nombre) j++
     const inicioMin = i * 30
     const slotMs = (j - i + 1) * 30 * 60_000
     const enVivo = EN_VIVO.has(nombre)
@@ -141,6 +185,12 @@ function bloquesDelDia(dia: string): BloqueDemo[] {
       origen: enVivo ? 'live_source' : 'asset',
       estado: 'planned',
       hora_local: hhmm(inicioMin),
+      hora: hhmm(inicioMin),
+      duracion: duracionEnPalabras(enVivo ? slotMs : slotMs - 6 * 60_000),
+      schedule_rule_id:
+        reglas.find((r) => r.titulo === nombre && r.hora === inicioMin)?.id ??
+        reglas.find((r) => r.titulo === nombre)?.id ??
+        null,
       titulo: nombre,
       temporada: enVivo ? null : 1 + ((i + dia.length) % 3),
       episodio: enVivo ? null : 1 + ((i * 7 + dia.charCodeAt(9)) % 26),
@@ -223,7 +273,7 @@ function franjasDelDiaEmision(dia: string): boolean[] {
   for (let k = 0; k < 48; k++) {
     const idx = (k + inicio) % 48
     const d = k + inicio >= 48 ? sumar(dia, 1) : dia
-    out.push(Boolean(programaEn(d, FRANJAS[idx])))
+    out.push(Boolean(programaDemoEn(d, FRANJAS[idx])))
   }
   return out
 }
@@ -744,6 +794,24 @@ function conPistaElegida<T extends ConAudio>(m: T): T {
     ...m,
     pista_audio_aire: pistaElegida.get(id),
     estado_material: 'aún no listo para aire',
+  }
+}
+
+/**
+ * Si el título está en la parrilla se mira contra las reglas de ahora, no
+ * contra las del arranque: una regla creada desde el hueco lo saca de «sin
+ * programar» al momento, como hace el servidor de verdad.
+ */
+function conSuRegla(t: TituloDeBiblioteca): TituloDeBiblioteca {
+  const suya = reglas
+    .filter((r) => r.titulo === t.nombre && r.activa)
+    .sort((a, b) => a.hora - b.hora)[0]
+  if (!suya) return { ...t, en_la_parrilla: false, hora: null, regla_hasta: null }
+  return {
+    ...t,
+    en_la_parrilla: true,
+    hora: hhmm(suya.hora),
+    regla_hasta: suya.fecha_fin,
   }
 }
 
@@ -1326,7 +1394,7 @@ export async function responder(ruta: string, init?: RequestInit): Promise<Respo
     return json(nuevo ? nuevo.item : bloque.item)
   }
   if (p === '/guia') return json(guia(url.searchParams.get('dia') ?? '2026-09-08'))
-  if (p === '/biblioteca') return json(titulos.map(conPistaElegida))
+  if (p === '/biblioteca') return json(titulos.map(conPistaElegida).map(conSuRegla))
   const tituloId = p.match(/^\/biblioteca\/(\d+)$/)
   if (tituloId) {
     const t = titulos.find((x) => x.id === Number(tituloId[1]))

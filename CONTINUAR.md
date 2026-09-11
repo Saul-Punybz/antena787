@@ -296,30 +296,37 @@ Repaso hecho contra el código, no contra el PRD. Tres grupos:
 
 ## Cosas pequeñas pendientes
 
-- **Hueco de producto que vio Saul (11 sept): a la Parrilla se le puede mover
-  contenido, pero no añadir.** El modelo es correcto —la parrilla es
-  consecuencia de las reglas, no una hoja de celdas— pero falta la acción
-  «aquí falta algo, lo arreglo aquí mismo», que el propio código promete en
-  un comentario («El aviso donde se toma la acción, no en un reporte
-  aparte»). Lo que falta, concreto:
-  1. El botón **«Escoger yo»** del panel de fin de semana vacío
-     (`ParrillaSemana.tsx:560`) **no tiene `onClick`**: está muerto.
-  2. Un **hueco no es clicable**: se pinta con rayado rojo y un `title`, sin
-     acción. Debería abrir «¿qué pongo aquí?» con tres salidas: regla nueva a
-     esa hora, algo solo ese día, o llenar con relleno/diferido.
-  3. **Biblioteca no es arrastrable hacia la Parrilla**: sus tarjetas no son
-     `draggable` y el `onDrop` de la tira solo acepta `text/antena-bloque`
-     (lo que ya estaba en la parrilla).
-  4. **El servidor tampoco puede**: hay `PUT /plan/{id}` pero **no existe
-     `POST /plan`** para un bloque suelto de un día. El panel «¿solo hoy, o
-     siempre?» existe solo para mover.
-  **Decidido por Saul (11 sept): solo atajos.** La parrilla no acepta poner
-  contenido directo; todo lo nuevo sigue entrando por una Regla, y la
-  parrilla gana el hueco clicable que abre la regla con día y hora puestos,
-  más un panel de biblioteca al lado que enseña primero lo no programado
-  («se me hace difícil visualizar todo el contenido de biblioteca a parrilla
-  porque no lo veo»). En curso: `agente/parrilla-atajos`, criterios F1-78 y
-  F1-79.
+- ~~Hueco de producto que vio Saul (11 sept): a la Parrilla se le puede mover
+  contenido, pero no añadir.~~ **Hecho (11 sept):** criterios **F1-78** [AUTO],
+  **F1-79** y **F1-80** [MANUAL]. Decisión de Saul: la parrilla **no** acepta
+  poner contenido directo —sigue siendo consecuencia de las reglas— y **no
+  existe `POST /plan`**; lo que gana son atajos y ver el inventario sin cambiar
+  de pantalla. Lo construido, todo en la interfaz:
+  1. **La franja vacía es un `button`** con `aria-label` y foco visible; al
+     tocarla se abre el editor de regla con el **día en el patrón** y la
+     **hora redondeada a la media hora** de donde se tocó, la fecha de inicio
+     de ese día y la duración más grande que quepa. La fecha de fin se deja en
+     blanco: de ella salen los avisos de vencimiento.
+  2. **«Escoger yo»** ya tiene acción: el primer vacío de una hora o más del
+     fin de semana. Y el botón «Regenerar la guía» de Parrilla · Guía, que
+     también estaba muerto, ahora recalcula y vuelve a leer la guía. La prueba
+     `TestF1Verif78NingunBotonMuertoEnLaParrilla` lo vigila.
+  3. **Biblioteca al lado** (`componentes/BibliotecaAlLado.tsx`): columna
+     plegable, plegado recordado en `localStorage`, buscador, y **primero lo
+     que no está programado** con su conteo. La tarjeta de un título ya
+     programado lleva «ver su regla» → `/reglas?titulo=…`.
+  4. **Vista por Día** (`pantallas/ParrillaDia.tsx`, `/parrilla/dia`): el día
+     de emisión hora por hora, de qué regla sale cada bloque, y los vacíos con
+     el mismo atajo. Las cuatro vistas son ahora una fila de pestañas donde la
+     abierta se ve (`.pestanas`). **Semana sigue siendo la vista por defecto**
+     de `/parrilla`: es la que enseña el aire vacío comparado entre días, que
+     es de donde salió el problema.
+  5. El `EditorDeRegla` salió de `Reglas.tsx` a `componentes/EditorDeRegla.tsx`
+     y acepta valores iniciales; Reglas lo usa igual y además entiende
+     `/reglas?titulo=…`.
+  Lo que **no** se hizo, a propósito: arrastrar de Biblioteca a la Parrilla
+  (haría falta `POST /plan`) y la salida «llenar con relleno/diferido» desde el
+  hueco (ya existe el botón «Llenar el fin de semana»).
 
 - **Segundo hueco de la misma familia (Saul, 11 sept): no hay dónde dar de
   alta una fuente en vivo.** La regla de tipo `vivo` existe (Reglas tiene el

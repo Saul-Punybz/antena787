@@ -16,6 +16,22 @@ export function ParrillaGuia() {
   const hoy = estado?.dia_emision ?? null
   const [elegido, setElegido] = useState<string | null>(null)
   const dia = elegido ?? hoy
+  const [regenerando, setRegenerando] = useState(false)
+
+  /**
+   * La guía se reescribe con el plan, así que regenerarla es volver a armar el
+   * plan y leerla otra vez. Antes este botón no hacía nada.
+   */
+  async function regenerar() {
+    if (!dia) return
+    setRegenerando(true)
+    await api.recalcular().catch(() => {})
+    await api
+      .guia(dia)
+      .then(setGuia)
+      .catch(() => {})
+    setRegenerando(false)
+  }
 
   useEffect(() => {
     if (!dia) return
@@ -100,8 +116,13 @@ export function ParrillaGuia() {
                   : 'Ningún programa desalineado'}
               </li>
             </ul>
-            <button className="boton boton--primario" style={{ flexShrink: 0 }}>
-              Regenerar la guía
+            <button
+              className="boton boton--primario"
+              style={{ flexShrink: 0 }}
+              disabled={regenerando}
+              onClick={regenerar}
+            >
+              {regenerando ? 'Regenerando…' : 'Regenerar la guía'}
             </button>
           </div>
 

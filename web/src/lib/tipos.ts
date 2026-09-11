@@ -81,11 +81,17 @@ export interface ElementoDelPlan {
    * pisar. Se suelta con PUT /plan/{id} {"fijado": false}.
    */
   fijado?: boolean
+  /** La regla de la que salió. Nulo en el relleno y en el cartel. */
+  schedule_rule_id?: number | null
   // embebidos que el servidor añade para la interfaz
   titulo?: string
   temporada?: number | null
   /** «T4 E1 · Nombre» tal como lo escribe el servidor (o un número en la demo). */
   episodio?: string | number | null
+  /** «1 h 25 min», ya escrito por el servidor. */
+  duracion?: string
+  /** «08:00», la hora de reloj del canal a la que empieza. */
+  hora?: HoraDelDia
   en_vivo?: boolean
 }
 
