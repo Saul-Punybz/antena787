@@ -239,10 +239,26 @@ go test ./... -count=1           # todo debe estar verde
   4. **El servidor tampoco puede**: hay `PUT /plan/{id}` pero **no existe
      `POST /plan`** para un bloque suelto de un día. El panel «¿solo hoy, o
      siempre?» existe solo para mover.
-  Decisión de Saul antes de construirlo: ¿la parrilla acepta poner contenido
-  directo (y entonces hace falta `POST /plan` con su regla de un día), o todo
-  lo nuevo sigue entrando por Reglas y la parrilla solo gana el atajo «crear
-  la regla a esta hora» desde el hueco?
+  **Decidido por Saul (11 sept): solo atajos.** La parrilla no acepta poner
+  contenido directo; todo lo nuevo sigue entrando por una Regla, y la
+  parrilla gana el hueco clicable que abre la regla con día y hora puestos,
+  más un panel de biblioteca al lado que enseña primero lo no programado
+  («se me hace difícil visualizar todo el contenido de biblioteca a parrilla
+  porque no lo veo»). En curso: `agente/parrilla-atajos`, criterios F1-78 y
+  F1-79.
+
+- **Segundo hueco de la misma familia (Saul, 11 sept): no hay dónde dar de
+  alta una fuente en vivo.** La regla de tipo `vivo` existe (Reglas tiene el
+  interruptor «Es una fuente en vivo» y `live_source_id`), la tabla
+  `live_source` existe con todo lo suyo (punto de escucha SRT/RTMP, duración
+  prevista, relleno de respaldo, reloj de cortes, retardo de 7 s), pero **no
+  hay pantalla ni ruta de API** para crearla: hoy solo nace desde el
+  importador de hojas (`internal/api/importar.go`). O sea que no hay dónde
+  escribir la dirección SRT de un noticiero. Falta `GET/POST/PUT/DELETE
+  /api/v1/vivos` y su pantalla (o una sección en Reglas, que es donde se
+  usa). El motor que de verdad las toma es T4 de F2, pero el alta se puede
+  construir antes y conviene, porque sin ella T4 no se puede ni probar a
+  mano.
 
 - **Catálogo de equipos y bibliotecas** (`docs/drivers/CATALOGO.md`, 10 sept):
   lo que T8 necesita antes de escribir drivers. Decisiones que deja: relés
