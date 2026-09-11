@@ -7,6 +7,7 @@
 // cuentas con la zona horaria completa.
 
 import type {
+  AceleradorDisponible,
   Ajustes,
   Alarma,
   Comprobacion,
@@ -462,8 +463,54 @@ function estado(): Estado {
     entraste: true,
     necesita_instalacion: !asistente.completa,
     instalacion_completa: asistente.completa,
+    // El acelerador (F2-11). Sin esto la tarjeta de Ajustes sale con el
+    // desplegable vacío y «Comprimiendo ahora con: —», que es justo lo que se
+    // le enseña a un cliente en la demostración. La lista imita lo que
+    // contestaría un PC con tarjeta NVIDIA —el caso de la torre—, y va con
+    // los mismos textos que manda el servidor de verdad
+    // (internal/engine/encoder.go, Nombre() y Explicacion()).
+    acelerador_efectivo: canal.acelerador === 'auto' ? 'software' : canal.acelerador,
+    aceleradores_disponibles: ACELERADORES_DEMO,
   }
 }
+
+const ACELERADORES_DEMO: AceleradorDisponible[] = [
+  {
+    acelerador: 'auto',
+    nombre: 'Automático',
+    explicacion:
+      'Usa el procesador. Escoger la tarjeta sola llega cuando el sistema pueda probarla antes de confiarle el aire.',
+    disponible: true,
+  },
+  {
+    acelerador: 'software',
+    nombre: 'El procesador',
+    explicacion:
+      'Comprime con el procesador. Es el más lento y el que nunca falla; es a donde vuelve el canal solo si la tarjeta deja de responder.',
+    disponible: true,
+  },
+  {
+    acelerador: 'nvenc',
+    nombre: 'La tarjeta NVIDIA',
+    explicacion:
+      'Comprime con la tarjeta y le quita casi todo el trabajo al procesador. Si deja de responder dos veces en diez minutos, el canal sigue emitiendo con el procesador y te avisa.',
+    disponible: true,
+  },
+  {
+    acelerador: 'qsv',
+    nombre: 'El video del procesador Intel',
+    explicacion:
+      'Comprime con la tarjeta y le quita casi todo el trabajo al procesador. Si deja de responder dos veces en diez minutos, el canal sigue emitiendo con el procesador y te avisa.',
+    disponible: false,
+  },
+  {
+    acelerador: 'videotoolbox',
+    nombre: 'La tarjeta de video (Mac)',
+    explicacion:
+      'Comprime con la tarjeta y le quita casi todo el trabajo al procesador. Si deja de responder dos veces en diez minutos, el canal sigue emitiendo con el procesador y te avisa.',
+    disponible: false,
+  },
+]
 
 // ── las pantallas de parrilla ─────────────────────────────────────────
 
