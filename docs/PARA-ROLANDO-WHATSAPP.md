@@ -189,3 +189,50 @@ bastante. Lo demás lo vamos sacando.
 
 Y si algo de esto te parece mucho lío, dime y lo vemos juntos en una llamada
 de veinte minutos con el equipo delante. Probablemente salga más rápido así.
+
+---
+
+## Contestado por Rolando · bloque 3 (TP1000) · 11 sept 2026
+
+Sus palabras, resumidas, y qué decide cada una. **Esto ya no se pregunta.**
+
+**3.1 ¿A dónde le mandas la señal?** → **Multicast.** «Los IPs y puertos son
+asignados por mí.»
+*Decide:* multicast es **el** camino, no una opción. La decisión 3 de
+`docs/f2/PLAN-F2.md` (unicast por defecto, multicast como opción del mismo
+driver) queda **al revés** y se corrige. El driver ya lo hace bien —detecta el
+grupo por la dirección y le pone TTL 1, que es lo correcto para un equipo en el
+mismo switch—, así que no hay código que cambiar: hay texto que corregir.
+
+**3.2 ¿Exige PIDs y número de programa?** → **No. Él los reasigna.** «Le puedes
+editar, pero prácticamente ese es su trabajo, y añadirle los números de los
+canales virtuales.»
+*Decide:* **se cae el bloqueo que llevaba semanas escrito.** Todo lo que decía
+«los PIDs, el programa y el tsid son valores de ejemplo hasta tener la cadena de
+Rolando» deja de importar para CAtv: el multiplexor los reasigna. Los campos
+siguen existiendo —otra estación sí los va a exigir (PRD §10: nunca fijos)— pero
+en la pantalla tienen que decir que este multiplexor los reasigna, para que
+nadie los rellene por miedo. Ya son opcionales en el formulario.
+*Y un dato nuevo:* el canal virtual (40.1 y los suyos) **lo pone el TP1000**, no
+nosotros.
+
+**3.3 ¿Quién arma el PSIP?** → **El TP1000, pero lo pone en blanco.** «Al no
+tener contenido desde el multicast lo pone en blanco.»
+*Decide:* es el hallazgo más valioso de las cinco. **Hoy el televidente de CAtv
+ve la guía vacía en su televisor**, y no es culpa del TP1000: es que nadie le
+manda con qué llenarla. Si el TS que sale lleva el nombre del programa, el
+TP1000 tendría de dónde sacarla. **Eso es algo que VLC nunca le dio.** Falta
+saber qué lee exactamente el equipo —tabla del servicio, EIT, otra cosa—, y eso
+sale del manual (3.5). Hasta leerlo, no se escribe nada: invariante 3.
+
+**3.4 ¿Tiene IP de manejo?** → **Sí, se maneja por web.** Dos puertos de
+ethernet: uno recibe los videos, otro es el de manejo. Las dos IPs se asignan al
+configurarlo.
+*Decide:* **hueco nuevo, y no estaba en ninguna lista.** Si el PC de la torre
+tiene más de una tarjeta de red, el sistema operativo escoge por cuál sale el
+multicast según su tabla de rutas, y escoge mal a menudo. Hay que poder decir
+**por cuál tarjeta sale** (`localaddr=` en la URL de ffmpeg). Hoy no existe: cero
+apariciones en todo el repositorio.
+
+**3.5 ¿Tienes el manual?** → **Sí, lo mandó por WhatsApp.** Pendiente de meterlo
+en `docs/equipos/` y leerlo antes de escribir una línea de PSIP.
