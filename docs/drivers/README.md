@@ -14,8 +14,10 @@ que todavía no soporta.
 
 > ## Antes que nada: hoy un driver empieza por una propuesta, no por código
 >
-> **Las interfaces de driver en Go todavía no existen.** El repositorio no
-> tiene `internal/drivers/`. Lo único que hay es `engine.Output` en
+> **Las interfaces de driver en Go todavía no existen.** Lo único que hay en
+> `internal/drivers/` es `alerta/sage` (el primero, 11 sept 2026), que no
+> define una interfaz de familia: decodifica su protocolo y entrega eventos.
+> Aparte de eso hay `engine.Output` en
 > [`internal/engine/encoder.go`](../../internal/engine/encoder.go) — una
 > estructura que describe una salida del encoder de la Fase 0, con dos clases
 > construidas (`mpeg2-ts` y `h264-ts`), y que **no es todavía la interfaz de
@@ -114,6 +116,31 @@ con fuentes: [`CATALOGO.md`](CATALOGO.md).
 **No hace falta saber el modelo antes de instalar.** El asistente pregunta **por
 dónde está conectado** —cable serial, cable de relés, cable de red, o varios— y
 prueba cada uno. **Si hay dos caminos, se usan los dos y se cruzan.**
+
+**`sage-endec` ya existe en Go** (`internal/drivers/alerta/sage`, 11 sept 2026),
+y es el primer driver de alerta escrito. Decodifica —y solo decodifica, ADR
+[0010](../adr/0010-eas-integrate-the-endec-never-replace-it.md)— el estado que
+el ENDEC publica por su cuenta: las líneas `local:` / `match:` / `nomatch:` /
+`dup:` del *decoder device*, la cabecera SAME
+`ZCZC-ORG-EEE-PSSCCC…+TTTT-JJJHHMM-LLLLLLLL-` partida en campos (con las hasta
+31 zonas FIPS, el `+TTTT` que es HHMM y no minutos, y el año del día juliano
+resuelto por cercanía), el `NNNN` de fin de mensaje, la copia cruda del
+*encoder device* con sus bytes de sincronismo `0xAB`, y los bloques
+`<ENDECSTART>`/`<ENDECEND>` del *news feed*. Separa **prueba semanal (RWT),
+prueba mensual (RMT) y alerta real** con los mismos tres valores de
+`alert_event.tipo`, porque una prueba no es una interrupción comercial. Los dos
+transportes —serial con `go.bug.st/serial` para el 1822 y el 3644, y TCP contra
+la interfaz de automatización del 3644— comparten un solo analizador, tolerante
+a lecturas partidas y a ruido, y reconectan con espera progresiva de 1 a 60 s.
+**No genera nada**: ni cabeceras, ni tonos, ni `NNNN`, y no le escribe al ENDEC.
+Y dice lo que no puede saber: el *decoder device* **no manda un mensaje de
+«alerta terminada»**, así que por ese cable se sabe cuándo empieza la
+interrupción y no cuándo acaba — eso lo cierra el relé PTT, el retorno de aire o
+nada, y el as-run tiene que decir cuál. Los relés están **documentados y sin
+implementar** (`reles.go`: qué significa cada programa del bloque verde, y por
+qué la entrada *Manual Override* del «commercial tally» es una escritura que un
+driver no decide solo), con la interfaz mínima `EntradaDeContacto` esperando a
+que se sepa qué placa serial hay en la estación. Cablearlo al motor es T8.
 
 > **`signal-compare` es la respuesta a "cualquier marca, cualquier país".** No
 > le habla al equipo: compara **la señal transmitida** contra la que el plan

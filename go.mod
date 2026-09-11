@@ -16,6 +16,7 @@ require (
 )
 
 require (
+	go.bug.st/serial v1.8.0
 	golang.org/x/image v0.12.0
 	modernc.org/sqlite v1.58.0
 )
