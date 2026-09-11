@@ -1335,7 +1335,14 @@ export async function responder(ruta: string, init?: RequestInit): Promise<Respo
     reglas = reglas.map((r) => (r.id === id ? { ...r, ...cuerpo } : r))
     return json(reglas.find((r) => r.id === id))
   }
-  if (p === '/plan') return json(planDelDiaEmision(url.searchParams.get('dia') ?? diaEmisionDe(ahoraDemo())))
+  if (p === '/plan') {
+    // El mismo sobre que manda el servidor de verdad: sin esto el demo
+    // enseñaba una lista pelada y una pantalla podía funcionar aquí y
+    // romperse contra el servidor real (11 sept 2026).
+    const dia = url.searchParams.get('dia') ?? diaEmisionDe(ahoraDemo())
+    const items = planDelDiaEmision(dia)
+    return json({ dia_emision: dia, inicio: `${dia}T06:00:00-04:00`, fin: `${sumar(dia, 1)}T06:00:00-04:00`, items })
+  }
   if (p === '/plan/semana') return json(semana(url.searchParams.get('desde') ?? '2026-09-06'))
   if (p === '/plan/mes') return json(mes(url.searchParams.get('mes') ?? '2026-09'))
   if (p === '/plan/recalcular')

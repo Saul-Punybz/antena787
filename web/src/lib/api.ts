@@ -146,7 +146,18 @@ export const api = {
     pedir<Regla>(`/reglas/${id}${soloHoy ? '?solo_hoy=1' : ''}`, conCuerpo('PUT', r)),
   borrarRegla: (id: number) => pedir<{ ok: true }>(`/reglas/${id}`, conCuerpo('DELETE')),
 
-  plan: (dia: string) => pedir<FilaDelPlan[]>(`/plan?dia=${dia}`),
+  /**
+   * Las filas del plan de un día, huecos incluidos. El servidor las manda
+   * dentro de un sobre con el día y sus bordes (`{dia_emision, inicio, fin,
+   * items}`); aquí se devuelven las filas, que es lo único que las pantallas
+   * usan. Antes esto decía que el servidor devolvía una lista pelada y la
+   * vista por día se quedaba en negro contra el servidor de verdad, porque
+   * solo el demo la mandaba así (11 sept 2026).
+   */
+  plan: (dia: string) =>
+    pedir<{ items?: FilaDelPlan[] } | FilaDelPlan[]>(`/plan?dia=${dia}`).then((r) =>
+      Array.isArray(r) ? r : (r.items ?? []),
+    ),
   /**
    * Mueve un bloque del plan a mano, o lo suelta. El servidor devuelve el
    * elemento ya cambiado, con `fijado: true` cuando quedó clavado; si choca
