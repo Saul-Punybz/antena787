@@ -27,6 +27,7 @@ import type {
   RespuestasDelAsistente,
   ResultadoDeEmparejar,
   ResumenDeImportacion,
+  Salida,
   SemanaDelPlan,
   TituloDeBiblioteca,
   TituloDelCatalogo,
@@ -43,7 +44,7 @@ import {
   incidentes,
   programaEn,
   reglas as reglasDemo,
-  salidas,
+  salidas as salidasDemo,
   titulos as titulosDemo,
 } from './datos'
 
@@ -51,6 +52,9 @@ const DESFASE_H = -4 // America/Puerto_Rico, sin horario de verano
 
 let reglas: Regla[] = reglasDemo.map((r) => ({ ...r }))
 const titulos: TituloDeBiblioteca[] = titulosDemo.map((t) => ({ ...t }))
+// Las salidas de la pantalla nueva (Salidas.tsx): copia mutable, igual que
+// `reglas`, para que crear/cambiar/borrar aquí se vea sin tocar datos.ts.
+let salidas: Salida[] = salidasDemo.map((s) => ({ ...s }))
 let ajustes: Ajustes = { ...ajustesDemo }
 const dejadosPasar = new Set<number>()
 let siguienteId = 1000
@@ -1312,6 +1316,116 @@ function pasoDelAsistente(n: number, cuerpo: Record<string, unknown> | undefined
   }
 }
 
+// ── las salidas (Salidas.tsx, F2-46, F2-50, F2-114) ────────────────────
+//
+// El servidor de verdad escribe `texto` con lo que dice cada driver
+// (`internal/drivers/salida/udpts.go:Descripcion`, `archivo.go:Descripcion`)
+// y valida los parámetros con `salida.Para` (`internal/api/salidas.go`).
+// Aquí se repite lo mínimo de esa traducción para que el demo se vea igual
+// que el servidor real sin tener que levantarlo.
+
+interface ParamsUDPTSDemo {
+  destino?: string
+  ttl?: number
+  bitrate_mux_kbs?: number
+  bitrate_video_kbs?: number
+  pid_video?: number
+  pid_audio?: number
+  pid_pmt?: number
+  program?: number
+  tsid?: number
+  audio?: string
+}
+
+/** "192.168.1.50:1234" o "udp://239.1.1.1:1234" → host y puerto, o nada. */
+function analizarDestino(destino: string): { host: string; puerto: string } | null {
+  const s = destino.trim().replace(/^udp:\/\//, '').replace(/^@/, '')
+  const i = s.lastIndexOf(':')
+  if (i <= 0 || i === s.length - 1) return null
+  const host = s.slice(0, i)
+  const puerto = s.slice(i + 1)
+  if (!/^\d+$/.test(puerto) || Number(puerto) < 1 || Number(puerto) > 65535) return null
+  return { host, puerto }
+}
+
+/** 224.0.0.0 a 239.255.255.255: el mismo rango que `esGrupo` en el driver. */
+function esGrupoDemo(host: string): boolean {
+  const m = /^(\d{1,3})\./.exec(host)
+  if (!m) return false
+  const primero = Number(m[1])
+  return primero >= 224 && primero <= 239
+}
+
+function nombreDelAudioDemo(audio: string): string {
+  if (audio === 'mp2') return 'MPEG capa II'
+  if (audio === 'ac3') return 'AC-3'
+  return audio
+}
+
+function textoUDPTSDemo(parametros: string): string {
+  let p: ParamsUDPTSDemo = {}
+  try {
+    p = JSON.parse(parametros || '{}') as ParamsUDPTSDemo
+  } catch {
+    return ''
+  }
+  const destino = analizarDestino(p.destino ?? '')
+  if (!destino) return ''
+  const grupo = esGrupoDemo(destino.host)
+  const donde = grupo
+    ? `al grupo ${destino.host}:${destino.puerto}, ${p.ttl || 1} salto(s) de red`
+    : `al receptor ${destino.host}:${destino.puerto}`
+  return (
+    `${donde} · MPEG-2 ${p.bitrate_video_kbs || 8000} kb/s de imagen, ` +
+    `${p.bitrate_mux_kbs || 10000} kb/s en total · programa ${p.program || 1}, ` +
+    `PID ${p.pid_video || 512}/${p.pid_audio || 513}, sonido ${nombreDelAudioDemo(p.audio || 'mp2')}`
+  )
+}
+
+function textoArchivoDemo(parametros: string): string {
+  let p: { ruta?: string } = {}
+  try {
+    p = JSON.parse(parametros || '{}') as { ruta?: string }
+  } catch {
+    return ''
+  }
+  return p.ruta?.trim() ? `al archivo ${p.ruta.trim()}` : ''
+}
+
+/** La frase en cristiano de a dónde va la salida, como la escribe el servidor. */
+function textoDeSalidaDemo(driver: string, parametros: string): string {
+  if (driver === 'udp-ts') return textoUDPTSDemo(parametros)
+  if (driver === 'archivo') return textoArchivoDemo(parametros)
+  return ''
+}
+
+/** Lo que `salidaValida`/`salida.Para` dirían del lado del servidor. */
+function validarSalidaDemo(nombre: string, driver: string, parametros: string): string | null {
+  if (!nombre.trim()) return 'ponle un nombre a la salida: es el que se ve en Al aire'
+  if (driver === 'udp-ts') {
+    let p: ParamsUDPTSDemo = {}
+    try {
+      p = JSON.parse(parametros || '{}') as ParamsUDPTSDemo
+    } catch {
+      return 'no entiendo lo que está guardado de esta salida'
+    }
+    if (!analizarDestino(p.destino ?? ''))
+      return 'no me has dicho a qué dirección mandar la señal: se escribe como 192.168.1.50:1234'
+    return null
+  }
+  if (driver === 'archivo') {
+    let p: { ruta?: string } = {}
+    try {
+      p = JSON.parse(parametros || '{}') as { ruta?: string }
+    } catch {
+      return 'no entiendo lo que está guardado de esta salida'
+    }
+    if (!p.ruta?.trim()) return 'no me has dicho en qué archivo guardar la señal'
+    return null
+  }
+  return `todavía no sé mandar la señal por "${driver}": en esta versión están la salida al multiplexor y la grabación a un archivo`
+}
+
 // ── el ruteador ───────────────────────────────────────────────────────
 
 function json(cuerpo: unknown, estadoHttp = 200): Response {
@@ -1335,8 +1449,9 @@ export async function responder(ruta: string, init?: RequestInit): Promise<Respo
     return json({ ok: true })
   }
   if (p === '/estado') return json(estado())
-  // Las salidas del canal (§10, F2-46): en demo se contestan tal cual, con los
-  // dos drivers que esta versión sabe abrir.
+  // Las salidas del canal (§10, F2-46, F2-50, F2-114): la pantalla Salidas.tsx
+  // hace el CRUD completo aquí, con la misma validación y el mismo texto en
+  // cristiano que escribiría el servidor de verdad.
   if (p === '/salidas' && metodo === 'GET') {
     return json({
       salidas,
@@ -1354,6 +1469,63 @@ export async function responder(ruta: string, init?: RequestInit): Promise<Respo
         },
       ],
     })
+  }
+  if (p === '/salidas' && metodo === 'POST') {
+    const nombre = String(cuerpo?.nombre ?? '')
+    const driver = String(cuerpo?.driver ?? '').trim()
+    const parametros = String(cuerpo?.parametros ?? '{}')
+    const error = validarSalidaDemo(nombre, driver, parametros)
+    if (error) return json({ error, campo: 'parametros' }, 400)
+    const nueva: Salida = {
+      id: siguienteId++,
+      nombre: nombre.trim(),
+      driver,
+      estado_conexion: 'sin_probar',
+      reintentos: 0,
+      ultimo_error: '',
+      parametros,
+      objetivo_volumen: typeof cuerpo?.objetivo_volumen === 'number' ? cuerpo.objetivo_volumen : -24,
+      texto: textoDeSalidaDemo(driver, parametros),
+    }
+    salidas = [...salidas, nueva]
+    return json(nueva, 201)
+  }
+  const salidaId = p.match(/^\/salidas\/(\d+)$/)
+  if (salidaId) {
+    const id = Number(salidaId[1])
+    const vieja = salidas.find((s) => s.id === id)
+    if (!vieja) return json({ error: 'esa salida ya no está' }, 404)
+    if (metodo === 'DELETE') {
+      salidas = salidas.filter((s) => s.id !== id)
+      const aviso = salidas.length
+        ? ''
+        : 'esa era la única salida del canal: mientras no haya otra, lo que salga se graba en la carpeta de datos'
+      return json({ borrada: id, aviso })
+    }
+    // PUT: lo que no venga en el cuerpo se queda como estaba.
+    const nombre = typeof cuerpo?.nombre === 'string' ? cuerpo.nombre : vieja.nombre
+    const driver = typeof cuerpo?.driver === 'string' ? cuerpo.driver.trim() : vieja.driver
+    const parametros =
+      typeof cuerpo?.parametros === 'string' ? cuerpo.parametros : (vieja.parametros ?? '{}')
+    const error = validarSalidaDemo(nombre, driver, parametros)
+    if (error) return json({ error, campo: 'parametros' }, 400)
+    // Cambiar a dónde va la señal deja el estado sin probar (salidas.go:85):
+    // lo que decía antes era de la dirección anterior.
+    const cambioDeDestino = parametros !== (vieja.parametros ?? '{}') || driver !== vieja.driver
+    const actualizada: Salida = {
+      ...vieja,
+      nombre: nombre.trim(),
+      driver,
+      parametros,
+      objetivo_volumen:
+        typeof cuerpo?.objetivo_volumen === 'number' ? cuerpo.objetivo_volumen : vieja.objetivo_volumen,
+      texto: textoDeSalidaDemo(driver, parametros),
+      ...(cambioDeDestino
+        ? { estado_conexion: 'sin_probar', reintentos: 0, ultimo_error: '' }
+        : {}),
+    }
+    salidas = salidas.map((s) => (s.id === id ? actualizada : s))
+    return json(actualizada)
   }
   if (p === '/canal') {
     // El modo no se cambia guardando el canal: para eso están /canal/al-aire
