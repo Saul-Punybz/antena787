@@ -25,7 +25,7 @@ asistente está abierto.
 | `POST /canal/al-aire` | Saca el canal de sombra. Cuerpo `{confirmacion}`, y hay que escribir **`AL AIRE`** (sin distinguir mayúsculas ni acentos): `400` con `campo: "confirmacion"` si no. `409` con `{error, campo, puede:false, comprobaciones}` si falta algo —y el canal no se toca—; `409` si ya estaba al aire. `200` con `{puede, comprobaciones, modo:"aire", aviso}`. Deja incidente `al_aire` y auditoría `channel.modo`. El motor arranca en el acto. |
 | `POST /canal/a-sombra` | Devuelve el canal a sombra: la señal deja de salir y el motor se para. Cuerpo `{confirmacion}` con **`SOMBRA`**. `409` si ya estaba en sombra. Deja incidente `a_sombra` y auditoría. |
 | `GET /ajustes` · `PUT /ajustes` | Mapa clave→valor de `settings` (sin la clave de estación). Los secretos (`clave_tmdb`, `avisos_telegram_token`, `avisos_smtp_clave`) salen tapados con `••••••`; devolverlos tapados en un `PUT` no los cambia. |
-| `WS /ws` | Empuja `{"tipo":"estado", ...}` cada segundo y `{"tipo":"evento", ...}` en cada incidente o cambio de plan. El empujón lleva `salidas` igual que `GET /estado`. |
+| `WS /ws` | Empuja `{"tipo":"estado", ...}` cada segundo y `{"tipo":"evento", ...}` en cada incidente o cambio de plan. El empujón lleva `salidas`, `al_aire` y `siguiente` igual que `GET /estado`: las dos últimas van siempre, con `null` cuando no hay nada al aire. |
 
 ## Salidas — a dónde manda el canal su señal (§10, F2-46, F2-50, F2-114)
 
@@ -158,7 +158,7 @@ sobre la misma ficha, sin que nadie tenga que apretar nada.
 | | |
 |---|---|
 | `POST /importar/hoja` | `{"texto": "<pegado desde Sheets/Excel>"}` → `{"reglas_creadas": n, "titulos_creados": n, "relevos_propuestos": [...], "repeticiones_propuestas": [...], "filas_con_error": [{"fila": 12, "texto": "...", "motivo": "fin antes que inicio"}], "fechas_corridas": [...], "posibles_duplicados": [...], "avisos": [...], "titulos_sin_emparejar": [...], "resumen": "..."}`. Nunca rechaza la hoja entera. |
-| `POST /importar/confirmar-relevos` | `[{"regla": id, "releva_a": id}]`. |
+| `POST /importar/confirmar-relevos` | `[{"regla": id, "releva_a": id, "repite_a": id}]`. Es la propuesta de `relevos_propuestos` devuelta tal cual: cada `relevo_propuesto` viaja ya como `{"regla", "releva_a", "hora", "texto"}`, donde `regla` es la que entra y `releva_a` la que vence. |
 
 `titulos_creados` cuenta solo fichas de verdad: un título que quedó **por
 emparejar** no es una ficha del catálogo todavía y no se cuenta ahí, sino en

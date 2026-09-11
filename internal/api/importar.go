@@ -23,13 +23,21 @@ type filaConError struct {
 
 // relevoPropuesto es un relevo inferido, ya con los identificadores de la
 // base para que confirmarlo sea un clic.
+//
+// Los nombres son los del resto del contrato: `regla` es la que entra y
+// `releva_a` la que vence, igual que `Regla.releva_a` y igual que el cuerpo
+// de POST /importar/confirmar-relevos, que es literalmente esta propuesta
+// devuelta tal cual. Antes se llamaban `regla_que_vence`/`regla_que_releva` y
+// la pantalla mandaba dos `undefined`: cada clic en «confirmar los relevos»
+// acababa en 400 «no encuentro la regla 0» (auditoría de contrato, 11 sept
+// 2026).
 type relevoPropuesto struct {
-	Expires  int64  `json:"regla_que_vence"`
-	Relieves int64  `json:"regla_que_releva"`
-	FromID   string `json:"id_hoja_vence,omitempty"`
-	ToID     string `json:"id_hoja_releva,omitempty"`
-	Clock    string `json:"hora"`
-	Text     string `json:"texto"`
+	Rule       int64  `json:"regla"`
+	HandsOffTo int64  `json:"releva_a"`
+	SheetID    string `json:"id_hoja,omitempty"`
+	SheetIDTo  string `json:"id_hoja_releva_a,omitempty"`
+	Clock      string `json:"hora"`
+	Text       string `json:"texto"`
 }
 
 // repeticionPropuesta es un segundo pase inferido.
@@ -243,9 +251,11 @@ func (s *Server) importarHoja(w http.ResponseWriter, r *http.Request) {
 		if !dentro(ruleIDs, h.From) || !dentro(ruleIDs, h.To) {
 			continue
 		}
+		// h.To es la que entra y h.From la que se acaba: la que entra es la
+		// que lleva el `releva_a` cargado cuando alguien confirma.
 		relevos = append(relevos, relevoPropuesto{
-			Expires: ruleIDs[h.From], Relieves: ruleIDs[h.To],
-			FromID: h.FromID, ToID: h.ToID,
+			Rule: ruleIDs[h.To], HandsOffTo: ruleIDs[h.From],
+			SheetID: h.ToID, SheetIDTo: h.FromID,
 			Clock: h.At.String(), Text: h.Text,
 		})
 	}

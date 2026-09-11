@@ -49,6 +49,9 @@ import {
 
 const DESFASE_H = -4 // America/Puerto_Rico, sin horario de verano
 
+// La versión que dice la demo. En el servidor de verdad la pone el binario.
+const VERSION_DEMO = '1.0.0'
+
 let reglas: Regla[] = reglasDemo.map((r) => ({ ...r }))
 const titulos: TituloDeBiblioteca[] = titulosDemo.map((t) => ({ ...t }))
 let ajustes: Ajustes = { ...ajustesDemo }
@@ -194,7 +197,6 @@ function bloquesDelDia(dia: string): BloqueDemo[] {
         reglas.find((r) => r.titulo === nombre)?.id ??
         null,
       titulo: nombre,
-      temporada: enVivo ? null : 1 + ((i + dia.length) % 3),
       episodio: enVivo ? null : 1 + ((i * 7 + dia.charCodeAt(9)) % 26),
       en_vivo: enVivo,
     }
@@ -448,7 +450,7 @@ function estado(): Estado {
     siguiente,
     alarmas: alarmasDe(dia),
     salidas,
-    version: ajustes.version ?? '1.0.0',
+    version: VERSION_DEMO,
     retorno_de_aire: { hay: false, texto: 'Todavía no hay retorno de aire conectado' },
     control_manual: { activo: false },
     // En modo demostración siempre se está adentro: no hay clave que pedir.
@@ -1410,7 +1412,7 @@ export async function responder(ruta: string, init?: RequestInit): Promise<Respo
     })
   }
   if (p === '/ajustes') {
-    if (metodo === 'PUT') ajustes = { ...ajustes, ...cuerpo }
+    if (metodo === 'PUT') ajustes = { ...ajustes, ...(cuerpo as Ajustes) }
     return json(ajustes)
   }
   if (p === '/instalacion') return json(instalacion())

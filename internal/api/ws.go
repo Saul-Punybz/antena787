@@ -141,19 +141,25 @@ func (s *Server) pushStatus(ws *wsConn, r *http.Request) error {
 		// no fuera, la sexta entrada aparecería y desaparecería sola.
 		"hay_anunciantes": s.hayAnunciantes(ctx),
 	}
+	// `al_aire` y `siguiente` van siempre, con `null` cuando no hay nada,
+	// igual que GET /estado. La interfaz fusiona el empujón con lo que tenía
+	// (lib/estado.tsx): si la clave se omite en un hueco, la pantalla se queda
+	// congelada con el programa anterior hasta la próxima recarga (auditoría
+	// de contrato, 11 sept 2026).
+	var alAire, siguiente *planRow
 	items, err := s.App.Store.Plan.ListRange(ctx, s.App.ChannelID, now.Add(-6*time.Hour), now.Add(6*time.Hour))
 	if err == nil {
 		for i := range items {
 			it := items[i]
 			if !it.PlannedAt.After(now) && it.End().After(now) {
-				msg["al_aire"] = s.nombrar(ctx, ch.Location(), &items[i])
-			} else if it.PlannedAt.After(now) {
-				if _, hay := msg["siguiente"]; !hay {
-					msg["siguiente"] = s.nombrar(ctx, ch.Location(), &items[i])
-				}
+				alAire = s.nombrar(ctx, ch.Location(), &items[i])
+			} else if it.PlannedAt.After(now) && siguiente == nil {
+				siguiente = s.nombrar(ctx, ch.Location(), &items[i])
 			}
 		}
 	}
+	msg["al_aire"] = alAire
+	msg["siguiente"] = siguiente
 	return ws.writeJSON(msg)
 }
 

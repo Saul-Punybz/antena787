@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
 import { useEstado } from '../lib/estado'
-import { haceCuanto } from '../lib/fechas'
-import { IconoEquis, IconoOk } from '../componentes/Iconos'
 import type { Ajustes as MapaDeAjustes } from '../lib/tipos'
 
 /**
  * Ajustes son las buenas prácticas vigiladas para siempre, no aplicadas una
- * vez. Muestra siempre tres números que no se ven en ningún otro lado: la
- * deriva del reloj, qué aceleración quedó elegida y con qué resultado, y el
- * umbral de silencio vigente (PRD §13).
+ * vez (PRD §13).
+ *
+ * Regla de esta pantalla: no se pinta ni un dato que el servidor no mande. Lo
+ * que llega con el motor se dice con esas palabras, y una tarjeta sin datos
+ * enseña «—» o la frase de por qué, nunca «undefined» ni «hace NaN días»
+ * (auditoría de contrato, 11 sept 2026).
  *
  * El volumen se enseña como "volumen de televisión de EE. UU.": la sigla del
  * estándar nunca sale a pantalla (PRD §4.3).
@@ -34,60 +35,18 @@ export function Ajustes() {
 
   if (!ajustes) return <p className="cargando">Leyendo los ajustes…</p>
 
-  const salud = [
-    {
-      ok: ajustes.antivirus_exclusiones === 'sí',
-      titulo: 'Exclusiones de antivirus',
-      detalle: 'Carpetas de video y la base de datos, fuera del escaneo',
-    },
-    {
-      ok: ajustes.energia_plan === 'sí',
-      titulo: 'Plan de energía',
-      detalle: 'Sin suspensión, sin apagado de disco',
-    },
-    {
-      ok: ajustes.arranque_tras_corte === 'sí',
-      titulo: 'Arranque tras corte de luz',
-      detalle: 'Habilitado en el BIOS',
-    },
-    {
-      ok: ajustes.rutas_largas === 'sí',
-      titulo: 'Rutas largas',
-      detalle: 'Nombres de más de 260 caracteres permitidos',
-    },
-    {
-      ok: ajustes.actualizaciones_windows === 'sí',
-      titulo: 'Actualizaciones del sistema',
-      detalle:
-        ajustes.actualizaciones_windows === 'sí'
-          ? 'No reinician la máquina sin avisar'
-          : 'Están en automático — pueden reiniciar la máquina al aire',
-    },
-  ]
-  const porArreglar = salud.filter((s) => !s.ok).length
-  const ahora = Date.parse(estado?.ahora ?? new Date().toISOString())
-
   return (
     <>
       <div className="encabezado">
         <div>
           <h1 className="titulo-pantalla">Ajustes</h1>
           <p className="subtitulo">
-            Antena787 v{ajustes.version} · {ajustes.sistema_operativo} · al aire hace{' '}
-            {ajustes.dias_al_aire} días sin interrupciones
+            Antena787 v{estado?.version ?? '—'} · la máquina y el tiempo al aire se
+            miden cuando arranque el motor
           </p>
         </div>
         <div className="fila" style={{ gap: 12 }}>
           {guardado && <span className="verde" style={{ fontSize: 13 }}>{guardado}</span>}
-          <span
-            className={'franja-modo ' + (porArreglar ? 'franja-modo--sombra' : 'franja-modo--aire')}
-            style={porArreglar ? { borderColor: 'rgba(248,81,73,.45)', color: 'var(--rojo)', background: 'rgba(248,81,73,.1)' } : undefined}
-          >
-            <span className={'punto ' + (porArreglar ? 'punto--problema' : 'punto--bien')} />
-            {porArreglar
-              ? `${porArreglar} cosa${porArreglar === 1 ? '' : 's'} que arreglar`
-              : 'todo en orden'}
-          </span>
         </div>
       </div>
 
@@ -99,78 +58,46 @@ export function Ajustes() {
           alignItems: 'start',
         }}
       >
-        {/* Salud de la máquina */}
-        <Tarjeta
-          rotulo="SALUD DE LA MÁQUINA"
-          ancha
-          problema={porArreglar > 0}
-        >
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-              gap: '16px 24px',
-            }}
-          >
-            {salud.map((s) => (
-              <div key={s.titulo} className="fila" style={{ alignItems: 'flex-start', gap: 11 }}>
-                {s.ok ? (
-                  <IconoOk tamano={16} color="var(--verde)" />
-                ) : (
-                  <IconoEquis tamano={16} color="var(--rojo)" />
-                )}
-                <div>
-                  <div style={{ font: '500 14px var(--sans)' }}>{s.titulo}</div>
-                  <div className="tenue" style={{ fontSize: 12.5, marginTop: 2 }}>
-                    {s.detalle}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-          {porArreglar > 0 && (
-            <button
-              className="boton"
-              style={{ marginTop: 18 }}
-              onClick={() => cambiar('actualizaciones_windows', 'sí')}
-            >
-              Arreglar las actualizaciones del sistema
-            </button>
-          )}
+        {/* Salud de la máquina: F2.5 todavía no existe (PRD §13). Antes esta
+            tarjeta leía ajustes que el servidor nunca manda y salía roja para
+            siempre; mientras no haya quien lo compruebe de verdad, mejor
+            decirlo que fingir un dato (auditoría de contrato, 11 sept 2026). */}
+        <Tarjeta rotulo="SALUD DE LA MÁQUINA" ancha>
+          <p className="ayuda">
+            Antivirus, plan de energía, arranque tras corte de luz, rutas largas y
+            actualizaciones del sistema se dejan bien puestos a mano al instalar la
+            máquina (ver la guía de instalación). Antena787 todavía no los comprueba
+            solo: esta tarjeta vuelve cuando pueda.
+          </p>
         </Tarjeta>
 
-        {/* Respaldo */}
+        {/* Respaldo: la copia de la base ya corre sola cada hora (carpeta_respaldo),
+            pero cómo va —cuándo fue la última, cuántas hay— todavía no lo dice
+            ningún ajuste. Antes esta tarjeta leía ajustes que el servidor nunca
+            manda y pintaba «hace NaN días» (auditoría de contrato, 11 sept 2026). */}
         <Tarjeta rotulo="RESPALDO">
-          <Linea nombre="Último" valor={haceCuanto(ajustes.respaldo_ultimo, ahora)} verde />
-          <Linea nombre="Cada" valor={ajustes.respaldo_cada} />
-          <Linea nombre="Copias guardadas" valor={ajustes.respaldo_copias} />
-          <Linea nombre="Tamaño" valor={ajustes.respaldo_tamano} />
-          <button className="boton" style={{ marginTop: 16 }}>
-            Bajar una copia
-          </button>
+          <p className="ayuda">
+            La base se respalda sola cada hora en la carpeta de datos de la
+            estación. Cuándo fue la última copia y cuántas quedan guardadas todavía
+            no lo enseña ningún ajuste: esta tarjeta vuelve cuando lo haga.
+          </p>
         </Tarjeta>
 
         {/* Actualizaciones */}
         <Tarjeta rotulo="ACTUALIZACIONES">
-          <Linea nombre="Versión" valor={ajustes.version} />
-          <Linea nombre="Hay disponible" valor={ajustes.actualizaciones_disponible} ambar />
-          <Linea nombre="Instalar sola" valor={ajustes.actualizaciones_instalar_sola} verde />
+          <Linea nombre="Versión" valor={estado?.version} />
           <p className="ayuda" style={{ marginTop: 12 }}>
-            Un canal al aire no se actualiza solo. Tú escoges cuándo, con la caja de
-            respaldo lista.
+            Un canal al aire no se actualiza solo. Antena787 todavía no busca versiones
+            nuevas ni sabe qué trae la que viene: hoy se cambia a mano, se baja la
+            versión nueva y se reinicia el servicio, con la copia de la base lista.
           </p>
-          <button className="boton" style={{ marginTop: 12 }}>
-            Ver qué cambia
-          </button>
         </Tarjeta>
 
         {/* Cumplimiento */}
         <Tarjeta rotulo="CUMPLIMIENTO" ancha>
           <Linea nombre="País" valor={ajustes.pais} />
-          <Linea nombre="Perfil" valor={ajustes.perfil} />
-          <Linea nombre="Volumen" valor={ajustes.volumen} verde />
-          <Linea nombre="Subtítulos" valor={ajustes.subtitulos} verde />
-          <Linea nombre="Equipo de alertas" valor={ajustes.equipo_de_alertas} verde />
+          <Linea nombre="Perfil" valor={estado?.canal.perfil_regulatorio} />
+          <Linea nombre="Calidad de salida" valor={ajustes.calidad} />
           {estado?.canal.perfil_regulatorio === 'us-fcc' && (
             <div className="campo" style={{ marginTop: 16 }}>
               <label htmlFor="subtitulos-estado">¿El canal está obligado a subtitular?</label>
@@ -197,20 +124,19 @@ export function Ajustes() {
 
         {/* Acceso remoto */}
         <Tarjeta rotulo="ACCESO REMOTO">
-          <Linea nombre="Tailscale" valor={ajustes.tailscale} verde />
-          <Linea nombre="Dirección" valor={ajustes.tailscale_direccion} />
-          <Linea nombre="Puertos abiertos" valor={ajustes.puertos_abiertos} verde />
-          <p className="ayuda" style={{ marginTop: 12 }}>
-            Se entra desde el celular sin abrir nada al internet.
+          <p className="ayuda">
+            Se entra desde el celular sin abrir nada al internet, con Tailscale. Cómo
+            está la red de la máquina no se comprueba desde aquí todavía: el asistente
+            de instalación lo dice al detectarla.
           </p>
         </Tarjeta>
 
         {/* Hora */}
         <Tarjeta rotulo="HORA">
-          <Linea nombre="Sincronizada con" valor={ajustes.hora_servidor} aqua />
-          <Linea nombre="Desvío" valor={segundos(ajustes.hora_desvio_s)} verde />
+          <Linea nombre="Reloj del canal" valor={estado?.canal.zona_horaria} aqua />
           <p className="ayuda" style={{ marginTop: 12 }}>
-            Avisa si pasa de {segundos(ajustes.hora_aviso_si_pasa_de_s)}.
+            La deriva del reloj se mide contra el aire que de verdad sale, así que llega
+            con el motor. Mientras, manda la hora del sistema operativo.
           </p>
         </Tarjeta>
 
@@ -228,11 +154,9 @@ export function Ajustes() {
 
         {/* Aceleración */}
         <Tarjeta rotulo="ACELERACIÓN DE VIDEO">
-          <Linea nombre="Tarjeta" valor={ajustes.aceleracion_tarjeta} />
-          <Linea nombre="Probada" valor={ajustes.aceleracion_probada} verde />
-          <Linea nombre="Resultado" valor={ajustes.aceleracion_resultado} verde />
-          <p className="ayuda" style={{ marginTop: 12 }}>
-            Se prueba sola cada vez que arranca.
+          <p className="ayuda">
+            No se cree lo que dice la tarjeta: se mide de verdad al arrancar el motor.
+            Todavía no hay motor, así que aquí no hay nada que enseñar.
           </p>
         </Tarjeta>
 
@@ -522,6 +446,10 @@ function CampoTexto({
   )
 }
 
+/**
+ * Una fila «nombre → valor». Lo que el servidor no manda sale «—»: en blanco
+ * parecía que la pantalla se había roto (auditoría de contrato, 11 sept 2026).
+ */
 function Linea({
   nombre,
   valor,
@@ -530,11 +458,12 @@ function Linea({
   aqua,
 }: {
   nombre: string
-  valor: string
+  valor: string | null | undefined
   verde?: boolean
   ambar?: boolean
   aqua?: boolean
 }) {
+  const hay = valor !== null && valor !== undefined && valor !== ''
   return (
     <div className="entre" style={{ padding: '7px 0', fontSize: 14 }}>
       <span className="apagado">{nombre}</span>
@@ -542,16 +471,18 @@ function Linea({
         style={{
           fontWeight: 500,
           textAlign: 'right',
-          color: verde
-            ? 'var(--verde)'
-            : ambar
-              ? 'var(--ambar)'
-              : aqua
-                ? 'var(--aqua)'
-                : 'var(--texto)',
+          color: !hay
+            ? 'var(--texto-3)'
+            : verde
+              ? 'var(--verde)'
+              : ambar
+                ? 'var(--ambar)'
+                : aqua
+                  ? 'var(--aqua)'
+                  : 'var(--texto)',
         }}
       >
-        {valor}
+        {hay ? valor : '—'}
       </span>
     </div>
   )

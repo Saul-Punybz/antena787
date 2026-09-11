@@ -22,6 +22,11 @@ type ruleOut struct {
 	DaysLeft int          `json:"dias_restantes"`
 	Pattern  string       `json:"patron_en_cristiano"`
 	Clock    string       `json:"hora_en_cristiano"`
+	// Cómo se llama el programa de la regla que releva y de la que repite:
+	// son las etiquetas «releva a …» y «repite a …» de la pantalla de Reglas,
+	// que con solo el número no se pueden escribir.
+	HandsOffTitle string `json:"releva_a_titulo,omitempty"`
+	RepeatsTitle  string `json:"repite_a_titulo,omitempty"`
 }
 
 func (s *Server) ruleOut(ctx context.Context, rule model.ScheduleRule, today model.Day) ruleOut {
@@ -37,7 +42,27 @@ func (s *Server) ruleOut(ctx context.Context, rule model.ScheduleRule, today mod
 			out.Titulo = t.Name
 		}
 	}
+	out.HandsOffTitle = s.tituloDeLaRegla(ctx, rule.HandsOffTo)
+	out.RepeatsTitle = s.tituloDeLaRegla(ctx, rule.RepeatsOf)
 	return out
+}
+
+// tituloDeLaRegla dice cómo se llama el programa de otra regla. Vacío si no
+// hay regla, si se borró o si es una franja sin ficha: la pantalla entonces no
+// pinta la etiqueta, que es mejor que pintar un número suelto.
+func (s *Server) tituloDeLaRegla(ctx context.Context, id *int64) string {
+	if id == nil {
+		return ""
+	}
+	otra, err := s.App.Store.Rule.Get(ctx, *id)
+	if err != nil || otra.TitleID == nil {
+		return ""
+	}
+	t, err := s.App.Store.Title.Get(ctx, *otra.TitleID)
+	if err != nil {
+		return ""
+	}
+	return t.Name
 }
 
 func (s *Server) reglasList(w http.ResponseWriter, r *http.Request) {
