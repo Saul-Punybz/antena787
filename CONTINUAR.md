@@ -191,9 +191,16 @@ go test ./... -count=1           # todo debe estar verde
    una en su worktree.** Antes de T2, contestar las preguntas 1, 3 y 10 del
    plan (F2.5, unicast/multicast al TP1000, varias salidas desde el
    principio) y pedir a Rolando su cadena `sout` de VLC.
-   **T2 y T3 en curso (10 sept)** con dos agentes (`agente/t2-decks-udpts`,
-   `agente/t3-detector`), bajo tres decisiones por defecto que Saul puede
-   cambiar: (1) F2-91 a F2-102 (F2.5) no bloquean el cierre de F2; (3) el
+   **T3 hecha (10 sept, integrada):** detector de silencio y negro sobre la
+   salida real (`internal/engine/detector.go`, `internal/app/vigilancia.go`),
+   enganchado en `correrMotor`; umbral de fábrica 15 s (F2-53); «avisa y
+   devuelve el control» cableado con gancho para T5 (`app.ControlDelAire`).
+   **Decisión pendiente de Saul:** el negro digital en rango limitado es
+   luma 16 exactos, así que «luma < 16» (PRD §14.1, F2-52) nunca se cumple;
+   el detector mide como el ingest (≥ 98 % de la imagen bajo 25.5) y F2-52
+   lo explica; si se prefiere otro número es una constante.
+   **T2 en curso** con un agente (`agente/t2-decks-udpts`), bajo tres
+   decisiones por defecto que Saul puede cambiar: (1) F2-91 a F2-102 (F2.5) no bloquean el cierre de F2; (3) el
    TP1000 recibe unicast IP:puerto por defecto y multicast+TTL es opción del
    mismo driver; (10) varias salidas simultáneas desde T2, solo `udp-ts` y
    `archivo` (internet y `http-ts` en T7). PIDs/programa/bitrate son valores
