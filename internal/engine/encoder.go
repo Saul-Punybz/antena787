@@ -368,28 +368,92 @@ func (o Output) argsMPEG2TS() []string {
 	args = append(args, "-max_muxing_queue_size", "1024")
 	args = append(args, o.streamIDs(len(codecs))...)
 
-	switch {
-	case o.UDP != "" && o.File != "":
-		// El mismo TS a la red y al disco. onfail=ignore en la rama de red:
-		// que nadie escuche el UDP no puede parar la grabación.
-		mux := o.especDelTee()
-		args = append(args, "-f", "tee",
-			fmt.Sprintf("[%s:onfail=ignore]%s|[%s]%s", mux, o.urlUDP(), mux, o.File))
-	case o.UDP != "":
-		args = append(args, o.flagsDelMux()...)
-		args = append(args, o.urlUDP())
-	default:
-		args = append(args, o.flagsDelMux()...)
-		args = append(args, o.File)
+	dst := o.destinosTS()
+	if len(dst) > 1 {
+		// El mismo TS a más de un sitio, multiplexado una sola vez.
+		args = append(args, "-f", "tee", ramasDelTee(o.especDelTee(), dst))
+		return args
 	}
+	args = append(args, o.flagsDelMux()...)
+	if len(dst) == 1 {
+		args = append(args, dst[0].url)
+		return args
+	}
+	// Sin ningún destino escrito se le pasa File tal cual —vacío— y es
+	// ffmpeg quien se queja: es lo que pasaba antes de que hubiera más de un
+	// destino posible, y no se cambia.
+	args = append(args, o.File)
 	return args
 }
 
-// argsH264TS es la salida de internet: H.264 y AAC. Las de verdad —RTMP, HLS,
-// SRT, y el http-ts de paridad con VLC— son T7; esto es lo que la F0 usaba
-// para medir dos salidas con volúmenes distintos a la vez.
+// destinoTS es un sitio al que va el mismo transport stream, y si ffmpeg
+// puede seguir con los demás cuando este falla.
+type destinoTS struct {
+	url string
+	// ignorable: los destinos de red sí se pueden ignorar —que nadie escuche
+	// el UDP, o que el reparto por HTTP se caiga, no puede parar la
+	// grabación ni el aire—; el archivo no, que es la prueba de lo que salió.
+	ignorable bool
+}
+
+// destinosTS son los sitios a los que esta salida escribe el mismo TS, en el
+// orden en que se le pasan a ffmpeg: la red, la escucha de este proceso que
+// lo reparte por HTTP (F2-115), y el disco.
+func (o Output) destinosTS() []destinoTS {
+	var d []destinoTS
+	if o.UDP != "" {
+		d = append(d, destinoTS{o.urlUDP(), true})
+	}
+	if o.TCP != "" {
+		d = append(d, destinoTS{o.urlTCP(), true})
+	}
+	if o.File != "" {
+		d = append(d, destinoTS{o.File, false})
+	}
+	return d
+}
+
+// Destinos son las direcciones a las que esta salida escribe el mismo
+// transport stream, dichas como se las dice a ffmpeg. Es lo que hace falta
+// para saber a dónde va una salida sin armar el encoder entero.
+func (o Output) Destinos() []string {
+	dst := o.destinosTS()
+	urls := make([]string, 0, len(dst))
+	for _, d := range dst {
+		urls = append(urls, d.url)
+	}
+	return urls
+}
+
+// ramasDelTee arma la especificación del multiplexor tee: las mismas opciones
+// de mux en cada rama, y onfail=ignore en las que se pueden perder.
+func ramasDelTee(mux string, dst []destinoTS) string {
+	ramas := make([]string, 0, len(dst))
+	for _, d := range dst {
+		spec := mux
+		if d.ignorable {
+			spec += ":onfail=ignore"
+		}
+		ramas = append(ramas, "["+spec+"]"+d.url)
+	}
+	return strings.Join(ramas, "|")
+}
+
+// urlTCP es la escucha de ESTE proceso a la que ffmpeg entrega el transport
+// stream para que Go lo reparta a varios clientes por HTTP (F2-115).
+func (o Output) urlTCP() string {
+	if o.TCP == "" || strings.Contains(o.TCP, "://") {
+		return o.TCP
+	}
+	return "tcp://" + o.TCP
+}
+
+// argsH264TS es la salida de internet: H.264 y AAC. Es la que sirve la copia
+// por HTTP que un navegador puede pintar —ningún navegador sabe decodificar
+// MPEG-2 (F2-115, F2-117)— y la que la F0 usaba para medir dos salidas con
+// volúmenes distintos a la vez. Las de verdad —RTMP, HLS, SRT— son T7.
 func (o Output) argsH264TS() []string {
-	return []string{
+	args := []string{
 		"-map", "0:v", "-map", "1:a",
 		"-filter:a:0", fmt.Sprintf("volume=%.2fdB", o.GainDB),
 		"-c:v", o.Accel.codecVideo("h264"), "-preset", "veryfast", "-pix_fmt", "yuv420p", "-g", "60",
@@ -397,8 +461,15 @@ func (o Output) argsH264TS() []string {
 		"-bufsize", fmt.Sprintf("%dk", o.VideoKbs*2),
 		"-c:a", "aac", "-b:a", "128k",
 		"-max_muxing_queue_size", "1024",
-		"-f", "mpegts", o.File,
 	}
+	dst := o.destinosTS()
+	if len(dst) > 1 {
+		return append(args, "-f", "tee", ramasDelTee("f=mpegts", dst))
+	}
+	if len(dst) == 1 {
+		return append(args, "-f", "mpegts", dst[0].url)
+	}
+	return append(args, "-f", "mpegts", o.File)
 }
 
 // opcionesDelMux son las opciones del multiplexor de TS, en el mismo orden

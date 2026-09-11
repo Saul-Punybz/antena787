@@ -4,9 +4,10 @@
 //
 // La palabra «driver» no se le enseña a nadie (PRD §10): la pantalla pregunta
 // «¿a un receptor o a un grupo?» y «¿qué espera tu multiplexor?», y aquí se
-// traduce. Los dos que existen en esta tanda son `udp-ts` —el que recibe el
-// multiplexor de CAtv, el primero que se construye— y `archivo`. Los de
-// internet (RTMP/HLS/SRT) y `http-ts` son T7.
+// traduce. Los que existen hoy son `udp-ts` —el que recibe el multiplexor de
+// CAtv, el primero que se construyó—, `archivo`, y `http-ts`, que deja la
+// misma señal en un puerto para que otro programa tire de ella (F2-115). Los
+// de internet (RTMP/HLS/SRT) son T7.
 //
 // Cada salida se guarda en la tabla `output`: el nombre que le puso la
 // persona, el driver, y sus `parametros` en JSON. Nada de esto es fijo en el
@@ -93,6 +94,8 @@ func Para(o model.Output, reg Registro) (Driver, error) {
 		return nuevoUDPTS(o, reg)
 	case DriverArchivo:
 		return nuevoArchivo(o, reg)
+	case DriverHTTPTS:
+		return nuevoHTTPTS(o, reg)
 	case "", "ninguna":
 		return nil, errors.New("esta salida no dice a dónde mandar la señal")
 	default:
@@ -106,6 +109,8 @@ func Disponibles() []Ficha {
 	return []Ficha{
 		{Driver: DriverUDPTS, Nombre: "Al transmisor (multiplexor)",
 			Explicacion: "La señal MPEG-2 por la red, a la dirección y el puerto que espera tu multiplexor."},
+		{Driver: DriverHTTPTS, Nombre: "A quien tire de ella (por HTTP)",
+			Explicacion: "Deja la señal en un puerto de esta máquina para que otro programa la pida: VLC, un monitor, o el equipo de otro. Pueden mirar varios a la vez."},
 		{Driver: DriverArchivo, Nombre: "A un archivo",
 			Explicacion: "Guarda lo que sale, tal cual, en el disco."},
 	}

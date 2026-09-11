@@ -4,6 +4,7 @@ import { api } from '../lib/api'
 import {
   ErrorDeApi,
   type DriverDeSalida,
+  type ParamsHTTPTS,
   type Salida,
   type SalidaNueva,
   type SalidasDelCanal,
@@ -20,6 +21,7 @@ import {
 
 const DRIVER_UDP_TS = 'udp-ts'
 const DRIVER_ARCHIVO = 'archivo'
+const DRIVER_HTTP_TS = 'http-ts'
 
 const ESTADOS: Record<string, { texto: string; clase: string }> = {
   conectada: { texto: 'Conectada', clase: 'punto--bien' },
@@ -239,6 +241,25 @@ const CAMPOS_UDPTS_VACIOS: CamposUDPTS = {
   audio: '',
 }
 
+/** Lo que trae guardado una salida http-ts (`ParamsHTTPTS` en tipos.ts). */
+interface CamposHTTPTS {
+  puerto: string
+  ruta: string
+  codec: 'mpeg2' | 'h264'
+  bitrateMuxKbs: string
+  bitrateVideoKbs: string
+  audio: string
+}
+
+const CAMPOS_HTTPTS_VACIOS: CamposHTTPTS = {
+  puerto: '8080',
+  ruta: '/stream.ts',
+  codec: 'mpeg2',
+  bitrateMuxKbs: '',
+  bitrateVideoKbs: '',
+  audio: '',
+}
+
 interface CamposArchivo {
   ruta: string
   bitrateMuxKbs: string
@@ -286,6 +307,22 @@ function camposUDPTSDe(salida: Salida | null): CamposUDPTS {
   }
 }
 
+function camposHTTPTSDe(salida: Salida | null): CamposHTTPTS {
+  if (!salida || salida.driver !== DRIVER_HTTP_TS) return { ...CAMPOS_HTTPTS_VACIOS }
+  // Leídos por su nombre y no por la clave suelta: `ParamsHTTPTS` de tipos.ts
+  // es el mismo contrato que el servidor guarda.
+  const p = parametrosGuardados(salida) as Partial<ParamsHTTPTS>
+  const numero = (v: number | undefined) => (v === undefined ? '' : String(v))
+  return {
+    puerto: p.puerto ? String(p.puerto) : CAMPOS_HTTPTS_VACIOS.puerto,
+    ruta: p.ruta ?? CAMPOS_HTTPTS_VACIOS.ruta,
+    codec: p.codec === 'h264' ? 'h264' : 'mpeg2',
+    bitrateMuxKbs: numero(p.bitrate_mux_kbs),
+    bitrateVideoKbs: numero(p.bitrate_video_kbs),
+    audio: p.audio ?? '',
+  }
+}
+
 function camposArchivoDe(salida: Salida | null): CamposArchivo {
   if (!salida || salida.driver !== DRIVER_ARCHIVO) return { ...CAMPOS_ARCHIVO_VACIOS }
   const p = parametrosGuardados(salida)
@@ -320,6 +357,27 @@ function construirParametrosUDPTS(c: CamposUDPTS): string {
   return JSON.stringify(p)
 }
 
+/**
+ * Lo mismo para la salida que se sirve por HTTP: el puerto, la dirección y
+ * para quién es son lo único obligatorio; lo demás lo rellena el driver
+ * (`internal/drivers/salida/httpts.go`, comentario de `ParamsHTTPTS`).
+ */
+function construirParametrosHTTPTS(c: CamposHTTPTS): string {
+  const ruta = c.ruta.trim()
+  const p: ParamsHTTPTS = {
+    puerto: Number(c.puerto),
+    // La barra delante no la tiene que escribir nadie.
+    ruta: ruta.startsWith('/') ? ruta : '/' + ruta,
+    codec: c.codec,
+  }
+  if (c.bitrateMuxKbs.trim()) p.bitrate_mux_kbs = Number(c.bitrateMuxKbs)
+  if (c.bitrateVideoKbs.trim()) p.bitrate_video_kbs = Number(c.bitrateVideoKbs)
+  // El sonido de la copia para el navegador lo pone el sistema: AAC, que es
+  // lo único que un navegador sabe oír.
+  if (c.codec === 'mpeg2' && c.audio.trim()) p.audio = c.audio
+  return JSON.stringify(p)
+}
+
 function construirParametrosArchivo(c: CamposArchivo): string {
   const p: Record<string, unknown> = { ruta: c.ruta.trim() }
   if (c.bitrateMuxKbs.trim()) p.bitrate_mux_kbs = Number(c.bitrateMuxKbs)
@@ -345,6 +403,7 @@ function EditorDeSalida({
     salida?.objetivo_volumen !== undefined ? String(salida.objetivo_volumen) : '',
   )
   const [udpts, setUdpts] = useState<CamposUDPTS>(camposUDPTSDe(salida))
+  const [httpts, setHttpts] = useState<CamposHTTPTS>(camposHTTPTSDe(salida))
   const [archivo, setArchivo] = useState<CamposArchivo>(camposArchivoDe(salida))
   const [error, setError] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
@@ -352,9 +411,11 @@ function EditorDeSalida({
   const camposListos =
     tipo === DRIVER_UDP_TS
       ? udpts.destino.trim() !== ''
-      : tipo === DRIVER_ARCHIVO
-        ? archivo.ruta.trim() !== ''
-        : false
+      : tipo === DRIVER_HTTP_TS
+        ? httpts.puerto.trim() !== '' && httpts.ruta.trim() !== ''
+        : tipo === DRIVER_ARCHIVO
+          ? archivo.ruta.trim() !== ''
+          : false
   const puedeGuardar = nombre.trim() !== '' && tipo !== '' && camposListos && !guardando
 
   async function guardar() {
@@ -367,7 +428,9 @@ function EditorDeSalida({
       parametros:
         tipo === DRIVER_UDP_TS
           ? construirParametrosUDPTS(udpts)
-          : construirParametrosArchivo(archivo),
+          : tipo === DRIVER_HTTP_TS
+            ? construirParametrosHTTPTS(httpts)
+            : construirParametrosArchivo(archivo),
     }
     if (objetivoVolumen.trim() !== '') cuerpo.objetivo_volumen = Number(objetivoVolumen)
     try {
@@ -417,6 +480,7 @@ function EditorDeSalida({
       </div>
 
       {tipo === DRIVER_UDP_TS && <CamposUDPTSForm valor={udpts} alCambiar={setUdpts} />}
+      {tipo === DRIVER_HTTP_TS && <CamposHTTPTSForm valor={httpts} alCambiar={setHttpts} />}
       {tipo === DRIVER_ARCHIVO && <CamposArchivoForm valor={archivo} alCambiar={setArchivo} />}
 
       <div className="campo">
@@ -618,6 +682,111 @@ function CamposUDPTSForm({
         Video: MPEG-2, el único formato que un multiplexor ATSC 1.0 entiende hoy. Lo que dejes
         en blanco arriba lo rellena el sistema con su valor de fábrica.
       </p>
+    </>
+  )
+}
+
+/**
+ * La salida que otro programa viene a buscar (F2-115): se elige el puerto, la
+ * dirección y para quién es. Pueden mirar varios a la vez sin estorbarse, y si
+ * no mira nadie la señal se sigue produciendo igual.
+ */
+function CamposHTTPTSForm({
+  valor,
+  alCambiar,
+}: {
+  valor: CamposHTTPTS
+  alCambiar: (v: CamposHTTPTS) => void
+}) {
+  const set = (campo: keyof CamposHTTPTS) => (v: string) => alCambiar({ ...valor, [campo]: v })
+  const ruta = valor.ruta.startsWith('/') ? valor.ruta : '/' + valor.ruta
+  return (
+    <>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 14 }}>
+        <div className="campo">
+          <label htmlFor="s-h-puerto">Puerto</label>
+          <input
+            id="s-h-puerto"
+            type="number"
+            min={1}
+            max={65535}
+            value={valor.puerto}
+            onChange={(e) => set('puerto')(e.target.value)}
+          />
+        </div>
+        <div className="campo">
+          <label htmlFor="s-h-ruta">Dirección</label>
+          <input
+            id="s-h-ruta"
+            type="text"
+            value={valor.ruta}
+            onChange={(e) => set('ruta')(e.target.value)}
+            placeholder="/stream.ts"
+          />
+          <span className="ayuda">
+            La señal queda en «http://(esta máquina):{valor.puerto || '8080'}
+            {ruta}». Eso es lo que se escribe en VLC o en el otro programa.
+          </span>
+        </div>
+      </div>
+
+      <div className="campo">
+        <label htmlFor="s-h-para-quien">Para quién es</label>
+        <select
+          id="s-h-para-quien"
+          value={valor.codec}
+          onChange={(e) =>
+            alCambiar({ ...valor, codec: e.target.value === 'h264' ? 'h264' : 'mpeg2' })
+          }
+        >
+          <option value="mpeg2">Para VLC, un multiplexor u otro programa (MPEG-2)</option>
+          <option value="h264">Para verla en un navegador (H.264)</option>
+        </select>
+        <span className="ayuda">
+          Un navegador no sabe pintar MPEG-2: si lo que quieres es mirar la salida en una
+          pantalla, escoge la segunda.
+        </span>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <div className="campo">
+          <label htmlFor="s-h-mux">Tasa total del mux (kb/s)</label>
+          <input
+            id="s-h-mux"
+            type="number"
+            min={1}
+            value={valor.bitrateMuxKbs}
+            onChange={(e) => set('bitrateMuxKbs')(e.target.value)}
+          />
+        </div>
+        <div className="campo">
+          <label htmlFor="s-h-video">Tasa de video (kb/s)</label>
+          <input
+            id="s-h-video"
+            type="number"
+            min={1}
+            value={valor.bitrateVideoKbs}
+            onChange={(e) => set('bitrateVideoKbs')(e.target.value)}
+          />
+          <span className="ayuda">Deja al menos 500 kb/s de margen sobre esta tasa.</span>
+        </div>
+      </div>
+
+      {valor.codec === 'mpeg2' ? (
+        <div className="campo">
+          <label htmlFor="s-h-audio">Sonido</label>
+          <select id="s-h-audio" value={valor.audio} onChange={(e) => set('audio')(e.target.value)}>
+            <option value="">— sin elegir —</option>
+            <option value="mp2">MPEG capa II (mp2)</option>
+            <option value="ac3">AC-3 (ac3)</option>
+          </select>
+        </div>
+      ) : (
+        <p className="ayuda">
+          El sonido va en AAC, el único que un navegador sabe oír. Lo que dejes en blanco
+          arriba lo rellena el sistema con su valor de fábrica.
+        </p>
+      )}
     </>
   )
 }
