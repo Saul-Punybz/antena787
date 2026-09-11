@@ -620,7 +620,6 @@ func (a *App) ForzarAcelerador(ac engine.Acelerador, porque string) {
 	a.accelForzado, a.accelPorQueEs = ac, porque
 }
 
-
 // ── el aire manda sobre la preparación (ADR 0008) ─────────────────────
 
 // AlAireCon lo llama el motor al encender: éste es el servidor de cuadros de

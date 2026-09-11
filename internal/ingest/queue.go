@@ -280,7 +280,6 @@ func (h *jobHeap) Pop() any {
 	return j
 }
 
-
 // esperarPermiso bloquea mientras Permiso conteste que no. Devuelve false solo
 // si se canceló el contexto. Sin Permiso puesto no espera nunca, que es como
 // se comportaba la cola antes de que esto existiera.

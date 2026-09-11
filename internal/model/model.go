@@ -186,13 +186,13 @@ type MediaAsset struct {
 	// PresetID es el preset de este archivo en concreto: el nivel más
 	// específico de los tres, el que gana sobre todos. Nulo = hereda del
 	// título, y si el título tampoco tiene, del canal.
-	PresetID *int64 `json:"preset_id" db:"preset_id"`
-	MotivoCodigo     string     `json:"motivo_codigo" db:"motivo_codigo"`               // por qué se paró, en clave: sin_audio, duracion_av_no_coincide, normalizacion_fallida; vacío en lo demás
-	NormalizeState   string     `json:"estado_normalizacion" db:"estado_normalizacion"` // pendiente | en_curso | listo | fallido
-	NormalizedPath   string     `json:"ruta_normalizada" db:"ruta_normalizada"`
-	IntentionalBlack bool       `json:"negro_intencional" db:"negro_intencional"`
-	NoLogo           bool       `json:"sin_logo" db:"sin_logo"`
-	LetThroughBy     string     `json:"dejado_pasar_por" db:"dejado_pasar_por"`
+	PresetID         *int64 `json:"preset_id" db:"preset_id"`
+	MotivoCodigo     string `json:"motivo_codigo" db:"motivo_codigo"`               // por qué se paró, en clave: sin_audio, duracion_av_no_coincide, normalizacion_fallida; vacío en lo demás
+	NormalizeState   string `json:"estado_normalizacion" db:"estado_normalizacion"` // pendiente | en_curso | listo | fallido
+	NormalizedPath   string `json:"ruta_normalizada" db:"ruta_normalizada"`
+	IntentionalBlack bool   `json:"negro_intencional" db:"negro_intencional"`
+	NoLogo           bool   `json:"sin_logo" db:"sin_logo"`
+	LetThroughBy     string `json:"dejado_pasar_por" db:"dejado_pasar_por"`
 
 	// Sonido del archivo (F1-58 a F1-63). Todo lo que sale al aire lleva
 	// audio: aquí queda qué pistas trae, cuál va al aire y de dónde salió.
