@@ -199,8 +199,18 @@ go test ./... -count=1           # todo debe estar verde
    luma 16 exactos, así que «luma < 16» (PRD §14.1, F2-52) nunca se cumple;
    el detector mide como el ingest (≥ 98 % de la imagen bajo 25.5) y F2-52
    lo explica; si se prefiere otro número es una constante.
-   **T2 en curso** con un agente (`agente/t2-decks-udpts`), bajo tres
-   decisiones por defecto que Saul puede cambiar: (1) F2-91 a F2-102 (F2.5) no bloquean el cierre de F2; (3) el
+   **Ramas de agentes en marcha al guardar (10 sept):** `agente/t2-decks-udpts`
+   (T2), y cinco bibliotecas de protocolo aisladas que no tocan `app` ni
+   los criterios: `agente/sage-endec` (`internal/drivers/alerta/sage`,
+   protocolo serial y TCP del ENDEC), `agente/same`
+   (`internal/drivers/alerta/same`, decodificador SAME solo lectura),
+   `agente/scte104` (`internal/drivers/senal/scte104`), `agente/pmcp`
+   (`internal/resolver/pmcp.go`, `/guia.pmcp`), `agente/hdhomerun`
+   (`internal/drivers/captura/hdhomerun`). Worktrees en
+   `../antena787-wt/`; `git worktree list` dice cuáles siguen. Integración:
+   rebase sobre `main`, `--ff-only`, suite completa, push; una rama sin
+   commit se relanza con el mismo encargo (resumido aquí).
+   **T2** va bajo tres decisiones por defecto que Saul puede cambiar: (1) F2-91 a F2-102 (F2.5) no bloquean el cierre de F2; (3) el
    TP1000 recibe unicast IP:puerto por defecto y multicast+TTL es opción del
    mismo driver; (10) varias salidas simultáneas desde T2, solo `udp-ts` y
    `archivo` (internet y `http-ts` en T7). PIDs/programa/bitrate son valores
