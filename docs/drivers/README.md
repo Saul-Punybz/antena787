@@ -104,8 +104,9 @@ Lo único que no se puede es enchufarse a sistemas de inserción de terceros.
 
 **En Estados Unidos los equipos son pocos y se conocen, y se traen todos:**
 Sage Digital ENDEC **1822** (serial RS-232 y relés; manual público, verificado)
-y **3644** (serial, relés y red: HTTP confirmado; syslog y SNMP **no
-aparecen en ninguna fuente pública**, se confirman contra el equipo); DASDEC
+y **3644** (serial, relés y red: HTTP y la interfaz de automatización por
+TCP —el mismo protocolo del serial, por red— confirmados; syslog y SNMP
+**no aparecen en ninguna fuente pública**, se confirman contra el equipo); DASDEC
 de Digital Alert Systems (red: HTTP confirmado, SNMP/syslog no encontrados;
 y relés); Gorman-Redlich (relés y serial); TFT (relés). Equipo por equipo,
 con fuentes: [`CATALOGO.md`](CATALOGO.md).

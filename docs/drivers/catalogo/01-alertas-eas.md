@@ -61,7 +61,19 @@ encontrada: [endec_spec_sheet.pdf](https://www.sagealertingsystems.com/endec_spe
 Confirma: **LAN** 10/100 RJ-45 (DHCP o IP fija); **HTTP/HTTPS** para
 programar y ver estado; **NTP**; **correo** para registro con audio y
 texto adjunto (STARTTLS, SSL); **FTP** mencionado solo en mercadotecnia,
-sin protocolo detallado. Seis puertos serial DB-9 (igual que el 1822), 5
+sin protocolo detallado.
+
+**Verificado aparte el 10 sept 2026 (Saul):** ni la hoja oficial ni la
+referencia del protocolo ([easstation.com](https://easstation.com/docs/reference/protocols/SAGE_ENDEC))
+mencionan **syslog ni SNMP** para el 3644. Lo que sí documenta la
+referencia es la **interfaz de automatización por TCP**: el mismo protocolo
+de los puertos serial, servido por red en un puerto base configurable
+(manual §12.62, `MENU.NETWORK.AUTOMATION`), además de la interfaz LAN del
+ENDEC PRO/DJ y de `ENDECSETD` para guardar y restaurar la configuración.
+**Todos los servicios de red vienen apagados de fábrica** (web, automatización,
+PRO/DJ): hay que encenderlos en el menú. Para el driver `sage-endec` eso
+significa dos caminos con el mismo protocolo: serial (1822 y 3644) o TCP
+(solo 3644); syslog/SNMP no cuentan hasta que el equipo real diga otra cosa. Seis puertos serial DB-9 (igual que el 1822), 5
 entradas de propósito general y 4 contactos secos de salida.
 
 **SNMP: no encontrado.** Ninguna fuente revisada —ni la hoja técnica, ni el

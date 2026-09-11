@@ -47,10 +47,13 @@ está el manual y con qué biblioteca de Go (sin CGo) se habla.
    actual de CAtv (DVB/BDA, modelo sin confirmar) exigiría sintonizar
    aparte.
 6. **Sage ENDEC 1822: verificado del todo** (manual público con protocolo
-   serial, formato ZCZC, relés y programas). **Sage 3644: HTTP y correo
-   confirmados; syslog y SNMP no aparecen en ninguna fuente pública** —
-   `docs/drivers/README.md` los daba por hechos y ya no. DASDEC: HTTP y
-   GPIO confirmados; SNMP/syslog no encontrados.
+   serial, formato ZCZC, relés y programas). **Sage 3644: HTTP, correo y la
+   interfaz de automatización por TCP** (el mismo protocolo del serial,
+   por red, puerto configurable, apagada de fábrica) confirmados; **syslog y
+   SNMP no aparecen en ninguna fuente pública** (verificado dos veces, 10
+   sept) — `docs/drivers/README.md` los daba por hechos y ya no. El driver
+   `sage-endec` tiene por tanto dos caminos con un solo protocolo: serial o
+   TCP. DASDEC: HTTP y GPIO confirmados; SNMP/syslog no encontrados.
 7. **El amplificador «ADR» de CAtv no existe como marca.** La hipótesis
    más fuerte es *Adrenalin*, el control de amplificadores de Technalogix
    (el mismo fabricante del TP1000). Se confirma con la placa.
