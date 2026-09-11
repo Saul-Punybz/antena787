@@ -1454,6 +1454,12 @@ const TIPOS_DE_SALIDA_DEMO: DriverDeSalida[] = [
       'La señal MPEG-2 por la red, a la dirección y el puerto que espera tu multiplexor.',
   },
   {
+    driver: 'http-ts',
+    nombre: 'Para verlo desde otra computadora',
+    explicacion:
+      'Sirve la misma señal por la red para que otro programa tire de ella: VLC en otra máquina, o un monitor. Varios pueden mirar a la vez sin estorbarse.',
+  },
+  {
     driver: 'archivo',
     nombre: 'A un archivo',
     explicacion: 'Guarda lo que sale, tal cual, en el disco.',
@@ -1493,7 +1499,7 @@ function validarSalidaDemo(nombre: string, tipo: string, parametros: string): st
   }
   const conocido = TIPOS_DE_SALIDA_DEMO.find((d) => d.driver === tipo)
   const destino = conocido ? conocido.nombre : 'ese destino'
-  return `todavía no sé mandar la señal a "${destino}": en esta versión están la salida al multiplexor y la grabación a un archivo`
+  return `todavía no sé mandar la señal a "${destino}": en esta versión están la salida al multiplexor, la de ver desde otra computadora y la grabación a un archivo`
 }
 
 // ── el ruteador ───────────────────────────────────────────────────────
