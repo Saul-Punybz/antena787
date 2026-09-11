@@ -101,9 +101,15 @@ const (
 	AcelVideoToolbox Acelerador = "videotoolbox" // macOS
 )
 
-// Aceleradores son todos, en el orden en que se le ofrecen a una persona.
+// Aceleradores son los que se le ofrecen a una persona, en ese orden.
+//
+// AcelVAAPI no está: la constante existe porque el valor está reservado, pero
+// VAAPI no es un cambio de códec —pide subir el cuadro a la tarjeta con su
+// propio filtro y un dispositivo abierto— y eso se escribe con la máquina
+// delante, no de memoria. Ofrecerlo antes sería ofrecer algo que comprime por
+// procesador diciendo que usa la tarjeta. Entra cuando esté escrito.
 func Aceleradores() []Acelerador {
-	return []Acelerador{AcelAuto, AcelSoftware, AcelNVENC, AcelQSV, AcelVAAPI, AcelVideoToolbox}
+	return []Acelerador{AcelAuto, AcelSoftware, AcelNVENC, AcelQSV, AcelVideoToolbox}
 }
 
 // Nombre es cómo se llama en pantalla. Sin jerga y sin la clave (F1-56).
@@ -185,11 +191,28 @@ func (a Acelerador) Disponible(ffmpeg string) bool {
 	if a.Resolver() == AcelSoftware {
 		return true
 	}
+	// El códec de verdad, no el que se acaba usando: si se preguntara por lo
+	// que devuelve codecVideo, VAAPI —que hoy cae en libx264— diría que sí lo
+	// hay en cualquier máquina, y quien lo escogiera comprimiría por
+	// procesador creyendo que usa la tarjeta.
+	var codec string
+	switch a.Resolver() {
+	case AcelNVENC:
+		codec = "h264_nvenc"
+	case AcelQSV:
+		codec = "h264_qsv"
+	case AcelVAAPI:
+		codec = "h264_vaapi"
+	case AcelVideoToolbox:
+		codec = "h264_videotoolbox"
+	default:
+		return false
+	}
 	out, err := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error", "-encoders").Output()
 	if err != nil {
 		return false
 	}
-	return bytes.Contains(out, []byte(a.codecVideo("h264")))
+	return bytes.Contains(out, []byte(codec))
 }
 
 // Encoder es el único ffmpeg de larga vida: recibe cuadros crudos y PCM por

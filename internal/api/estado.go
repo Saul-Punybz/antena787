@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"slices"
+
 	"antena787/internal/app"
 	"antena787/internal/engine"
 	"antena787/internal/model"
@@ -199,6 +201,24 @@ func (s *Server) canalPut(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "la hora de inicio del día de emisión tiene que estar dentro del día", "hora_inicio_dia_emision")
 		return
 	}
+	// El acelerador tiene que ser uno de los que existen, y tiene que estar
+	// en esta máquina: guardar "nvenc" en un PC sin tarjeta NVIDIA dejaría el
+	// canal apuntando a un códec que ffmpeg no tiene, y eso se descubriría la
+	// próxima vez que alguien encienda el aire (F2-11).
+	if nuevo.Accel != old.Accel {
+		ac := engine.Acelerador(nuevo.Accel)
+		if !slices.Contains(engine.Aceleradores(), ac) {
+			failf(w, http.StatusBadRequest, "acelerador",
+				"no conozco %q como forma de comprimir el video", nuevo.Accel)
+			return
+		}
+		if s.App.FFmpeg != "" && !ac.Disponible(s.App.FFmpeg) {
+			failf(w, http.StatusBadRequest, "acelerador",
+				"%s no está en esta máquina: escoge otra", ac.Nombre())
+			return
+		}
+	}
+
 	// El modo no se cambia por aquí. Guardar el nombre del canal no puede
 	// encender ni apagar un transmisor de paso: para eso están
 	// POST /canal/al-aire y POST /canal/a-sombra, que comprueban antes y

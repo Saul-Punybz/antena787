@@ -99,6 +99,20 @@ export function Biblioteca() {
           <span className="punto punto--bien" />
           {titulos?.length ?? 0} títulos · importados de la carpeta una vez
         </div>
+        {/*
+          El botón de añadir. Estaba solo como zona de arrastre allá abajo, y
+          una zona de arrastre no se ve: quien no sabe que puede arrastrar no
+          descubre nunca que también se puede hacer clic. Aquí arriba, con el
+          signo delante y diciendo que busca en la computadora.
+        */}
+        <button
+          className="boton boton--primario"
+          onClick={() => entrada.current?.click()}
+          style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}
+        >
+          <span style={{ font: '400 19px var(--sans)', lineHeight: 1 }}>+</span>
+          Añadir contenido
+        </button>
       </div>
 
       {/* La ficha grande de arriba, como los mockups */}
@@ -181,7 +195,7 @@ export function Biblioteca() {
         }}
       >
         <div style={{ font: '600 15px var(--sans)' }}>
-          Arrastra videos aquí para añadirlos al canal
+          Arrastra videos aquí, o haz clic para buscarlos en tu computadora
         </div>
         <p className="subtitulo">
           Caen en la carpeta vigilada. El sistema los mide, los prepara y te dice en

@@ -376,6 +376,50 @@ Repaso hecho contra el código, no contra el PRD. Tres grupos:
   F1; ponerlo en la señal es F2 (T7).
 
 **No existe en ninguna parte. Son huecos reales.**
+
+> **Dos que encontró Saul el 11 de septiembre por la tarde, abriendo la interfaz,
+> y que no estaban en ninguna lista.** Verificados contra el código, no contra el
+> PRD. Van en fila por decisión suya: primero se termina el watchdog.
+>
+> **A · No hay dónde escribir el IP de una señal que ENTRA.** `model.LiveSource`
+> y `LiveSourceRepo` existen (`internal/store/catalog.go:383,403`), y el editor de
+> reglas ya deja apuntar un bloque a una fuente en vivo
+> (`web/src/componentes/EditorDeRegla.tsx:122`). Pero **no hay ni una sola ruta**
+> en el router (`internal/api/server.go:74-160`): no existe `GET`/`POST`
+> `/api/v1/fuentes`. La única forma de que nazca una fuente en vivo es de rebote,
+> al importar una hoja (`internal/api/importar.go:220-225`). O sea: se puede
+> *programar* un vivo que no se puede *crear*, y no hay dónde decir de dónde
+> viene. **Ojo con el estimado:** la pantalla sola sería una mentira — crearía
+> filas que no reproducen nada, porque el driver que abre la señal es **T4**, sin
+> construir. API + pantalla + driver, no solo pantalla.
+>
+> **B · No hay dónde ver el stream que SALE.** Es el monitor F2-117, y sigue
+> bloqueado detrás del driver `http-ts` (`internal/drivers/salida/salida.go:9`,
+> marcado T7). Ya estaba dicho más arriba; queda aquí porque es la misma
+> pregunta de Saul y porque es lo que MistServer hacía y dejó de hacer: la
+> ventana donde se ve lo que sale. **El driver va antes que la vista.**
+>
+> **El orden que sale de A y B, verificado el 11 sept con la tabla de paridad
+> de `docs/VLC-PARIDAD.md` y con la prueba `TestF2_46ElTSQueSalePorUDPCumple…`
+> corriendo:** Antena787 ya reemplaza a VLC y a MistServer en la mitad que
+> **empuja** la señal —archivo → motor → MPEG-2 TS → UDP al TP1000, medido:
+> programa 7, PMT 480, video 512, audio 513, 0 errores CC, desvío de tasa
+> 0.00 %—, pero **no** en la mitad que **recibe** (F2-116, T4) ni en la que
+> **mira** (F2-117). Para CAtv eso no es un detalle: RadioOnce Live! son 15
+> horas a la semana de señal que hoy tiene que entrar por MistServer. Y aunque
+> la salida sea correcta, hoy se emite a ciegas y sin guardar nada.
+> **Orden acordado con Saul:** watchdog (en curso) → `http-ts` + monitor (ver
+> lo que sale) → entrada en vivo + driver T4 (meter una señal) → grabación.
+>
+> **C · El botón de añadir contenido estaba escondido. Arreglado el 11 sept.**
+> La función existía (`POST /api/v1/material/subir`) y la zona de arrastre de
+> Biblioteca también abría el selector de archivos al hacer clic — pero el texto
+> decía solo «Arrastra videos aquí», así que nadie podía descubrirlo. Ahora hay
+> un botón «+ Añadir contenido» arriba, junto al buscador
+> (`web/src/pantallas/Biblioteca.tsx:104-116`), y la zona de arrastre dice que
+> también se puede hacer clic. **No faltaba la función, faltaba el botón que la
+> anunciara** — que es un tipo de hueco que las pruebas no encuentran nunca.
+
 1. **Dónde escribir IPs, puertos y direcciones. El más urgente.** El paso 4
    del asistente pregunta el *tipo* de destino en lenguaje llano («al equipo
    que junta los canales, por el cable de red») pero **no pide la dirección**.

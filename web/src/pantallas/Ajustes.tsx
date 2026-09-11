@@ -35,6 +35,15 @@ export function Ajustes() {
     window.setTimeout(() => setGuardado(''), 1600)
   }
 
+  // El acelerador vive en el canal, no en settings: se guarda por su propia
+  // puerta. PUT /canal no toca el modo nunca (F2-118), así que mandar el canal
+  // entero desde aquí no puede encender ni apagar el transmisor.
+  async function cambiarCanal(clave: string, valor: string) {
+    await api.guardarCanal({ [clave]: valor }).catch(() => {})
+    setGuardado('Guardado')
+    window.setTimeout(() => setGuardado(''), 1600)
+  }
+
   if (!ajustes) return <p className="cargando">Leyendo los ajustes…</p>
 
   return (
@@ -173,12 +182,49 @@ export function Ajustes() {
           />
         </Tarjeta>
 
-        {/* Aceleración */}
+        {/*
+          Aceleración (F2-11). Lo guardado y lo que corre de verdad son dos
+          cosas distintas: si la tarjeta deja de responder dos veces en diez
+          minutos, el canal sigue emitiendo por el procesador sin tocar lo que
+          la persona eligió. Esta tarjeta enseña las dos, y cuando no coinciden
+          dice por qué — que es la única forma de que alguien se entere.
+        */}
         <Tarjeta rotulo="ACELERACIÓN DE VIDEO">
-          <p className="ayuda">
-            No se cree lo que dice la tarjeta: se mide de verdad al arrancar el motor.
-            Todavía no hay motor, así que aquí no hay nada que enseñar.
-          </p>
+          <div className="campo">
+            <label htmlFor="acelerador">Con qué se comprime el video</label>
+            <select
+              id="acelerador"
+              value={estado?.canal.acelerador ?? 'auto'}
+              onChange={(e) => void cambiarCanal('acelerador', e.target.value)}
+            >
+              {(estado?.aceleradores_disponibles ?? []).map((a) => (
+                <option key={a.acelerador} value={a.acelerador} disabled={!a.disponible}>
+                  {a.nombre}
+                  {a.disponible ? '' : ' — no está en esta máquina'}
+                </option>
+              ))}
+            </select>
+            <span className="ayuda">
+              {estado?.aceleradores_disponibles?.find(
+                (a) => a.acelerador === (estado?.canal.acelerador ?? 'auto'),
+              )?.explicacion ?? ''}
+            </span>
+          </div>
+          <Linea
+            nombre="Comprimiendo ahora con"
+            valor={
+              estado?.aceleradores_disponibles?.find(
+                (a) => a.acelerador === estado?.acelerador_efectivo,
+              )?.nombre ??
+              estado?.acelerador_efectivo ??
+              '—'
+            }
+          />
+          {estado?.acelerador_porque && (
+            <p className="ayuda ambar" style={{ marginTop: 10 }}>
+              {estado.acelerador_porque}
+            </p>
+          )}
         </Tarjeta>
 
         {/* Audio */}

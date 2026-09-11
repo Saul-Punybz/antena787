@@ -32,7 +32,7 @@ Lo que mandaste es una demostración de cómo corres el canal hoy — sabemos qu
 
 4. **Una fecha cruzada pasa sin que nada avise.** *Hellsing* tiene fin antes que inicio y la hoja lo marca "✓ OK". El sistema no deja guardar eso, y al importar tu Sheet te lista fila por fila lo que no cuadró, sin rechazar el resto.
 
-5. **Los anuncios no tienen dónde vivir.** Tienes capacidad para 12 minutos por hora las 24 horas — 518,400 segundos al mes — y hoy no hay dónde anotar un cliente. El sistema te da el inventario, el enlace por anunciante, el cobro y el reporte.
+5. **Los anuncios no tienen dónde vivir.** Tienes capacidad para 12 minutos por hora las 24 horas — 518,400 segundos al mes — y hoy no hay dónde anotar un cliente. El sistema te va a dar el inventario, el enlace por anunciante, el cobro y el reporte. **Es lo último que se construye, y quiero que sepas por qué:** de nada sirve poder venderle a un cliente si el aire todavía se te puede caer. Primero va la señal —que entre, que salga, que se grabe, que no se caiga— y después el dinero. Mientras tanto los anuncios se siguen llevando como hoy.
 
 6. **RadioOnce Live! depende de que alguien esté mirando.** 15 horas semanales en vivo. El sistema espera la señal, pone relleno si no llega, y vuelve solo al vivo en cuanto aparece.
 
@@ -41,6 +41,8 @@ Lo que mandaste es una demostración de cómo corres el canal hoy — sabemos qu
 ## 3. Qué va a hacer el software, pantalla por pantalla
 
 Son 9 pantallas. Ninguna te va a pedir que sepas qué es un códec o un contenedor de video.
+
+Ocho son del camino de la señal y se construyen primero. La novena, Anuncios, es la del dinero y va al final, por la razón que está en el hallazgo 5.
 
 - **Al aire** — el tablero: qué está saliendo ahora mismo, qué sigue, y las alarmas activas. Aquí es donde ves de un vistazo si algo necesita tu atención.
 
@@ -56,7 +58,7 @@ Son 9 pantallas. Ninguna te va a pedir que sepas qué es un códec o un contened
 
 - **Biblioteca** — tu catálogo: los 118 títulos, con sus sinopsis, años y clasificaciones. Arrastras archivos o apuntas a una carpeta, y el sistema mide la duración real, corrige el volumen, revisa que traiga subtítulos si los tiene, y te avisa en español si algo está roto — nunca con un mensaje técnico. Lo que falla nunca llega al aire.
 
-- **Anuncios** — clientes, órdenes de compra, cuánto tiempo vendible tienes por hora, y la prueba de que cada anuncio salió al aire. Es lo que activa tus 518,400 segundos hoy en cero.
+- **Anuncios** *(la última, no la primera)* — clientes, órdenes de compra, cuánto tiempo vendible tienes por hora, y la prueba de que cada anuncio salió al aire. Es lo que activa tus 518,400 segundos hoy en cero. **No cuentes con esta pantalla todavía:** está diseñada y tiene su sitio en el menú, pero se construye al final, después de que la señal esté sólida. Si te la enseño antes de tiempo, te estaría vendiendo una fecha que no puedo cumplir.
 
 - **Ajustes** — todo lo que se configura una vez: a dónde sale tu señal, el formato de tu canal, el perfil regulatorio de tu país, y el equipo conectado (transmisor, alertas de emergencia).
 
