@@ -113,6 +113,10 @@ func (s *Server) routes() {
 	// transmisor, MistServer) no tiene navegador donde poner una.
 	open("GET /guia.xml", s.guiaXML)
 	open("GET /api/v1/guia.xml", s.guiaXML)
+	// PMCP (ATSC A/76) es la guía que consume el generador PSIP de la
+	// estación, no un navegador: sin clave, igual que guia.xml.
+	open("GET /guia.pmcp", s.guiaPMCP)
+	open("GET /api/v1/guia.pmcp", s.guiaPMCP)
 	api("GET /api/v1/guia", s.guiaContraPlan)
 
 	// Biblioteca

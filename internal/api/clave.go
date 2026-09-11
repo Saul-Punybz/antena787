@@ -191,7 +191,8 @@ type ctxKey int
 const authorKey ctxKey = 1
 
 // guard exige la clave de estación salvo donde el contrato dice que no:
-// /estado, /entrar, /guia.xml, y el asistente mientras no haya clave puesta.
+// /estado, /entrar, /guia.xml, /guia.pmcp, y el asistente mientras no haya
+// clave puesta.
 func (s *Server) guard(h http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()

@@ -295,6 +295,33 @@ func (a *App) pushGuide(ctx context.Context, data []byte) {
 	}()
 }
 
+// pushGuidePMCP es pushGuide para la guía en PMCP (ATSC A/76): mismo patrón,
+// mismo destino opcional por su propia clave (guia_pmcp_destino_http), y que
+// falle tampoco rompe nada —ni la guía PMCP en memoria ni, mucho menos, la
+// guía XMLTV o el aire—.
+func (a *App) pushGuidePMCP(ctx context.Context, data []byte) {
+	destino := a.setting(ctx, KeyGuidePMCPHTTP)
+	if destino == "" {
+		return
+	}
+	copia := append([]byte(nil), data...)
+	go func() {
+		if err := enviarGuia(destino, copia); err != nil {
+			aviso := fmt.Sprintf("no pude mandar la guía PMCP a %s: %s", destino, err)
+			a.setAlarms("guia_pmcp", []Alarma{{
+				Tipo:    "guia_pmcp",
+				Nivel:   NivelAviso,
+				Texto:   aviso,
+				Detalle: "la guía PMCP en /guia.pmcp se publicó igual; esto es solo la copia que sale a la red",
+				Accion:  &AccionAlarma{Texto: "ver los ajustes", Ruta: "/ajustes"},
+			}})
+			a.Publish("plan", "guia_pmcp", aviso)
+			return
+		}
+		a.Publish("plan", "guia_pmcp", "la guía PMCP se mandó a "+destino)
+	}()
+}
+
 // enviarGuia hace el POST del XML al destino, con su propio límite de tiempo.
 func enviarGuia(destino string, data []byte) error {
 	ctx, cancel := context.WithTimeout(context.Background(), TiempoDeGuia)

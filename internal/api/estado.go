@@ -323,6 +323,9 @@ func (s *Server) ajustesPut(w http.ResponseWriter, r *http.Request) {
 	if _, cambió := body[app.KeyGuideHTTP]; cambió {
 		s.App.Recalc()
 	}
+	if _, cambió := body[app.KeyGuidePMCPHTTP]; cambió {
+		s.App.Recalc()
+	}
 	all, err := s.App.Store.Settings.GetAll(ctx)
 	if err != nil {
 		failStore(w, err, "leer los ajustes")

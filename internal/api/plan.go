@@ -651,6 +651,27 @@ func (s *Server) guiaXML(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(data)
 }
 
+// guiaPMCP sirve la guía vigente en PMCP (ATSC A/76): lo que consume un
+// generador PSIP (docs/drivers/catalogo/03-multiplexores-psip-cortes.md §2),
+// no un transmisor de XMLTV. Mismo tratamiento de sesión que guiaXML: sin
+// clave, porque quien la lee tampoco tiene navegador.
+func (s *Server) guiaPMCP(w http.ResponseWriter, r *http.Request) {
+	data, at := s.App.GuidePMCP()
+	if len(data) == 0 {
+		if err := s.App.RefreshGuide(r.Context()); err != nil {
+			fail(w, http.StatusInternalServerError, "no se pudo armar la guía: "+err.Error(), "")
+			return
+		}
+		data, at = s.App.GuidePMCP()
+	}
+	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	if !at.IsZero() {
+		w.Header().Set("Last-Modified", at.UTC().Format(http.TimeFormat))
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
+}
+
 // guiaContraPlan compara lo que dice la guía publicada con lo que dice el
 // plan de verdad. Es la pantalla que contesta "¿lo que anuncié es lo que va
 // a salir?".

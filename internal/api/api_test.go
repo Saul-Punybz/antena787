@@ -178,6 +178,9 @@ func TestSinCookieTodoEs401(t *testing.T) {
 	if w := c.do("GET", "/guia.xml", nil); w.Code != http.StatusOK {
 		t.Fatalf("/guia.xml sin cookie dio %d, se esperaba 200", w.Code)
 	}
+	if w := c.do("GET", "/guia.pmcp", nil); w.Code != http.StatusOK {
+		t.Fatalf("/guia.pmcp sin cookie dio %d, se esperaba 200", w.Code)
+	}
 }
 
 func TestEstadoDiceQueFaltaInstalar(t *testing.T) {
@@ -492,6 +495,19 @@ func TestGuiaXMLEsValida(t *testing.T) {
 	}
 	if comparacion.Dia != anunciado {
 		t.Fatalf("la comparación dice ser del día %q y se pidió la del %q", comparacion.Dia, anunciado)
+	}
+
+	// La misma parrilla también se sirve en PMCP (ATSC A/76), sin clave y
+	// con el mismo Content-Type, para el generador PSIP de la estación.
+	w = c.do("GET", "/guia.pmcp", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("/guia.pmcp dio %d", w.Code)
+	}
+	if ct := w.Header().Get("Content-Type"); !strings.Contains(ct, "xml") {
+		t.Fatalf("la guía PMCP se sirve como %q", ct)
+	}
+	if problems := resolver.ValidatePMCP(w.Body.Bytes()); len(problems) != 0 {
+		t.Fatalf("la guía PMCP no es publicable: %v", problems)
 	}
 	for _, f := range filas {
 		if f["coincide"] != true {

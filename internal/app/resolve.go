@@ -343,6 +343,19 @@ func (a *App) rebuildGuide(ctx context.Context, ch model.Channel) error {
 		return err
 	}
 	a.pushGuide(ctx, data)
+
+	// PMCP (ATSC A/76) es la guía que de verdad consume un generador PSIP
+	// (docs/drivers/catalogo/03-multiplexores-psip-cortes.md §2), armada con
+	// el mismo plan que el XMLTV de arriba. Que no se pudiera armar no tumba
+	// la publicación que ya pasó: sigue puesta la PMCP que había.
+	if pmcpData, err := resolver.PMCP(ch, items, titles, episodes); err != nil {
+		a.Incident("guia_pmcp_rechazada", "no se pudo armar la guía PMCP: "+err.Error())
+	} else {
+		a.mu.Lock()
+		a.guidePMCP = pmcpData
+		a.mu.Unlock()
+		a.pushGuidePMCP(ctx, pmcpData)
+	}
 	return nil
 }
 
@@ -407,6 +420,15 @@ func (a *App) Guide() ([]byte, time.Time) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.guide, a.guideAt
+}
+
+// GuidePMCP es la guía vigente en PMCP (ATSC A/76), tal como se sirve en
+// /guia.pmcp. Comparte el instante de generación con Guide: las dos se
+// arman en la misma corrida de rebuildGuide, del mismo plan.
+func (a *App) GuidePMCP() ([]byte, time.Time) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.guidePMCP, a.guideAt
 }
 
 // GuideItems son los plan_item con los que se armó la guía vigente: es lo que

@@ -103,6 +103,47 @@ func slug(s string) string {
 	return strings.Trim(b.String(), "-")
 }
 
+// esContenidoPublicable dice si un plan_item es de los que se anuncian en
+// una guía: archivo o vivo. El relleno y el cartel de la estación llenan
+// aire pero no son programación, así que ni XMLTV ni PMCP los describen.
+func esContenidoPublicable(origin string) bool {
+	return origin == "asset" || origin == "live_source"
+}
+
+// titlesByAsset indexa los títulos por el media_asset que los identifica
+// —los que son un solo archivo, como una película—, para resolver un
+// plan_item que solo trae MediaAssetID.
+func titlesByAsset(titles map[int64]model.Title) map[int64]model.Title {
+	byAsset := map[int64]model.Title{}
+	for _, t := range titles {
+		if t.MediaAssetID != nil {
+			byAsset[*t.MediaAssetID] = t
+		}
+	}
+	return byAsset
+}
+
+// resolveTitle encuentra el título (y el episodio, si lo hay) de un
+// plan_item: primero por su episodio, si no por el archivo que trae. Es el
+// mismo criterio para XMLTV y PMCP, así que las dos guías nunca describen
+// cosas distintas para el mismo bloque.
+func resolveTitle(p model.PlanItem, titles map[int64]model.Title, episodes map[int64]model.Episode, byAsset map[int64]model.Title) (title model.Title, ep model.Episode, haveEp bool) {
+	if p.EpisodeID != nil {
+		if e, ok := episodes[*p.EpisodeID]; ok {
+			ep, haveEp = e, true
+			if t, ok := titles[e.TitleID]; ok {
+				title = t
+			}
+		}
+	}
+	if title.Name == "" && p.MediaAssetID != nil {
+		if t, ok := byAsset[*p.MediaAssetID]; ok {
+			title = t
+		}
+	}
+	return title, ep, haveEp
+}
+
 // XMLTV escribe la guía del canal a partir del plan. Solo publica lo que es
 // contenido —archivo o vivo—: el relleno no se anuncia. Los instantes van en
 // la zona horaria del canal, que es como los lee un receptor.
@@ -120,18 +161,13 @@ func XMLTV(ch model.Channel, items []model.PlanItem, titles map[int64]model.Titl
 		Channels:   []xmlChannel{{ID: id, Names: names}},
 	}
 
-	byAsset := map[int64]model.Title{}
-	for _, t := range titles {
-		if t.MediaAssetID != nil {
-			byAsset[*t.MediaAssetID] = t
-		}
-	}
+	byAsset := titlesByAsset(titles)
 
 	ordered := append([]model.PlanItem(nil), items...)
 	sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].PlannedAt.Before(ordered[j].PlannedAt) })
 
 	for _, p := range ordered {
-		if p.Origin != "asset" && p.Origin != "live_source" {
+		if !esContenidoPublicable(p.Origin) {
 			continue
 		}
 		if p.PlannedMs <= 0 {
@@ -142,22 +178,7 @@ func XMLTV(ch model.Channel, items []model.PlanItem, titles map[int64]model.Titl
 			Stop:    p.End().In(loc).Format(XMLTVTime),
 			Channel: id,
 		}
-		var title model.Title
-		var ep model.Episode
-		haveEp := false
-		if p.EpisodeID != nil {
-			if e, ok := episodes[*p.EpisodeID]; ok {
-				ep, haveEp = e, true
-				if t, ok := titles[e.TitleID]; ok {
-					title = t
-				}
-			}
-		}
-		if title.Name == "" && p.MediaAssetID != nil {
-			if t, ok := byAsset[*p.MediaAssetID]; ok {
-				title = t
-			}
-		}
+		title, ep, haveEp := resolveTitle(p, titles, episodes, byAsset)
 		switch {
 		case title.Name != "":
 			prog.Title = []xmlText{{Lang: "es", Value: title.Name}}

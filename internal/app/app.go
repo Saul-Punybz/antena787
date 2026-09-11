@@ -81,6 +81,11 @@ const (
 	// red cada vez que se publica. Vacío = no se manda a ningún sitio
 	// (F1-49). Que el envío falle nunca afecta a la guía local ni al aire.
 	KeyGuideHTTP = "guia_destino_http"
+	// KeyGuidePMCPHTTP es lo mismo que KeyGuideHTTP pero para la guía en
+	// PMCP (ATSC A/76): el generador PSIP de la estación, no un transmisor
+	// que lea XMLTV. Mismo patrón: se manda en cada publicación, y que el
+	// envío falle no afecta ni a la guía local ni al aire.
+	KeyGuidePMCPHTTP = "guia_pmcp_destino_http"
 	// KeyOnlineInfo enciende la búsqueda de fichas por internet ("si"/"no",
 	// de fábrica "no"): sin ella la instalación funciona entera sin red
 	// (PRD §10, F1-09).
@@ -237,6 +242,7 @@ type App struct {
 
 	mu         sync.RWMutex
 	guide      []byte
+	guidePMCP  []byte
 	guideItems []model.PlanItem
 	guideAt    time.Time
 	warnings   []resolver.Warning

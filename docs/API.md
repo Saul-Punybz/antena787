@@ -85,6 +85,7 @@ quieren distintas de las de arriba, `bitrate_mux_kbs`, `bitrate_video_kbs` y
 | `POST /plan/recalcular` | Fuerza una corrida del resolver ahora. Devuelve avisos: `[{"tipo":"sobrecupo"\|"hueco"\|"vencimiento"\|"sin_relleno", "texto"}]`. |
 | `POST /plan/llenar-con-diferido` | `{"desde":"01:00","hasta":"06:00","origen_desde":"07:00","origen_hasta":"12:00"}` crea la regla de diferido de un clic. |
 | `GET /guia.xml` | El XMLTV vigente (sin autenticación: lo lee el transmisor / MistServer). |
+| `GET /guia.pmcp` | La misma parrilla en PMCP (ATSC A/76): lo que consume un generador PSIP como Triveni GuideBuilder, no un transmisor de XMLTV (docs/drivers/catalogo/03-multiplexores-psip-cortes.md §2). Sin autenticación, igual que `/guia.xml`, y armada del mismo plan en la misma corrida. |
 | `GET /guia?dia=` | La guía contra el plan real: `{dia, filas:[{guia, plan, coincide}], identificador_de_canal, revalidada, por_que_no_coinciden?}`. `guia` y `plan` son `{titulo, inicio, duracion_ms}` o `null`. |
 
 ## Biblioteca
@@ -375,6 +376,7 @@ Todos viven en `settings` y se leen y escriben por `GET`/`PUT /ajustes`.
 | `carpeta_contenido` · `carpeta_respaldo` | Las dos carpetas del asistente. |
 | `ruta_guia_xml` | Dónde se escribe el XMLTV en disco. Vacío = solo `/guia.xml`. |
 | `guia_destino_http` | Destino opcional al que se le manda la guía por `POST` (`application/xml`, 10 s de espera) cada vez que se publica. Que falle deja alarma y nada más: la guía local y el aire siguen igual (F1-49). |
+| `guia_pmcp_destino_http` | Lo mismo que `guia_destino_http`, pero para la guía en PMCP (`/guia.pmcp`): el destino es el generador PSIP de la estación, no un transmisor de XMLTV. Mismo patrón exacto: `POST` en cada publicación, y que falle no toca ni la guía PMCP en memoria ni la guía XMLTV ni el aire. |
 | `fichas_en_linea` | `si` / `no` (de fábrica `no`). Enciende la búsqueda de fichas por internet: TVmaze y la portada de los discos, que no piden clave, y TMDB si hay clave. |
 | `clave_tmdb` | La clave de TMDB. Secreto: sale tapado. |
 | `silencio_umbral_s` · `negro_umbral_s` | Cuántos segundos de silencio o de negro **en la salida real** hacen falta para avisar (F2-51, F2-52, F2-53). De 3 a 120; de fábrica **15** los dos. Un valor fuera de rango o que no es un número entero se rechaza con `400` y la frase dice el rango. `GET` los manda siempre, con el valor de fábrica si nadie los ha tocado, para que Ajustes pueda pintar el umbral vigente (PRD §13). |
