@@ -14,6 +14,7 @@ import type {
   CambioDePlan,
   CambioDeTitulo,
   Canal,
+  ComprobacionesDelAire,
   CuerposDePaso,
   DecisionDeEmparejar,
   ElementoDelPlan,
@@ -122,6 +123,14 @@ export const api = {
   estado: () => pedir<Estado>('/estado'),
   canal: () => pedir<Canal>('/canal'),
   guardarCanal: (c: Partial<Canal>) => pedir<Canal>('/canal', conCuerpo('PUT', c)),
+
+  // La puerta del aire (internal/api/aire.go). PUT /canal no toca el modo a
+  // propósito: la transición pasa por aquí, con confirmación escrita.
+  comprobacionesDelAire: () => pedir<ComprobacionesDelAire>('/canal/comprobaciones'),
+  salirAlAire: (confirmacion: string) =>
+    pedir<ComprobacionesDelAire>('/canal/al-aire', conCuerpo('POST', { confirmacion })),
+  volverASombra: (confirmacion: string) =>
+    pedir<ComprobacionesDelAire>('/canal/a-sombra', conCuerpo('POST', { confirmacion })),
   ajustes: () => pedir<Ajustes>('/ajustes'),
   guardarAjustes: (a: Ajustes) => pedir<Ajustes>('/ajustes', conCuerpo('PUT', a)),
 
