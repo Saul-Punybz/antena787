@@ -199,6 +199,23 @@ go test ./... -count=1           # todo debe estar verde
    luma 16 exactos, así que «luma < 16» (PRD §14.1, F2-52) nunca se cumple;
    el detector mide como el ingest (≥ 98 % de la imagen bajo 25.5) y F2-52
    lo explica; si se prefiere otro número es una constante.
+   **Integrado el 11 sept (todo en `main`, CI por confirmar):** **T2**
+   (decks y prioridad, salida `udp-ts` al multiplexor con PIDs/PCR/tsid/
+   multicast, varias salidas a la vez, `internal/drivers/salida`; prueba de
+   punta a punta que lee el TS por UDP y mide tasa 0.00 % de desvío, PCR
+   30.5 ms, CC 0; F0 corta 0 FALLA), y cuatro bibliotecas de protocolo:
+   `internal/drivers/alerta/sage` (protocolo del ENDEC por serial y TCP,
+   contra el manual Rev 1.5), `internal/drivers/alerta/same` (decodificador
+   SAME, 0.5 ms por segundo de audio, cero asignaciones, lee hasta −4 dB de
+   SNR), `internal/drivers/captura/hdhomerun` (retorno de aire por HTTP) y
+   `internal/resolver/pmcp.go` + `/guia.pmcp` (guía para el generador PSIP).
+   Todo compila sin CGo en Windows, Linux y macOS.
+   **Dos cosas que decidir, chicas:** (a) el decodificador SAME marca
+   `Confianza` 1/3 cuando solo una de las tres repeticiones se leyó limpia
+   —a −6 dB de SNR una de cada diez sale con un carácter mal—; hay que
+   decidir si el as-run exige 2/3 para escribir la línea sin asterisco;
+   (b) la cabecera SAME va en UTC y el texto del ENDEC en hora local, ya
+   resuelto en el driver, pero conviene que T8 no lo olvide.
    **Ramas de agentes en marcha al guardar (10 sept):** `agente/t2-decks-udpts`
    (T2), y cinco bibliotecas de protocolo aisladas que no tocan `app` ni
    los criterios: `agente/sage-endec` (`internal/drivers/alerta/sage`,
