@@ -174,6 +174,20 @@ export function Ajustes() {
         <Tarjeta rotulo="CANAL">
           <Linea nombre="Nombre" valor={estado?.canal.nombre ?? '—'} />
           <Linea nombre="Identificativo" valor={estado?.canal.identificativo ?? '—'} />
+          <div className="campo">
+            <label htmlFor="numero-canal">Número de canal</label>
+            <input
+              id="numero-canal"
+              defaultValue={estado?.canal.numero_canal ?? ''}
+              placeholder="40.1"
+              onBlur={(e) => void cambiarCanal('numero_canal', e.target.value.trim())}
+            />
+            <span className="ayuda">
+              El que tu televidente marca en el control remoto, no la frecuencia por la
+              que viaja la señal. La guía que sale en el televisor lo necesita en cada
+              programa: sin él, el equipo que la arma descarta lo que le mandamos.
+            </span>
+          </div>
           <Linea nombre="Comunidad de licencia" valor={estado?.canal.comunidad_licencia ?? '—'} />
           <Linea nombre="Zona horaria" valor={estado?.canal.zona_horaria ?? '—'} />
           <Linea

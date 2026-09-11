@@ -48,6 +48,12 @@ export interface Canal {
   /** Con qué se pidió comprimir. Lo que corre de verdad es
    * `Estado.acelerador_efectivo`, que puede ser otro. */
   acelerador: Acelerador
+  /**
+   * El número que el televidente marca en el control remoto: «40.1», «57-2».
+   * No es la frecuencia por la que viaja la señal. La guía del televisor lo
+   * exige por evento; vacío es legítimo y la guía avisa en vez de inventarlo.
+   */
+  numero_canal: string
 }
 
 export interface Salida {

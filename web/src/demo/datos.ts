@@ -27,6 +27,7 @@ export const canal: Canal = {
   id: 1,
   nombre: 'Caribbean Advantage TV',
   acelerador: 'auto',
+  numero_canal: '40.1',
   tipo: 'tv',
   perfil_de_formato: '1080i 29.97',
   perfil_regulatorio: 'us-fcc',

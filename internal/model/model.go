@@ -98,6 +98,12 @@ type Channel struct {
 	CallSign       string      `json:"identificativo" db:"identificativo"`
 	LicenseCity    string      `json:"comunidad_licencia" db:"comunidad_licencia"`
 	LicenseClass   string      `json:"clase_licencia" db:"clase_licencia"`
+	// VirtualChannel es el número que el televidente marca en el control
+	// remoto: «40.1», «57-2». No es la frecuencia por la que viaja la señal.
+	// El esquema de PMCP lo exige en cada evento (A/76B) y vacío es legítimo:
+	// una instalación nueva no lo sabe todavía, y en CAtv lo asigna el
+	// multiplexor. La guía avisa antes que inventarlo.
+	VirtualChannel string `json:"numero_canal" db:"numero_canal"`
 	// Accel es con qué se comprime el video: la tarjeta o el procesador.
 	// Los valores son los de engine.Acelerador; 'auto' —el de fábrica— deja
 	// que se escoja el mejor que haya en esta máquina, que es lo que pasaba

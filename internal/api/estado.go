@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"regexp"
 	"slices"
 
 	"antena787/internal/app"
@@ -201,6 +202,19 @@ func (s *Server) canalPut(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "la hora de inicio del día de emisión tiene que estar dentro del día", "hora_inicio_dia_emision")
 		return
 	}
+	// El número de canal es lo que el televidente marca: «5», «40.1»,
+	// «57-2». Vacío se acepta —una instalación nueva no lo sabe, y en CAtv lo
+	// asigna el multiplexor—, pero lo que se escriba tiene que parecerse a un
+	// número de canal, o la guía del televisor sale mal y nadie se entera.
+	if nuevo.VirtualChannel != old.VirtualChannel {
+		nuevo.VirtualChannel = strings.TrimSpace(nuevo.VirtualChannel)
+		if nuevo.VirtualChannel != "" && !numeroDeCanal.MatchString(nuevo.VirtualChannel) {
+			failf(w, http.StatusBadRequest, "numero_canal",
+				"%q no parece un número de canal: se escribe como 5, 40.1 o 57-2", nuevo.VirtualChannel)
+			return
+		}
+	}
+
 	// El acelerador tiene que ser uno de los que existen, y tiene que estar
 	// en esta máquina: guardar "nvenc" en un PC sin tarjeta NVIDIA dejaría el
 	// canal apuntando a un códec que ffmpeg no tiene, y eso se descubriría la
@@ -400,3 +414,9 @@ func (s *Server) ajustesPut(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, s.conLosDeFabrica(r, s.tapar(r, all)))
 }
+
+// numeroDeCanal es la forma de un canal virtual: el mayor solo («5»), o mayor
+// y menor separados por punto o guion («40.1», «57-2»). Es a propósito laxo:
+// se comprueba que sea un número de canal, no que sea EL número de canal, que
+// eso solo lo sabe quien tiene la licencia.
+var numeroDeCanal = regexp.MustCompile(`^[0-9]{1,3}([.-][0-9]{1,3})?$`)

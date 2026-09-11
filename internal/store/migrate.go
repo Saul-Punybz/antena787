@@ -32,6 +32,7 @@ var migrations = []Migration{
 	{Version: 6, SQL: migracion6},
 	{Version: 7, SQL: migracion7},
 	{Version: 8, SQL: migracion8},
+	{Version: 9, SQL: migracion9},
 }
 
 // migracion2 cierra tres huecos de integridad del plan (F1-12, F1-22, F1-26
@@ -213,6 +214,23 @@ ALTER TABLE channel ADD COLUMN acelerador TEXT NOT NULL DEFAULT 'auto';
 // las rompería.
 const migracion8 = `
 ALTER TABLE media_asset RENAME COLUMN motivo_en_cristiano TO motivo_claro;
+`
+
+// migracion9 le da al canal su número: el que el televidente marca en el
+// control remoto (40.1, 57-2), que no es la frecuencia por la que viaja la
+// señal. En ATSC se llama canal virtual y viaja en el PSIP.
+//
+// Hace falta porque el esquema de PMCP (ATSC A/76B) lo EXIGE en cada evento y
+// no admite «no lo sé»: hasta ahora salía un "1" inventado, y un generador de
+// PSIP que no conozca ese canal descarta los eventos enteros. Lo descubrió la
+// auditoría del 11 sept contra el esquema oficial
+// (docs/investigacion/PMCP-A76B-AUDITORIA-2026-09-11.md).
+//
+// Vacío es un valor legítimo: una instalación recién hecha todavía no lo
+// sabe, y quien lo sabe es la persona —en CAtv lo asigna el multiplexor—. La
+// guía avisa en vez de inventarlo.
+const migracion9 = `
+ALTER TABLE channel ADD COLUMN numero_canal TEXT NOT NULL DEFAULT '';
 `
 
 // SchemaVersion es la versión a la que lleva este binario.

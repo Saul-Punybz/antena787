@@ -348,9 +348,49 @@ func (a *App) rebuildGuide(ctx context.Context, ch model.Channel) error {
 	// (docs/drivers/catalogo/03-multiplexores-psip-cortes.md §2), armada con
 	// el mismo plan que el XMLTV de arriba. Que no se pudiera armar no tumba
 	// la publicación que ya pasó: sigue puesta la PMCP que había.
-	if pmcpData, err := resolver.PMCP(ch, items, titles, episodes); err != nil {
+	//
+	// La PMCP pasa por la misma puerta que el XMLTV, y por la misma razón: un
+	// generador de PSIP que recibe un documento mal armado **descarta el
+	// documento entero**, así que el televidente se queda con la guía en
+	// blanco y nadie se entera de por qué. Hasta el 11 de septiembre esta
+	// guía se publicaba sin mirarla nunca, y la auditoría contra el esquema
+	// oficial encontró nueve errores en lo que ya se estaba sirviendo
+	// (docs/investigacion/PMCP-A76B-AUDITORIA-2026-09-11.md). Vale más la
+	// PMCP vieja que una PMCP rota.
+	assets, err := a.guideAssets(ctx, items)
+	if err != nil {
+		assets = nil // sin fichas se publica igual: solo faltarán los subtítulos
+	}
+	pmcpData, err := resolver.PMCPCompleto(ch, ch.VirtualChannel, items, titles, episodes, assets)
+	switch {
+	case err != nil:
 		a.Incident("guia_pmcp_rechazada", "no se pudo armar la guía PMCP: "+err.Error())
-	} else {
+	default:
+		graves, avisos := resolver.ValidatePMCPPorGravedad(pmcpData)
+		if len(graves) > 0 {
+			detalle := strings.Join(graves, "; ")
+			a.Incident("guia_pmcp_rechazada",
+				"la guía del televisor no se publicó porque "+detalle)
+			a.setAlarms("guia_pmcp", []Alarma{{
+				Tipo:    "guia",
+				Nivel:   NivelProblema,
+				Texto:   "la guía que sale en el televisor no se pudo publicar: sigue puesta la anterior",
+				Detalle: detalle,
+				Accion:  &AccionAlarma{Texto: "ir a Ajustes", Ruta: "/ajustes"},
+			}})
+			break
+		}
+		if len(avisos) > 0 {
+			a.setAlarms("guia_pmcp", []Alarma{{
+				Tipo:    "hueco",
+				Nivel:   NivelAviso,
+				Texto:   "la guía del televisor se publicó con tramos sin describir",
+				Detalle: strings.Join(avisos, "; "),
+				Accion:  &AccionAlarma{Texto: "llenar", Ruta: "/parrilla"},
+			}})
+		} else {
+			a.setAlarms("guia_pmcp", nil)
+		}
 		a.mu.Lock()
 		a.guidePMCP = pmcpData
 		a.mu.Unlock()
@@ -401,6 +441,28 @@ func (a *App) guideCatalog(ctx context.Context) (map[int64]model.Title, map[int6
 		}
 	}
 	return byTitle, byEpisode, nil
+}
+
+// guideAssets devuelve el archivo de cada bloque del plan, por id. La guía
+// del televisor lo necesita para una sola cosa: decir si el programa lleva
+// subtítulos, que es un dato del archivo y no del título. Solo se piden los
+// que el plan usa de verdad, y cada uno una vez.
+func (a *App) guideAssets(ctx context.Context, items []model.PlanItem) (map[int64]model.MediaAsset, error) {
+	out := map[int64]model.MediaAsset{}
+	for _, it := range items {
+		if it.MediaAssetID == nil {
+			continue
+		}
+		if _, ya := out[*it.MediaAssetID]; ya {
+			continue
+		}
+		as, err := a.Store.Media.Get(ctx, *it.MediaAssetID)
+		if err != nil {
+			continue // un archivo que ya no está no tumba la guía entera
+		}
+		out[as.ID] = as
+	}
+	return out, nil
 }
 
 // RefreshGuide vuelve a escribir la guía con el plan que hay guardado ahora
