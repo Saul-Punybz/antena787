@@ -789,6 +789,14 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   Cuando se cumple ese umbral · Entonces el sistema suelta el control por sí
   solo, vuelve a `AUTOMÁTICO`, y registra un incidente tipo
   `manual_por_timeout` con su hora.
+  Medio construido en T3 (10 sept 2026): el umbral, la detección y el
+  incidente son los de F2-51/52/54 (`internal/app/vigilancia.go:devolverElControl`,
+  que escribe `manual_por_timeout` con la hora del reloj de la aplicación).
+  Lo que falta es quien suelta el aire de verdad: T3 lo pide por el gancho
+  `app.ControlDelAire` (`EnManual` / `VolverAlAutomatico`) y **T5 lo
+  implementa** con `PonerControlDelAire`. Probado contra un control de mentira
+  en `TestF2_54EnManualElMismoUmbralDevuelveElControl`; se cierra del todo en
+  T5.
 - **F2-31** [AUTO] — Dado un operador en manual con un spot pagado sonando
   que presiona **"Volver al automático"** · Cuando se confirma la acción ·
   Entonces el sistema **espera a que termine el clip en curso —como máximo 60
@@ -939,20 +947,74 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   −60 dBFS durante 16 segundos continuos (por encima del umbral de 15 s) ·
   Cuando el detector evalúa la salida · Entonces dispara alarma y registra
   un incidente, **sin importar** lo que diga el plan en ese instante.
+  Construido en T3 (10 sept 2026): `internal/engine/detector.go:mirarAudio`
+  (nivel RMS del bloque en dBFS sobre lo que de verdad se le escribe al
+  encoder) e `internal/app/vigilancia.go:quizasDisparar` (alarma
+  `silencio_al_aire` de nivel `problema` + incidente `silencio_detectado`,
+  abierto mientras dura y cerrado al volver la señal). La vigilancia no mira
+  el plan para decidir: solo para el permiso de F2-72. Pruebas:
+  `TestF2_51SilencioAlAireAvisaYQuedaEnLaBitacora`,
+  `TestDetectorSilencioEmpiezaYTermina` y, de punta a punta con un clip mudo
+  hecho con ffmpeg pasando por el motor de T1,
+  `TestF2_51DePuntaAPuntaConUnClipNegroYMudo`.
 - **F2-52** [AUTO] — Dado la salida real del canal con luma por debajo de 16
   durante 16 segundos continuos · Cuando el detector evalúa la salida ·
   Entonces dispara alarma y registra un incidente.
+  Construido en T3 (10 sept 2026): `internal/engine/detector.go:mirarCuadro`
+  y `mirarLuma` (submuestreo de ~1,024 puntos del plano de luma, con el salto
+  primo respecto al ancho para que barra todas las columnas) e
+  `internal/app/vigilancia.go:quizasDisparar` (alarma `negro_al_aire` +
+  incidente `negro_detectado`). Pruebas:
+  `TestF2_52NegroAlAireAvisaYQuedaEnLaBitacora`,
+  `TestDetectorNegroEmpiezaYTermina`,
+  `TestDetectorSubmuestreoMiraTodaLaImagen`.
+
+  **Corrección medida del umbral.** El criterio dice «luma por debajo de 16»,
+  y 16 es exactamente el negro digital de un video en rango limitado: medido
+  el 10 de septiembre de 2026 sobre la salida real del decodificador, un clip
+  de `color=c=black` da luma media **16.000 clavados**, así que «por debajo de
+  16» no se cumpliría nunca y el criterio sería inverificable. Por eso el
+  detector mide con los mismos números que el ingest ya le pasa a ffmpeg
+  (`blackdetect=pic_th=0.98:pix_th=0.10`, `internal/ingest/blacksilence.go`):
+  **negro es el 98 % o más de la imagen por debajo de 0.10 × 255 = 25.5**. Se
+  mira la parte de la imagen y no la media porque la media de una escena
+  nocturna con un punto de luz puede quedar bajo el umbral sin que la imagen
+  esté en negro. La luma media se sigue enseñando en la alarma, que es el
+  número que el PRD §13 le promete a una persona. Candado:
+  `TestDetectorElNegroDigitalEsDieciseis`.
 - **F2-53** [AUTO] — Dado la salida real del canal con silencio de 8
   segundos (por debajo del umbral configurado de 15 s) dentro de una pausa
   dramática legítima de un programa · Cuando el detector evalúa la salida ·
   Entonces **no** dispara alarma ni incidente (evita falsos positivos en
   pausas cortas).
+  Construido en T3 (10 sept 2026): `internal/app/vigilancia.go:abrirEpisodio`
+  (lee `silencio_umbral_s` al empezar el episodio, de fábrica 15 s) y
+  `quizasDisparar` (no dispara antes del umbral). El episodio se mide en
+  cuadros y muestras que de verdad salieron —los latidos
+  `negro_sigue`/`silencio_sigue` del detector—, no en hora de pared, así que
+  un hipo del sistema no adelanta el aviso. Prueba:
+  `TestF2_53OchoSegundosDeSilencioNoDisparan`, más
+  `TestElUmbralSeLeeDeAjustesYSeDefiende` (lo que no se entiende vale el de
+  fábrica: un ajuste torcido no apaga la vigilancia).
 - **F2-54** [AUTO] — Dado el mismo umbral (audio < −60 dBFS o luma < 16 por
   > 15 s) configurado una sola vez para el canal · Cuando se dispara tanto
   en modo automático (§9 paso 4) como durante un `MANUAL_HOLD` (§9 paso 6) ·
   Entonces es el **mismo mecanismo** el que gobierna ambos casos, no dos
   implementaciones distintas (verificable por código: una sola fuente de
   verdad para el umbral y la detección).
+  Construido en T3 (10 sept 2026): hay un solo detector
+  (`internal/engine/detector.go`, un `engine.Sink` entre el servidor de
+  cuadros y el encoder) y un solo sitio que decide
+  (`internal/app/vigilancia.go:quizasDisparar`). El modo manual no tiene ruta
+  propia: lo único que cambia es que, además del aviso,
+  `vigilancia.go:devolverElControl` pide volver al automático por el gancho
+  `app.ControlDelAire` —que construye T5— y deja el incidente
+  `manual_por_timeout` (F2-30). Los umbrales son dos ajustes
+  (`silencio_umbral_s`, `negro_umbral_s`) leídos en un solo sitio
+  (`App.umbralDe`), y los números de los umbrales son los mismos que el
+  ingest (`internal/ingest/blacksilence.go`). Pruebas:
+  `TestF2_54EnManualElMismoUmbralDevuelveElControl`,
+  `TestSinDevolverElControlSoloSeAvisa`, `TestEnAutomaticoNoSeTocaElControl`.
 
 ### NTP y reloj (§14.1, §19)
 
@@ -1045,6 +1107,17 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   detector de silencio y negro **no dispara** mientras dura ese clip, y vuelve
   a estar activo en cuanto termina. Un `plan_item` cuyo origen es un
   `live_source` **nunca** puede desactivarlo.
+  Construido en T3 (10 sept 2026): `internal/app/vigilancia.go:negroPermitido`
+  (mira el `plan_item` en curso y solo deja pasar los de origen `asset` o
+  `relleno` cuyo `media_asset.negro_intencional` está puesto; un origen
+  `live_source` no cuenta) y `abrirEpisodio`, que consulta el permiso **una
+  vez por episodio** —dos consultas a la base cuando el aire se pone negro, no
+  sesenta por segundo— y lo vuelve a consultar en el episodio siguiente, así
+  que en cuanto el clip termina el detector está activo otra vez. La marca
+  silencia el negro **y** el silencio de ese clip, porque el escenario del
+  criterio y la frase del PRD §9 hablan de los dos juntos. Pruebas:
+  `TestF2_72NegroIntencionalNoDispara`,
+  `TestF2_72UnVivoNoDesactivaElDetector`.
 - **F2-73** [AUTO] — Dado dos `plan_item` solapados que llegaron a existir pese
   a la restricción del esquema (F1-44) · Cuando el motor los encuentra en
   runtime · Entonces reproduce el de **menor `id`** y registra

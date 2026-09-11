@@ -468,6 +468,24 @@ export interface ResumenDeImportacion {
 export type Ajustes = Record<string, string>
 
 /**
+ * Las claves del detector de silencio y negro sobre la salida real (F2-51 a
+ * F2-54, tanda T3). `GET /ajustes` siempre las manda —con el valor de fábrica
+ * si nadie las ha tocado—, así que la tarjeta de Ajustes nunca pinta «—».
+ *
+ * - `silencio_umbral_s` · `negro_umbral_s`: segundos de silencio o de negro
+ *   **en la salida** que hacen falta para avisar. De 3 a 120; de fábrica 15.
+ *   Ocho segundos de pausa dramática no disparan nada (F2-53).
+ * - `silencio_devuelve_control`: `si` / `no` (de fábrica `si`). Con `si`, si
+ *   el aire está en manual y se pasa el umbral, el sistema vuelve solo al
+ *   automático (F2-30).
+ */
+export type AjustesDelDetector = {
+  silencio_umbral_s: string
+  negro_umbral_s: string
+  silencio_devuelve_control: 'si' | 'no'
+}
+
+/**
  * Los tres estados del ajuste `subtitulos_estado` (perfil us-fcc,
  * PRD §12 · COMPLIANCE.md). "no_se" es el default; los tres funcionan
  * igual —los subtítulos se conservan y se pueden subir siempre— y solo

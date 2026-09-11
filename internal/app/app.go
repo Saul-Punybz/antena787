@@ -134,7 +134,7 @@ type Alarma struct {
 
 // fuentesDeAlarma es el orden en que se enseñan las alarmas vivas. Cada
 // fuente manda sobre las suyas y no pisa las de las demás.
-var fuentesDeAlarma = []string{"guia", "disco", "despierto", "cuarentena", "vencimiento", "emparejar", "avisos"}
+var fuentesDeAlarma = []string{"vigilancia", "guia", "disco", "despierto", "cuarentena", "vencimiento", "emparejar", "avisos"}
 
 // DBName es el nombre del archivo de la base dentro de la carpeta de datos.
 const DBName = "antena.db"

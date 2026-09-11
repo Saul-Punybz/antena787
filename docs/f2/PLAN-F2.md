@@ -104,7 +104,47 @@ prioridad, comparte archivo con T1 — coordinar tras fusionar T1),
 adivinan PIDs/programa; construir con valores de ejemplo y dejarlos
 configurables, no fijos.
 
-### T3 · Detector de silencio y negro sobre la salida
+### T3 · Detector de silencio y negro sobre la salida — **HECHA** (10 sept 2026)
+
+> Rama `agente/t3-detector`, un solo commit. Lo construido está criterio por
+> criterio en `docs/ACEPTACION.md` (F2-51, F2-52, F2-53, F2-54, F2-72, y la
+> mitad de F2-30 que no necesita a T5).
+>
+> **Lo que T3 dejó puesto, y que T5 y T6 heredan:**
+>
+> - `engine.Detector`: un `engine.Sink` que se pone **entre** el servidor de
+>   cuadros y el encoder y mide lo que de verdad sale. Cuenta por un canal de
+>   estados (`negro_empieza` / `negro_sigue` / `negro_termina` y los tres del
+>   silencio) y no decide nada. Si nadie lee el canal, el estado se tira y se
+>   cuenta (`Detector.Perdidos`): **el aire no espera al vigilante**.
+> - `App.Vigilar(ctx, formato, destino) engine.Sink` es el gancho, y es una
+>   línea. **`motor.go` todavía no la tiene** (es de T1/T2): al fusionar hay
+>   que cambiar en `correrMotor`
+>   `engine.NewServer(formato, enc, …)` por
+>   `engine.NewServer(formato, a.Vigilar(ctx, formato, enc), …)`.
+>   La vigilancia vive lo que vive esa vida del motor; en sombra no se llama.
+>   Está probado exactamente así en
+>   `TestF2_51DePuntaAPuntaConUnClipNegroYMudo`.
+> - `app.ControlDelAire` (`EnManual` / `VolverAlAutomatico`) y
+>   `app.PonerControlDelAire`: el gancho que **T5** tiene que instalar desde
+>   `manual.go` para que «avisa y devuelve el control» suelte el aire de
+>   verdad. Es una variable de paquete, como `sostenerPorDefecto` de
+>   `despierto.go`.
+> - Tres ajustes nuevos, validados en la API y servidos siempre con su valor
+>   de fábrica: `silencio_umbral_s` y `negro_umbral_s` (3 a 120 s, de fábrica
+>   **15**) y `silencio_devuelve_control` (`si`/`no`, de fábrica `si`).
+>   `Ajustes.tsx` los pinta; el interruptor ya no escribe `silencio_avisa`,
+>   que nunca existió en el servidor.
+> - **Corrección medida del umbral de negro.** El negro digital de un video en
+>   rango limitado es luma **16 clavados**, así que «luma por debajo de 16» no
+>   dispara nunca. El detector mide con los mismos números que el ingest ya le
+>   pasa a ffmpeg: 98 % de la imagen por debajo de 25.5. Toda la explicación
+>   está en F2-52 de `ACEPTACION.md` y en el comentario de `PixelNegro`.
+> - Una línea en `app.go`: `"vigilancia"` al frente de `fuentesDeAlarma` (el
+>   aire mudo manda sobre todo lo demás). **Ninguna** goroutine nueva en
+>   `Start()`: la vigilancia no vive lo que vive la aplicación, sino lo que
+>   vive el motor.
+
 **Objetivo:** un solo mecanismo que vigile la salida real (no el plan) y
 dispare alarma/incidente cuando hay silencio o negro de verdad, en
 automático y en manual por igual.

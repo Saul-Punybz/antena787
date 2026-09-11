@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -218,7 +219,34 @@ func (s *Server) ajustesGet(w http.ResponseWriter, r *http.Request) {
 		failStore(w, err, "leer los ajustes")
 		return
 	}
-	writeJSON(w, http.StatusOK, s.tapar(r, all))
+	writeJSON(w, http.StatusOK, s.conLosDeFabrica(r, s.tapar(r, all)))
+}
+
+// conLosDeFabrica añade los ajustes que la pantalla enseña siempre y que
+// pueden no estar guardados todavía. Ajustes tiene que poder pintar el umbral
+// de silencio y negro vigente desde la primera vez que se abre (PRD §13): si
+// no se manda, la tarjeta dice «—» y el número que de verdad gobierna el aire
+// queda invisible.
+func (s *Server) conLosDeFabrica(r *http.Request, out map[string]string) map[string]string {
+	silencio, negro, devuelve := s.App.UmbralesDeVigilancia(r.Context())
+	poner := func(clave, valor string) {
+		if _, hay := out[clave]; !hay {
+			out[clave] = valor
+		}
+	}
+	poner(app.KeySilencioUmbral, strconv.Itoa(silencio))
+	poner(app.KeyNegroUmbral, strconv.Itoa(negro))
+	poner(app.KeySilencioDevuelveControl, siONo(devuelve))
+	return out
+}
+
+// siONo es cómo viajan los ajustes de sí o no en esta API: «si» o «no», sin
+// tilde, igual que `fichas_en_linea` e `instalacion.ve_barras`.
+func siONo(v bool) string {
+	if v {
+		return "si"
+	}
+	return "no"
 }
 
 // tapar sustituye el valor de los secretos por Tapado, y añade los que la
@@ -253,6 +281,17 @@ func (s *Server) ajustesPut(w http.ResponseWriter, r *http.Request) {
 			failf(w, http.StatusBadRequest, k, "el ajuste %q no se cambia desde aquí", k)
 			return
 		}
+		if k == app.KeySilencioUmbral || k == app.KeyNegroUmbral {
+			if _, err := app.UmbralValido(v); err != nil {
+				failf(w, http.StatusBadRequest, k, "%s", err.Error())
+				return
+			}
+		}
+		if k == app.KeySilencioDevuelveControl && v != "si" && v != "no" {
+			failf(w, http.StatusBadRequest, k,
+				"«avisa y devuelve el control» solo entiende %q o %q", "si", "no")
+			return
+		}
 		if k == app.KeySubtitulosEstado && !app.SubtitulosEstadoValido(v) {
 			failf(w, http.StatusBadRequest, k,
 				"el ajuste de subtítulos solo entiende %q, %q o %q",
@@ -281,5 +320,5 @@ func (s *Server) ajustesPut(w http.ResponseWriter, r *http.Request) {
 		failStore(w, err, "leer los ajustes")
 		return
 	}
-	writeJSON(w, http.StatusOK, s.tapar(r, all))
+	writeJSON(w, http.StatusOK, s.conLosDeFabrica(r, s.tapar(r, all)))
 }

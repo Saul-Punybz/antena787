@@ -255,7 +255,7 @@ export function Ajustes() {
           </div>
         </Tarjeta>
 
-        {/* Detector de silencio */}
+        {/* Detector de silencio y negro sobre la salida real (F2-51 a F2-54) */}
         <Tarjeta rotulo="DETECTOR DE SILENCIO">
           <div className="entre">
             <div>
@@ -267,39 +267,30 @@ export function Ajustes() {
             <button
               className="interruptor"
               role="switch"
-              aria-checked={ajustes.silencio_avisa === 'sí'}
+              aria-checked={ajustes.silencio_devuelve_control !== 'no'}
               onClick={() =>
-                cambiar('silencio_avisa', ajustes.silencio_avisa === 'sí' ? 'no' : 'sí')
+                cambiar(
+                  'silencio_devuelve_control',
+                  ajustes.silencio_devuelve_control === 'no' ? 'si' : 'no',
+                )
               }
             />
           </div>
-          <div className="entre" style={{ marginTop: 20 }}>
-            <label htmlFor="umbral" style={{ font: '400 14px var(--sans)' }}>
-              Umbral
-            </label>
-            <span className="fila" style={{ gap: 7 }}>
-              <input
-                id="umbral"
-                type="number"
-                min={3}
-                max={120}
-                value={ajustes.silencio_umbral_s}
-                onChange={(e) => cambiar('silencio_umbral_s', e.target.value)}
-                className="mono"
-                style={{
-                  width: 62,
-                  background: 'var(--superficie-2)',
-                  border: '1px solid var(--borde)',
-                  borderRadius: 7,
-                  color: 'var(--texto)',
-                  padding: '7px 9px',
-                  textAlign: 'right',
-                }}
-              />
-              <span className="tenue" style={{ fontSize: 12 }}>
-                s
-              </span>
-            </span>
+          <UmbralEnSegundos
+            id="umbral"
+            rotulo="Umbral de silencio"
+            valor={ajustes.silencio_umbral_s}
+            onCambio={(v) => cambiar('silencio_umbral_s', v)}
+          />
+          <UmbralEnSegundos
+            id="umbral-negro"
+            rotulo="Umbral de negro"
+            valor={ajustes.negro_umbral_s}
+            onCambio={(v) => cambiar('negro_umbral_s', v)}
+          />
+          <div className="tenue" style={{ fontSize: 12.5, marginTop: 14 }}>
+            Se mide sobre lo que de verdad sale —audio bajo −60 dBFS o luma bajo 16—, no
+            sobre el plan. Un archivo marcado «abre en negro a propósito» no lo dispara.
           </div>
         </Tarjeta>
 
@@ -567,7 +558,52 @@ function Linea({
 }
 
 /** «12 s», o «—» cuando el servidor todavía no manda ese dato (los de la
- * hora y el detector de silencio llegan con el motor, F2). */
+ * hora llegan con el motor, F2). */
 function segundos(v: unknown): string {
   return v === undefined || v === null || v === '' ? '—' : `${v} s`
+}
+
+/** Un umbral en segundos, con los mismos límites que valida el servidor
+ * (de 3 a 120: `app.UmbralValido`). */
+function UmbralEnSegundos({
+  id,
+  rotulo,
+  valor,
+  onCambio,
+}: {
+  id: string
+  rotulo: string
+  valor: string | undefined
+  onCambio: (v: string) => void
+}) {
+  return (
+    <div className="entre" style={{ marginTop: 20 }}>
+      <label htmlFor={id} style={{ font: '400 14px var(--sans)' }}>
+        {rotulo}
+      </label>
+      <span className="fila" style={{ gap: 7 }}>
+        <input
+          id={id}
+          type="number"
+          min={3}
+          max={120}
+          value={valor ?? ''}
+          onChange={(e) => onCambio(e.target.value)}
+          className="mono"
+          style={{
+            width: 62,
+            background: 'var(--superficie-2)',
+            border: '1px solid var(--borde)',
+            borderRadius: 7,
+            color: 'var(--texto)',
+            padding: '7px 9px',
+            textAlign: 'right',
+          }}
+        />
+        <span className="tenue" style={{ fontSize: 12 }}>
+          s
+        </span>
+      </span>
+    </div>
+  )
 }
