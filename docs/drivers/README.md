@@ -161,6 +161,28 @@ que se sepa qué placa serial hay en la estación. Cablearlo al motor es T8.
 abajo, y **las alertas de emergencia se cumplen con hardware certificado, no
 con este software** (§5, §12).
 
+**El decodificador de SAME, que es la mitad de `signal-compare`.**
+`internal/drivers/alerta/same` oye el protocolo SAME —el de 47 CFR 11.31: FSK a
+520.83 baudios, marca 2083.3 Hz, espacio 1562.5 Hz, la cabecera
+`ZCZC-ORG-EEE-PSSCCC+TTTT-JJJHHMM-LLLLLLLL-` tres veces y el `NNNN` del final—
+en el audio del **retorno de aire**, y por un canal va soltando qué alerta se
+oyó, de qué zonas, con cuánta duración y **a qué hora exacta**. Para qué sirve:
+para que el as-run diga *«la alerta salió al aire»* y no *«el ENDEC dijo que la
+mandó»*, que son dos cosas distintas — un ENDEC que disparó sin que el aire
+cambiara es un incidente, y esta es la única manera de verlo sin creerle a
+nuestro propio motor (ADR [0009](../adr/0009-truth-is-the-transmitted-signal.md),
+ADR [0010](../adr/0010-eas-integrate-the-endec-never-replace-it.md) capa 2). Es
+la línea de evidencia que hoy no produce ningún proyecto libre, y no hay ningún
+decodificador de SAME en Go: este se escribió a mano, sin enlazar nada. Lo que
+**no** es: no emite alertas, no genera cabeceras SAME, no sintetiza la señal de
+atención de 853+960 Hz —solo la oye, para poder decir que el mensaje salió
+completo— y no reemplaza al ENDEC ni vale como cumplimiento de la Parte 11. En
+el paquete no hay modulador ni lo va a haber: el que hace falta para las pruebas
+vive en un archivo `_test.go`, así que el binario **no puede** emitir SAME ni por
+accidente. Y no decide nada: cuenta lo que oyó, con un campo de confianza que
+dice con cuántas de las tres repeticiones se armó la cabecera; quien decide qué
+hacer con eso es el motor.
+
 ### Retorno de aire (`capture_input`)
 
 | Driver | Qué es |
