@@ -68,6 +68,16 @@ export function IconoAnuncios(p: Props) {
   )
 }
 
+export function IconoSalidas(p: Props) {
+  return (
+    <svg {...base(p)}>
+      <path d="M10 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h5" />
+      <path d="M14 8l5 4-5 4" />
+      <path d="M19 12H9" />
+    </svg>
+  )
+}
+
 export function IconoAjustes(p: Props) {
   return (
     <svg {...base(p)}>

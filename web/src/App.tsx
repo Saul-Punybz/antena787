@@ -12,6 +12,7 @@ import { ParrillaGuia } from './pantallas/ParrillaGuia'
 import { ParrillaMes } from './pantallas/ParrillaMes'
 import { ParrillaSemana } from './pantallas/ParrillaSemana'
 import { Reglas } from './pantallas/Reglas'
+import { Salidas } from './pantallas/Salidas'
 
 /**
  * Rutas por hash: la build es estática y el binario Go la sirve con go:embed,
@@ -71,6 +72,7 @@ function Rutas() {
         </Route>
         <Route path="/reglas" element={<Reglas />} />
         <Route path="/biblioteca" element={<Biblioteca />} />
+        <Route path="/salidas" element={<Salidas />} />
         <Route path="/ajustes" element={<Ajustes />} />
         {/* Estas las construye la siguiente entrega; el menú las esconde
             hasta que existan. */}

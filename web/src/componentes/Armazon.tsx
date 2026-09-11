@@ -7,6 +7,7 @@ import {
   IconoBiblioteca,
   IconoParrilla,
   IconoReglas,
+  IconoSalidas,
 } from './Iconos'
 
 const MENU = [
@@ -14,6 +15,7 @@ const MENU = [
   { a: '/parrilla', texto: 'Parrilla', Icono: IconoParrilla },
   { a: '/reglas', texto: 'Reglas', Icono: IconoReglas },
   { a: '/biblioteca', texto: 'Biblioteca', Icono: IconoBiblioteca },
+  { a: '/salidas', texto: 'Salidas', Icono: IconoSalidas },
   { a: '/anuncios', texto: 'Anuncios', Icono: IconoAnuncios, soloConAnunciantes: true },
   { a: '/ajustes', texto: 'Ajustes', Icono: IconoAjustes },
 ]
