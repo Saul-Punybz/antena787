@@ -485,8 +485,8 @@ func (a *App) elEncoderSeColgo(enc *engine.Encoder, acel engine.Acelerador, plaz
 		"la salida de video dejó de aceptar imagen durante %s: sale el cartel de la estación y el canal vuelve solo",
 		plazo.Round(time.Second))
 	// Dos veces en diez minutos ya no es mala suerte. El canal se queda con el
-	// procesador, que es más lento y nunca falla, y se dice por qué en
-	// cristiano: quien lo lee no es técnico.
+	// procesador, que es más lento y nunca falla, y se dice por qué en palabras
+	// claras: quien lo lee no es técnico.
 	if veces >= ColgadasParaSoftware && acel.Resolver() != engine.AcelSoftware {
 		a.ForzarAcelerador(engine.AcelSoftware, FraseTarjetaCaida)
 		texto = fmt.Sprintf("%s (%d veces en %s): el canal sigue emitiendo con el procesador, que es más lento pero no falla",

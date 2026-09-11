@@ -21,7 +21,7 @@ import type {
  *
  * Tres reglas que se cumplen aquí y no se negocian:
  *   · nunca se pide escoger nada por su nombre técnico — el servidor manda las
- *     opciones ya escritas en cristiano y esta pantalla solo las pinta;
+ *     opciones ya escritas en palabras claras y esta pantalla solo las pinta;
  *   · «todavía no» es una respuesta válida y se ve igual de legítima que las
  *     demás, no escondida al final en letra chica;
  *   · la prueba de barras no finge. Las barras se dibujan en esta pantalla; la
@@ -871,7 +871,7 @@ export function Asistente() {
           <div style={{ display: 'grid', gap: 18, marginTop: 20 }}>{cuerpo}</div>
 
           {error && (
-            <div className="error-en-cristiano" style={{ marginTop: 16 }}>
+            <div className="error-claro" style={{ marginTop: 16 }}>
               {error}
             </div>
           )}

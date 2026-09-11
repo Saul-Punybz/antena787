@@ -214,7 +214,7 @@ func tailscaleIPs() []string {
 	return out
 }
 
-// saludo es lo que se lee en la consola al arrancar. En cristiano, porque lo
+// saludo es lo que se lee en la consola al arrancar. En palabras claras, porque lo
 // puede estar leyendo alguien que instaló esto por primera vez.
 func saludo(a *app.App, direcciones []string, dataDir string, uiBuilt bool) {
 	fmt.Println("Antena787", a.Version)

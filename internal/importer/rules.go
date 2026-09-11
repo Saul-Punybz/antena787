@@ -195,7 +195,7 @@ type parsed struct {
 // Rules convierte la tabla de reglas en reglas y títulos del canal.
 //
 // Nunca rechaza la hoja entera: la fila que no cuadra va a Result.RowErrors
-// con el motivo en cristiano y el resto se importa igual.
+// con el motivo claro y el resto se importa igual.
 func Rules(sheet Sheet, ch model.Channel, opts ...Option) Result {
 	o := options{slotMs: DefaultSlotMs}
 	for _, f := range opts {

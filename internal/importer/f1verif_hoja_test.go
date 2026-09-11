@@ -9,8 +9,8 @@ import (
 )
 
 // F1-50 — Una hoja de 200 filas de las cuales 7 no se pueden interpretar:
-// se importan las 193 válidas y salen las 7 fila por fila, con el motivo en
-// cristiano. Nunca se rechaza la hoja entera.
+// se importan las 193 válidas y salen las 7 fila por fila, con el motivo en palabras
+// claras. Nunca se rechaza la hoja entera.
 func TestF1Verif50DoscientasFilasSieteMalas(t *testing.T) {
 	lineas := []string{"Id\tVideo\tDuración\tDías\tHoras\tFec Ini\tFec Final"}
 
@@ -58,7 +58,7 @@ func TestF1Verif50DoscientasFilasSieteMalas(t *testing.T) {
 		// El motivo se lee, no se descifra: nada de códigos ni de "error".
 		if strings.Contains(strings.ToLower(e.Reason), "parse") ||
 			strings.Contains(strings.ToLower(e.Reason), "invalid") {
-			t.Fatalf("el motivo de la fila %q no está en cristiano: %q", e.SheetID, e.Reason)
+			t.Fatalf("el motivo de la fila %q no está en palabras claras: %q", e.SheetID, e.Reason)
 		}
 	}
 	// Las siete son exactamente las que se sembraron.

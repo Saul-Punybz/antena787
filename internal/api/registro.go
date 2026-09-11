@@ -37,8 +37,8 @@ func (s *Server) incidentes(w http.ResponseWriter, r *http.Request) {
 }
 
 // incidenteOut es un incidente tal como lo pinta la bitácora de Al aire
-// (web/src/lib/tipos.ts, `Incidente`): la fila entera más la frase en
-// cristiano de su tipo, para que la pantalla no tenga que saber qué es un
+// (web/src/lib/tipos.ts, `Incidente`): la fila entera más la frase en palabras
+// claras de su tipo, para que la pantalla no tenga que saber qué es un
 // `salto_de_reloj`.
 type incidenteOut struct {
 	model.Incident

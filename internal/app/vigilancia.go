@@ -445,7 +445,7 @@ func (a *App) detalleDeVigilancia(ep *episodioVigilado, e engine.Estado) string 
 		e.Nivel, engine.SilencioDBFS, ep.umbral.Round(time.Second))
 }
 
-// UmbralesDeVigilancia son los umbrales vigentes, en segundos y en cristiano.
+// UmbralesDeVigilancia son los umbrales vigentes, en segundos y en palabras claras.
 // Ajustes enseña siempre este número (PRD §13) y la API lo sirve con los
 // demás ajustes.
 func (a *App) UmbralesDeVigilancia(ctx context.Context) (silencio, negro int, devuelve bool) {
@@ -455,7 +455,7 @@ func (a *App) UmbralesDeVigilancia(ctx context.Context) (silencio, negro int, de
 }
 
 // UmbralValido dice si un ajuste de umbral se puede guardar, y si no, por qué
-// no. Lo usa la API para contestar en cristiano.
+// no. Lo usa la API para contestar en palabras claras.
 func UmbralValido(v string) (int, error) {
 	n, err := strconv.Atoi(v)
 	if err != nil {

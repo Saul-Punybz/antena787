@@ -202,7 +202,7 @@ func TestLaCuarentenaDiceElCodigoDelMotivo(t *testing.T) {
 	}
 	var lista []struct {
 		ID           int64  `json:"id"`
-		Motivo       string `json:"motivo_en_cristiano"`
+		Motivo       string `json:"motivo_claro"`
 		MotivoCodigo string `json:"motivo_codigo"`
 	}
 	c.json(w, &lista)

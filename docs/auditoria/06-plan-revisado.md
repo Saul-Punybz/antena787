@@ -157,7 +157,7 @@ sigue debiendo entero el watchdog de 3 s (F2-11) y disco/base/reloj.
   (`WriteFrame`/`WriteAudio`) como intermedio, que ninguna tanda nueva debe
   saltarse.
 - `salida.Driver` — el código real tiene **tres** métodos, no dos:
-  `Abrir`, `Vigilar`, y `Descripcion() string` (la frase en cristiano). T7
+  `Abrir`, `Vigilar`, y `Descripcion() string` (la frase clara). T7
   (`internet.go`, `httpts.go`) tiene que implementar los tres.
 - El catálogo de incidentes creció más de lo anotado: además de los ocho
   que el plan proponía, el código usa `IncFalloDeClip`, `IncCartel`,

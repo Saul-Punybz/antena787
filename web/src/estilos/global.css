@@ -829,7 +829,7 @@ button.dias__dia {
   font: 400 12.5px var(--sans);
   color: var(--texto-3);
 }
-.error-en-cristiano {
+.error-claro {
   background: rgba(248, 81, 73, 0.1);
   border: 1px solid rgba(248, 81, 73, 0.35);
   border-radius: 8px;

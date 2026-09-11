@@ -10,7 +10,7 @@ import (
 
 // Los ajustes del detector de silencio y negro (T3 de F2): GET los manda
 // siempre —con el valor de fábrica si nadie los tocó, para que la tarjeta de
-// Ajustes no pinte «—»— y PUT los valida en cristiano.
+// Ajustes no pinte «—»— y PUT los valida en palabras claras.
 
 func TestAjustesDelDetectorSalenConSuValorDeFabrica(t *testing.T) {
 	c := nuevo(t).conClave().entrar()
@@ -53,7 +53,7 @@ func TestAjustesDelDetectorSeGuardanYSeValidan(t *testing.T) {
 		t.Fatalf("el interruptor quedó en %q", todos[app.KeySilencioDevuelveControl])
 	}
 
-	// Lo que no se puede guardar se contesta en cristiano, diciendo el rango.
+	// Lo que no se puede guardar se contesta en palabras claras, diciendo el rango.
 	for clave, valor := range map[string]string{
 		app.KeySilencioUmbral: "1",
 		app.KeyNegroUmbral:    "500",

@@ -93,7 +93,7 @@ func (a *App) ReservarRellenoPorDefecto(ctx context.Context) (string, error) {
 // marcado como relleno. Tarda: quien lo llama lo hace en su propia goroutine.
 //
 // Si algo falla, el apunte se borra para que se pueda volver a intentar, y
-// queda un incidente con el motivo en cristiano.
+// queda un incidente con el motivo claro.
 func (a *App) CrearRellenoPorDefecto(ctx context.Context) (string, error) {
 	ruta, _, err := a.RellenoPorDefecto(ctx)
 	if err != nil {

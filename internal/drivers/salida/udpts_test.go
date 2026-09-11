@@ -122,7 +122,7 @@ func TestElMismoDriverMandaAUnGrupoMulticastConSuTTL(t *testing.T) {
 }
 
 // Lo que un multiplexor no perdonaría se dice antes de encender nada, y se
-// dice en cristiano: nada de «parámetro inválido».
+// dice en palabras claras: nada de «parámetro inválido».
 func TestLoQueElMultiplexorNoPerdonaSeDiceEnCristiano(t *testing.T) {
 	casos := []struct {
 		nombre string

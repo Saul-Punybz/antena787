@@ -236,7 +236,7 @@ func TestCrearReglaValida(t *testing.T) {
 		t.Fatalf("la regla creada no trae su título: %+v", out)
 	}
 	if out.Pattern == "" {
-		t.Fatal("la regla no dice su patrón en cristiano")
+		t.Fatal("la regla no dice su patrón en palabras claras")
 	}
 }
 

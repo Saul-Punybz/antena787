@@ -1,6 +1,6 @@
 // Cómo se lee el sonido de un archivo en pantalla (F1-58 a F1-62).
 //
-// Todo lo que el operador ve es en cristiano: el idioma con su nombre, los
+// Todo lo que el operador ve es en palabras claras: el idioma con su nombre, los
 // canales como «mono», «estéreo» o «5.1», y el archivo de al lado por su
 // nombre, no por su ruta entera.
 

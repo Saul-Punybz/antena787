@@ -440,7 +440,7 @@ func (r *TitleRepo) anotar(ctx context.Context, tx *sql.Tx, id int64, campo, ant
 	return r.audit.appendIn(ctx, tx, &e)
 }
 
-// reglasEnPalabras cuenta reglas en cristiano, para la bitácora y para lo
+// reglasEnPalabras cuenta reglas en palabras claras, para la bitácora y para lo
 // que se le enseña a una persona.
 func reglasEnPalabras(n int) string {
 	switch n {

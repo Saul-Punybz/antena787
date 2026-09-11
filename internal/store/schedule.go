@@ -48,8 +48,8 @@ func scanRule(sc interface{ Scan(...any) error }) (model.ScheduleRule, error) {
 }
 
 // rulesErr distingue el CHECK de fechas del esquema del resto de errores.
-// La regla de integridad vive en el esquema (PRD §15); aquí solo se dice en
-// cristiano.
+// La regla de integridad vive en el esquema (PRD §15); aquí solo se dice en palabras
+// claras.
 func rulesErr(op string, err error, r *model.ScheduleRule) error {
 	if err != nil && r != nil && r.To < r.From &&
 		strings.Contains(err.Error(), "CHECK constraint failed") {

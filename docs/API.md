@@ -4,7 +4,7 @@ Prefijo `/api/v1/`. JSON, con los nombres de campo del modelo (`internal/model`,
 etiquetas `json`: en español, iguales a las columnas de la base). Todo
 instante viaja como RFC 3339 en UTC; los días de emisión como `AAAA-MM-DD`;
 las horas del día como `"HH:MM"` en la zona del canal. Errores: `4xx` con
-`{"error": "frase en cristiano", "campo": "opcional"}`. Nada de códigos
+`{"error": "frase clara", "campo": "opcional"}`. Nada de códigos
 crípticos: el texto del error es el que ve la persona.
 
 Autenticación (F1): **clave de estación** (PRD §13, §19). `POST /api/v1/entrar`
@@ -32,7 +32,7 @@ asistente está abierto.
 | Método y ruta | Qué hace |
 |---|---|
 | `GET /salidas` | `{salidas:[Salida], drivers_disponibles:[{driver, nombre, explicacion}]}`. `drivers_disponibles` es lo que se le puede ofrecer hoy, con su nombre de pantalla: la persona nunca ve la clave sola. En esta versión son la salida al multiplexor (`udp-ts`) y la grabación a un archivo (`archivo`); las de internet y `http-ts` llegan con T7 de F2. |
-| `POST /salidas` | Crea una salida: `{nombre, driver, parametros, objetivo_volumen}`. `parametros` es una **cadena JSON** con lo que ese driver necesita (abajo). Se prueba antes de guardar: `400` con `{"error":"…","campo":"parametros"}` y el texto en cristiano del driver si algo no cuadra —un PCR que un multiplexor descartaría, un PID que no es de nadie, una dirección a medias—, y no se guarda nada. `201` con la salida creada. |
+| `POST /salidas` | Crea una salida: `{nombre, driver, parametros, objetivo_volumen}`. `parametros` es una **cadena JSON** con lo que ese driver necesita (abajo). Se prueba antes de guardar: `400` con `{"error":"…","campo":"parametros"}` y el texto en palabras claras del driver si algo no cuadra —un PCR que un multiplexor descartaría, un PID que no es de nadie, una dirección a medias—, y no se guarda nada. `201` con la salida creada. |
 | `PUT /salidas/{id}` | Cambia lo que venga; lo que no venga se queda. Cambiar `parametros` o `driver` deja `estado_conexion` en `sin_probar`: lo que decía antes era de la dirección anterior. `404` si no existe. |
 | `DELETE /salidas/{id}` | `{"borrada": id, "aviso": "…"}`. Quitar la última no se prohíbe: el aviso dice que, mientras no haya otra, lo que salga se graba en la carpeta de datos. |
 
@@ -80,7 +80,7 @@ quieren distintas de las de arriba, `bitrate_mux_kbs`, `bitrate_video_kbs` y
 | | |
 |---|---|
 | `GET /reglas` | Todas las reglas del canal, con `titulo` embebido y `dias_restantes`. |
-| `POST /reglas` · `PUT /reglas/{id}` · `DELETE /reglas/{id}` | Crear, editar (`?solo_hoy=1` crea una excepción de un día en vez de cambiar la regla), borrar. Validación en cristiano: fechas cruzadas, patrón inválido, título sin material listo. |
+| `POST /reglas` · `PUT /reglas/{id}` · `DELETE /reglas/{id}` | Crear, editar (`?solo_hoy=1` crea una excepción de un día en vez de cambiar la regla), borrar. Validación en palabras claras: fechas cruzadas, patrón inválido, título sin material listo. |
 | `GET /plan?dia=AAAA-MM-DD` | Los `plan_item` de ese día de emisión, en orden, con título/episodio/duración y huecos calculados (`{"hueco": true, "inicio", "fin"}`). |
 | `PUT /plan/{id}` | Mueve un bloque a mano, o lo suelta. Cuerpo: cualquier subconjunto de `{"instante_planeado":"2026-09-08T15:30:00-04:00","duracion_planeada_ms":1800000,"fijado":false}`. Con hora o duración el bloque queda **fijado** y la corrida siguiente del resolver ni lo mueve ni lo borra (F1-26); `{"fijado": false}` lo suelta. Devuelve `200` con el bloque en la misma forma que los items de `GET /plan`, `fijado` incluido. Errores: `409` si choca con otro bloque («a esa hora ya está …»), `400` si la hora no se entiende o se sale de las fechas de la regla, `404` si el bloque no existe. Después de cambiar, la guía se rehace en la misma corrida y se publica el mismo evento que el recálculo. |
 | `GET /plan/semana?desde=AAAA-MM-DD` | Siete días: `{desde, dias:[{dia, franjas[48], horas_vacias}], horas_vacias_semana, nota?}`. Cada franja son 30 min desde la medianoche local: `{hora, titulo, en_vivo, duracion_ms, plan_id, fijado, estado}`, con `titulo` y `plan_id` en **nulo** cuando el tramo está vacío. |
@@ -99,7 +99,7 @@ quieren distintas de las de arriba, `bitrate_mux_kbs`, `bitrate_video_kbs` y
 | `GET /biblioteca/{id}` · `PUT /biblioteca/{id}` | Ficha del título: los mismos campos de la lista más `lista_de_episodios[]`, cada episodio con su `duracion_ms`, su `estado_material` y el sonido de su archivo. `PUT` edita nombre, sinopsis, tipo, carátula y `infantil_core` (programa de educación o información para niños; cuenta para las horas de programación infantil de una estación Class A, F1-76). |
 | `GET /material` · `GET /material/{id}` | `media_asset` con medidas. |
 | `PUT /material/{id}` | `negro_intencional`, `sin_logo`, `subtitulos_externos`, `marcas_de_corte_ms` (confirmar marcas candidatas) y `pista_audio_aire` (ver abajo). |
-| `GET /cuarentena` | Los assets en cuarentena con `titulo` (cómo se llama para una persona: el título o el episodio que lo usa, o el nombre del archivo si nadie lo fichó), `motivo_en_cristiano` y `motivo_codigo`. Mientras haya alguno, `/estado` lleva la alarma «N archivos en cuarentena» (nivel aviso, acción → `/biblioteca`). |
+| `GET /cuarentena` | Los assets en cuarentena con `titulo` (cómo se llama para una persona: el título o el episodio que lo usa, o el nombre del archivo si nadie lo fichó), `motivo_claro` y `motivo_codigo`. Mientras haya alguno, `/estado` lleva la alarma «N archivos en cuarentena» (nivel aviso, acción → `/biblioteca`). |
 | `POST /cuarentena/{id}/dejar-pasar` | `{"quien":"Rolando"}` → estado `listo`, `dejado_pasar_por`, entrada en `audit_log`. `409` si el archivo no trae sonido (ver abajo). |
 | `POST /material/subir` | multipart; cae en la carpeta vigilada. |
 | `GET /relleno` | La biblioteca de relleno; vacía → aviso. |
@@ -237,7 +237,7 @@ aparece en esta lista.
 
 | | |
 |---|---|
-| `GET /incidentes?desde=&hasta=` | Bitácora de incidentes: lo que el sistema hizo solo (PRD §15). Cada fila trae `id`, `tipo`, `inicio`, `fin` (nulo si sigue abierto), `detalle` y **`texto`**, la frase en cristiano del tipo (`app.TextoDeIncidente`: *«Un archivo quedó en cuarentena»*, *«El reloj de la máquina saltó y el plan se rehizo»*…; un `panico_<x>` sale como *«Una parte del sistema falló y se relanzó sola (x)»*; un tipo desconocido, legible con espacios). Sin fechas, la última semana. Fechas en RFC 3339; una mal escrita es `400`. Al aire la pinta como tarjeta con lo último y un panel al lado con 7/30/90 días. |
+| `GET /incidentes?desde=&hasta=` | Bitácora de incidentes: lo que el sistema hizo solo (PRD §15). Cada fila trae `id`, `tipo`, `inicio`, `fin` (nulo si sigue abierto), `detalle` y **`texto`**, la frase clara del tipo (`app.TextoDeIncidente`: *«Un archivo quedó en cuarentena»*, *«El reloj de la máquina saltó y el plan se rehizo»*…; un `panico_<x>` sale como *«Una parte del sistema falló y se relanzó sola (x)»*; un tipo desconocido, legible con espacios). Sin fechas, la última semana. Fechas en RFC 3339; una mal escrita es `400`. Al aire la pinta como tarjeta con lo último y un panel al lado con 7/30/90 días. |
 | `GET /auditoria?entidad=&id=` | `audit_log`, con la cadena de hash verificable (`GET /auditoria/verificar`). |
 
 ## Asistente de instalación (sin clave hasta terminar)
@@ -269,13 +269,13 @@ la misma sesión que cualquier otra ruta.
 | Campo | Qué dice |
 |---|---|
 | `ffmpeg` · `ffprobe` | Dónde están las herramientas de video en esta máquina; vacío si no se encontraron. |
-| `problema` | Por qué no se encontraron, en cristiano. Solo sale cuando hay problema. |
+| `problema` | Por qué no se encontraron, en palabras claras. Solo sale cuando hay problema. |
 | `carpeta_datos` | La carpeta de datos de la aplicación. |
 | `carpeta_contenido` | La carpeta de contenido, si ya se puso (paso 7). |
 | `carpeta_respaldo` | A dónde van los respaldos. |
 | `relleno` | Cuántas piezas de relleno hay en la biblioteca ahora mismo (un número). Cero significa que el primer hueco sale al cartel. |
 | `aceleracion` | Nunca un nombre de tarjeta: siempre la frase «se mide al arrancar el motor (F2); todavía no hay motor». Listar `-hwaccels` no basta porque los controladores mienten. |
-| `disco` | Una frase en cristiano, p. ej. «890 GB libres de 2.0 TB en el disco de datos», o «no pude medir el disco» si no se pudo. |
+| `disco` | Una frase clara, p. ej. «890 GB libres de 2.0 TB en el disco de datos», o «no pude medir el disco» si no se pudo. |
 | `red` | «conectado (nombre_de_la_tarjeta, dirección)» o «sin red: se puede seguir, la guía y el aire no la necesitan». |
 
 `opciones` (el `valor` es lo que se manda de vuelta; nunca se enseña un

@@ -676,7 +676,7 @@ export function ParrillaSemana() {
           <p className="subtitulo">
             {diaCorto(arrastre.dia)} {diaYMes(arrastre.dia)}
           </p>
-          {problema && <div className="error-en-cristiano">{problema}</div>}
+          {problema && <div className="error-claro">{problema}</div>}
           <button
             className="boton"
             disabled={guardando}
@@ -738,7 +738,7 @@ export function ParrillaSemana() {
           <p className="subtitulo">
             {diaCorto(soltando.dia)} {diaYMes(soltando.dia)}
           </p>
-          {problema && <div className="error-en-cristiano">{problema}</div>}
+          {problema && <div className="error-claro">{problema}</div>}
           <p className="subtitulo">
             Alguien lo movió a mano, así que la parrilla lo deja donde está. Al soltarlo
             vuelve a la hora que le da su regla.

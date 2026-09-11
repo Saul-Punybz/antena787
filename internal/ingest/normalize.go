@@ -100,7 +100,7 @@ type LoudnessReport struct {
 	Passes int
 
 	// CaptionsKept dice si los subtítulos del original llegaron a la copia.
-	// CaptionsNote explica en cristiano lo que pasó cuando no llegaron
+	// CaptionsNote explica en palabras claras lo que pasó cuando no llegaron
 	// enteros; es texto para enseñarle a una persona, no para la máquina.
 	CaptionsKept bool
 	CaptionsNote string

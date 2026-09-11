@@ -363,7 +363,7 @@ vuelta?"** — nunca *"elige un driver de salida"*. El usuario tampoco ve
 tiene que poder pedirlo en palabras que entienda alguien que sabe instalar
 software y nada más: no `pcr_period`, sino *"lo que tu multiplexor espera"*.
 
-**Y todo error se explica en cristiano.** No *"no audio stream detected"* sino
+**Y todo error se explica en palabras claras.** No *"no audio stream detected"* sino
 **"Este video no tiene sonido"**, y qué hacer.
 
 ### 3 · `ninguna` nunca miente

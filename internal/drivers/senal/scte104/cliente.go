@@ -7,7 +7,7 @@
 // presenta con un init_request, late cada diez segundos, y si el enlace se cae
 // vuelve a levantarlo con espera progresiva 1, 2, 4… con tope de 60 s, sin
 // rendirse nunca (el esquema de F2-48). Cuenta los reintentos y guarda el
-// último error para que la pantalla pueda decir en cristiano cómo está el
+// último error para que la pantalla pueda decir en palabras claras cómo está el
 // enlace, con el mismo vocabulario que las salidas.
 //
 // **Este paquete no se entera de que existe el motor ni el plan.** No conoce
@@ -101,7 +101,7 @@ type Opciones struct {
 	Espera func(intento int) time.Duration
 	// Reloj da la hora. time.Now si es nil.
 	Reloj func() time.Time
-	// Aviso, si está puesto, recibe una frase en cristiano cada vez que el
+	// Aviso, si está puesto, recibe una frase clara cada vez que el
 	// enlace cambia de estado. Es el gancho para la bitácora; este paquete no
 	// escribe incidentes por su cuenta porque no conoce la base.
 	Aviso func(texto string)
@@ -141,7 +141,7 @@ type Estado struct {
 	// una estación que lleva semanas encendida, un número que crece despacio y
 	// uno que crece a saltos cuentan cosas distintas.
 	Reintentos int64
-	// UltimoError es el último fallo, en cristiano, o vacío si nunca hubo.
+	// UltimoError es el último fallo, en palabras claras, o vacío si nunca hubo.
 	UltimoError string
 	// DesdeCuando es cuándo se abrió el enlace que está en pie.
 	DesdeCuando time.Time

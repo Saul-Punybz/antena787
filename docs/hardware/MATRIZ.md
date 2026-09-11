@@ -134,7 +134,7 @@ funcionó, y esto fue lo que pasó" vale tanto como una que dice que sí.
 
 | Columna | Qué va |
 |---|---|
-| **Equipo** | Qué es, en cristiano: "multiplexor", "ENDEC", "amplificador". |
+| **Equipo** | Qué es, en palabras claras: "multiplexor", "ENDEC", "amplificador". |
 | **Familia** | Máquina · encoder/multiplexor · transmisor · ENDEC · retorno de aire · tarjeta de captura. Es la sección donde va la fila. |
 | **Marca y modelo** | Lo que diga la etiqueta. Si no se lee, dilo así. |
 | **Cómo se conecta** | El cable y el protocolo: "UDP por Ethernet", "relés en bloque verde", "serial RS-232", "SNMP". **Esta es la columna que más sirve**, porque el driver se elige por aquí. |

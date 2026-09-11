@@ -786,7 +786,7 @@ func TestUnClienteEsDeUnSoloEnlace(t *testing.T) {
 }
 
 // TestAvisoDelEnlace comprueba el gancho para la bitácora: el paquete no
-// escribe incidentes (no conoce la base), pero dice en cristiano cuándo el
+// escribe incidentes (no conoce la base), pero dice en palabras claras cuándo el
 // enlace se abre y cuándo se cae.
 func TestAvisoDelEnlace(t *testing.T) {
 	iny := nuevoInyector(t)

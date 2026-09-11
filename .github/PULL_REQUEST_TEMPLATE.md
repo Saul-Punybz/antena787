@@ -1,6 +1,6 @@
 ## Qué cambia
 
-<!-- Una o dos líneas, en cristiano. Si el PR cierra un issue: "Cierra #123". -->
+<!-- Una o dos líneas, en palabras claras. Si el PR cierra un issue: "Cierra #123". -->
 
 ## Por qué
 

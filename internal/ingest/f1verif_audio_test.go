@@ -278,7 +278,7 @@ func TestF1_59_SinSonidoYSinAudioAlLadoNoHaySalida(t *testing.T) {
 	esperado := "«promo.mp4» no trae sonido: pon a su lado un archivo de audio con el mismo nombre " +
 		"(.wav, .m4a, .aac, .mp3 o .flac) y lo vuelvo a procesar"
 	if asset.PlainReason != esperado {
-		t.Errorf("motivo_en_cristiano = %q\nse esperaba            %q", asset.PlainReason, esperado)
+		t.Errorf("motivo_claro = %q\nse esperaba            %q", asset.PlainReason, esperado)
 	}
 	// El código es lo que mira la aplicación para NO ofrecer el botón de
 	// "dejarlo pasar": no hay camino para soltarlo mudo.

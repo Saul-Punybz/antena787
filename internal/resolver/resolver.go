@@ -1,6 +1,6 @@
 // Package resolver arma el plan: convierte las reglas de programación en
-// plan_item con instante y duración exactos, rellena lo que sobra y avisa en
-// cristiano de lo que no cuadra. Es lógica pura —sin base de datos, sin red y
+// plan_item con instante y duración exactos, rellena lo que sobra y avisa en palabras
+// claras de lo que no cuadra. Es lógica pura —sin base de datos, sin red y
 // sin ffmpeg—: recibe todo en memoria y devuelve el estado deseado de la
 // ventana. Aplicar el diff contra lo que ya está guardado es trabajo del
 // store; correr Resolve dos veces con la misma entrada da exactamente lo
@@ -341,7 +341,7 @@ func (r *run) instances() []instance {
 	return r.dropInsideBlocks(r.resolveClashes(out))
 }
 
-// ruleProblem devuelve el motivo, en cristiano, por el que una regla no se
+// ruleProblem devuelve el motivo, en palabras claras, por el que una regla no se
 // puede programar. Vacío significa que está bien.
 func (r *run) ruleProblem(rule model.ScheduleRule) string {
 	if rule.To < rule.From {
@@ -476,8 +476,8 @@ func (r *run) resolveHardEnds(insts []instance) {
 
 // dropInsideBlocks quita las corridas que arrancan dentro de un bloque con
 // hora de fin declarada (en vivo o arrendado). El bloque manda y sale entero:
-// meterle otra regla encima sería dos cosas al aire a la vez. Se avisa en
-// cristiano para que quien programa mueva la regla (F1-39).
+// meterle otra regla encima sería dos cosas al aire a la vez. Se avisa en palabras
+// claras para que quien programa mueva la regla (F1-39).
 func (r *run) dropInsideBlocks(in []instance) []instance {
 	var out []instance
 	for i := range in {

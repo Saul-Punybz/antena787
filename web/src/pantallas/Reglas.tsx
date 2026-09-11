@@ -466,7 +466,7 @@ function TarjetaSinEmparejar({
       )}
 
       {error && (
-        <div className="error-en-cristiano" style={{ marginTop: 11 }}>
+        <div className="error-claro" style={{ marginTop: 11 }}>
           {error}
         </div>
       )}
@@ -598,7 +598,7 @@ function PanelDeImportacion({
     >
       {!resumen && (
         <>
-          {error && <div className="error-en-cristiano">{error}</div>}
+          {error && <div className="error-claro">{error}</div>}
           <div className="campo">
             <label htmlFor="hoja">Pega aquí las celdas</label>
             <textarea

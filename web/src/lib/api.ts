@@ -96,7 +96,7 @@ async function pedir<T>(ruta: string, init?: RequestInit): Promise<T> {
   }
   if (!respuesta.ok) {
     const e = cuerpo as { error?: string; campo?: string } | null
-    // Un error sin frase en cristiano no viene de Antena787 (docs/API.md):
+    // Un error sin frase clara no viene de Antena787 (docs/API.md):
     // al otro lado hay otra cosa. La interfaz sigue con datos de ejemplo.
     if (!enDemo && respuesta.status !== 401 && typeof e?.error !== 'string') {
       entrarEnDemo()
@@ -182,7 +182,7 @@ export const api = {
   /**
    * Mueve un bloque del plan a mano, o lo suelta. El servidor devuelve el
    * elemento ya cambiado, con `fijado: true` cuando quedó clavado; si choca
-   * con otro bloque contesta 409 con la frase en cristiano.
+   * con otro bloque contesta 409 con la frase clara.
    */
   cambiarPlan: (id: number, cambio: CambioDePlan) =>
     pedir<ElementoDelPlan>(`/plan/${id}`, conCuerpo('PUT', cambio)),

@@ -575,7 +575,7 @@ func TestHoraYFechaEnCristiano(t *testing.T) {
 func TestNoSeReconoceLaTabla(t *testing.T) {
 	_, errs := Parse("hola\tque tal\nnada\tque ver")
 	if len(errs) != 1 || !strings.Contains(errs[0].Reason, "no reconocí") {
-		t.Fatalf("se esperaba un motivo en cristiano, salió %v", errs)
+		t.Fatalf("se esperaba un motivo claro, salió %v", errs)
 	}
 	res := Rules(Sheet{Kind: KindUnknown}, catv)
 	if len(res.Rules) != 0 || len(res.RowErrors) != 1 {
@@ -697,7 +697,7 @@ func TestEmparejaErratasConElCatalogo(t *testing.T) {
 		t.Fatal("«RadioOnce Live!» es una fuente en vivo y no debía salir por emparejar")
 	}
 
-	// Y el emparejamiento se cuenta fila por fila, en cristiano.
+	// Y el emparejamiento se cuenta fila por fila, en palabras claras.
 	var zorro string
 	for _, n := range res.Notices {
 		if n.Title == "Zorro 57" {
@@ -758,7 +758,7 @@ func TestRecuerdaElAliasDeOtraHoja(t *testing.T) {
 			len(res.Titles), len(fichas)+2)
 	}
 
-	// Y se dice de dónde salió, en cristiano.
+	// Y se dice de dónde salió, en palabras claras.
 	var dicho string
 	for _, x := range m.Matched {
 		if x.From == "Samurai X" {

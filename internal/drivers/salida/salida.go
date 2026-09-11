@@ -53,14 +53,14 @@ const (
 // (docs/f2/PLAN-F2.md §3).
 type Driver interface {
 	// Abrir traduce los parámetros de la salida a lo que el encoder
-	// entiende, en el formato de casa del canal. Un error aquí está en
-	// cristiano y es lo que se le enseña a la persona.
+	// entiende, en el formato de casa del canal. Un error aquí está en palabras
+	// claras y es lo que se le enseña a la persona.
 	Abrir(f engine.Format) (engine.Output, error)
 	// Vigilar corre hasta que se cancele el contexto: cuenta reintentos y
 	// guarda estado_conexion, reintentos y ultimo_error de esa salida
 	// (F2-48/49). No bloquea el motor: va en su propia goroutine.
 	Vigilar(ctx context.Context, salida model.Output, listo <-chan error)
-	// Descripcion es a dónde va, en cristiano, para la pantalla y la
+	// Descripcion es a dónde va, en palabras claras, para la pantalla y la
 	// bitácora: «al grupo 239.1.1.1:1234, 4 saltos».
 	Descripcion() string
 }

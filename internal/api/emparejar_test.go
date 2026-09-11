@@ -116,7 +116,7 @@ func TestF1Verif64LaHojaDejaTitulosPorEmparejar(t *testing.T) {
 		t.Fatalf("«Samurai X» dice %d reglas y %d franjas", samurai.Reglas, len(samurai.Franjas))
 	}
 	if !strings.Contains(samurai.Franjas[0], " a las ") {
-		t.Fatalf("la franja no se lee en cristiano: %q", samurai.Franjas[0])
+		t.Fatalf("la franja no se lee en palabras claras: %q", samurai.Franjas[0])
 	}
 	if !strings.Contains(samurai.Texto, "no tiene ficha en el catálogo") {
 		t.Fatalf("el texto de «Samurai X» dice %q", samurai.Texto)
@@ -463,7 +463,7 @@ func TestF1Verif67NoEsUnPrograma(t *testing.T) {
 
 // ── los peros ─────────────────────────────────────────────────────────
 
-// TestEmparejarLoQueNoSePuede: cada pero se dice en cristiano y con su
+// TestEmparejarLoQueNoSePuede: cada pero se dice en palabras claras y con su
 // código.
 func TestEmparejarLoQueNoSePuede(t *testing.T) {
 	c := nuevo(t).conClave().entrar()

@@ -2,8 +2,8 @@
 // lo convierte en reglas y títulos del dominio (internal/model).
 //
 // Es lógica pura: no toca la base, ni la red, ni el disco. Recibe texto y
-// devuelve datos más una lista de lo que no cuadró, fila por fila y en
-// cristiano. Nunca rechaza la hoja entera (PRD §13, auditoría B11): trae lo
+// devuelve datos más una lista de lo que no cuadró, fila por fila y en palabras
+// claras. Nunca rechaza la hoja entera (PRD §13, auditoría B11): trae lo
 // que sirve y explica el resto.
 //
 // Formatos que entiende:
@@ -158,7 +158,7 @@ type RowError struct {
 	Line    int    // línea del texto pegado
 	SheetID string // el Id que traía la hoja, si lo traía
 	Title   string // el título de la fila, si se pudo leer
-	Reason  string // el motivo, en cristiano
+	Reason  string // el motivo, en palabras claras
 }
 
 func (e RowError) Error() string {

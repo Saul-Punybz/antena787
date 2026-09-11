@@ -236,7 +236,7 @@ func maxInt(a, b int) int {
 }
 
 // ValidateXMLTV revisa la guía antes de publicarla y devuelve los problemas
-// en cristiano: canal que no existe, programas solapados, huecos largos y
+// en palabras claras: canal que no existe, programas solapados, huecos largos y
 // fechas que no cuadran (PRD §9 paso 3, criterio F1-28). Lista vacía quiere
 // decir que la guía se puede publicar.
 func ValidateXMLTV(data []byte) []string {

@@ -142,7 +142,7 @@ Gobiernan cualquier decisión. Si algo los viola, está mal aunque sea elegante.
    aplicación.
 6. **El instalador hace el trabajo sucio.** Antivirus, energía, servicio,
    rutas, permisos.
-7. **Los errores se explican en cristiano.** No *"no audio stream detected"*
+7. **Los errores se explican en palabras claras.** No *"no audio stream detected"*
    sino **"Este video no tiene sonido"**, y qué hacer.
 8. **La hoja de cálculo es un remedio casero, no la vara de medir.**
 9. **Revelación progresiva.** Nadie paga complejidad que no usa.
@@ -445,7 +445,7 @@ distintos, ambos válidos, y el modelo los distingue.**
 - **Watchdog del encoder.** Si el encoder no consume un cuadro en 3 segundos
   (configurable), el motor manda el cartel al aire, mata el encoder y lo
   relanza con **el mismo acelerador**. Si vuelve a fallar dos veces en 10
-  minutos, lo relanza por software y avisa en cristiano: *"tu tarjeta de
+  minutos, lo relanza por software y avisa en palabras claras: *"tu tarjeta de
   video dejó de responder"*. Si lo que pasó es que `ffmpeg` **desapareció del
   disco**, el watchdog lo distingue y lo dice: *"tu antivirus bloqueó
   ffmpeg — vuelve a aplicar las exclusiones en Ajustes"*.
@@ -753,7 +753,7 @@ anunciante, que **vence a los 30 días** y se puede revocar de un clic. Si el
 enlace se filtra —se reenvía por WhatsApp, aparece en redes— quien lo abra no
 puede subir material a nombre de otro anunciante ni cambiar lo comprado.
 
-**Límites que se explican en cristiano.** Un spot puede pesar hasta **500 MB**
+**Límites que se explican en palabras claras.** Un spot puede pesar hasta **500 MB**
 y durar hasta **5 minutos**; pasado eso el portal lo dice con esas palabras y
 no con un error de servidor. Lo subido se examina en una carpeta aparte —sin
 red, con límite de tiempo— y solo entonces entra a la biblioteca (§19).
@@ -1205,7 +1205,7 @@ con diferido"**, que crea la regla que retransmite la mañana en la madrugada.
 Es un botón, no un proyecto.
 
 > **El importador nunca rechaza la hoja entera.** Trae lo que sirve y lista
-> **fila por fila** lo que no pasó y por qué, en cristiano. Sabe además que
+> **fila por fila** lo que no pasó y por qué, en palabras claras. Sabe además que
 > una hoja hecha a mano usa fechas de calendario: para las filas cuya hora cae
 > entre las 12:00 y las 5:59 AM corre las fechas un día atrás —para que
 > coincidan con el día de emisión— y lo reporta fila por fila en vez de
@@ -1262,7 +1262,7 @@ hasta que lo estén el producto no está completo:**
 
 - **El asistente de instalación**, incluida la prueba de barras y el paso de
   la clave de estación.
-- **Cuarentena** — qué falló, en cristiano, y el botón *"Dejarlo pasar bajo mi
+- **Cuarentena** — qué falló, en palabras claras, y el botón *"Dejarlo pasar bajo mi
   responsabilidad"*.
 - **Bitácora de incidentes** — el historial de todo lo que el sistema hizo
   solo, y desde donde se marca a mano una interrupción de alerta.
@@ -1374,7 +1374,7 @@ media_asset     channel (nulo = compartido), ruta, hash, códec, resolucion,
                 ← las marcas viven en el ARCHIVO: la emisión original y el
                   diferido generan sus cortes desde aquí
                 estado (ingiriendo | listo | cuarentena | fallido),
-                motivo_en_cristiano, estado_normalizacion,
+                motivo_claro, estado_normalizacion,
                 negro_intencional (bool), sin_logo (bool)
                 ← negro_intencional apaga el detector de negro y silencio
                   mientras dura el clip; sin_logo apaga la superposición
@@ -1770,7 +1770,7 @@ memoria para explicárselo a alguien después.
 ### Cuando no hay internet
 
 **Nada de lo que necesita internet saca el canal del aire, y nada falla en
-silencio.** Todo degrada con un aviso en cristiano:
+silencio.** Todo degrada con un aviso claro:
 
 - **La hora** — servidor de la red local como alternativa, y los avisos de
   arriba.

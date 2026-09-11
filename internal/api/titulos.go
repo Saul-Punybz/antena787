@@ -383,7 +383,7 @@ func failEmparejar(w http.ResponseWriter, err error) {
 	}
 }
 
-// reglasQuePasaron y reglasQueSeFueron cuentan reglas en cristiano.
+// reglasQuePasaron y reglasQueSeFueron cuentan reglas en palabras claras.
 func reglasQuePasaron(n int) string {
 	switch n {
 	case 0:

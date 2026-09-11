@@ -198,8 +198,8 @@ export function Biblioteca() {
           Arrastra videos aquí, o haz clic para buscarlos en tu computadora
         </div>
         <p className="subtitulo">
-          Caen en la carpeta vigilada. El sistema los mide, los prepara y te dice en
-          cristiano si alguno no sirve.
+          Caen en la carpeta vigilada. El sistema los mide, los prepara y te dice en palabras
+          claras si alguno no sirve.
         </p>
         {subiendo && (
           <p className="aqua" style={{ fontSize: 13, marginTop: 10 }}>
@@ -271,7 +271,7 @@ export function Biblioteca() {
               <div>
                 <div style={{ font: '600 14px var(--sans)' }}>{c.titulo}</div>
                 <div className="ambar" style={{ fontSize: 13, marginTop: 3 }}>
-                  {c.motivo_en_cristiano}
+                  {c.motivo_claro}
                 </div>
                 {c.motivo_codigo === 'sin_audio' && (
                   <div className="tenue" style={{ fontSize: 12.5, marginTop: 4, maxWidth: 520 }}>
@@ -571,7 +571,7 @@ function ProgramaInfantil({
           onClick={() => void cambiar(!ficha.infantil_core)}
         />
       </div>
-      {error && <div className="error-en-cristiano">{error}</div>}
+      {error && <div className="error-claro">{error}</div>}
     </div>
   )
 }
@@ -656,7 +656,7 @@ function SonidoDelMaterial({
           aún no listo para aire
         </span>
       )}
-      {error && <div className="error-en-cristiano">{error}</div>}
+      {error && <div className="error-claro">{error}</div>}
       {audio && (
         <div className="tenue" style={{ fontSize: 12.5 }}>
           Audio: archivo de al lado · <span className="mono">{nombreDeArchivo(audio)}</span>
@@ -714,7 +714,7 @@ function PanelDejarPasar({
     >
       <div className="tarjeta tarjeta--aviso" style={{ padding: '14px 16px' }}>
         <div className="ambar" style={{ fontSize: 14 }}>
-          {item.motivo_en_cristiano}
+          {item.motivo_claro}
         </div>
         <div className="mono tenue" style={{ fontSize: 11.5, marginTop: 6 }}>
           {item.ruta}
@@ -724,7 +724,7 @@ function PanelDejarPasar({
         Esto va a salir al aire tal como está. Queda anotado tu nombre y la hora, para que
         después se sepa quién lo autorizó.
       </p>
-      {error && <div className="error-en-cristiano">{error}</div>}
+      {error && <div className="error-claro">{error}</div>}
       <div className="campo">
         <label htmlFor="quien-pasa">¿Quién lo autoriza?</label>
         <input

@@ -608,7 +608,7 @@ func TestF1_10_ErrorDeLecturaVaACuarentena(t *testing.T) {
 		t.Fatalf("estado = %q, se esperaba cuarentena", asset.State)
 	}
 	if asset.PlainReason == "" {
-		t.Error("falta motivo_en_cristiano")
+		t.Error("falta motivo_claro")
 	}
 	for _, jerga := range []string{"ffprobe", "ffmpeg", "codec", "moov", "atom"} {
 		if strings.Contains(strings.ToLower(asset.PlainReason), jerga) {
@@ -623,7 +623,7 @@ func TestF1_10_ErrorDeLecturaVaACuarentena(t *testing.T) {
 
 // TestF1_10_SinAudioVaACuarentena es la otra mitad: un archivo con imagen y
 // sin pista de sonido no se da por listo solo. Queda en cuarentena con su
-// motivo en cristiano.
+// motivo claro.
 //
 // Desde la decisión del 9 de septiembre de 2026 (F1-58 y F1-59) la cuarentena
 // es además definitiva mientras no aparezca el sonido: no hay «dejarlo pasar»
@@ -660,6 +660,6 @@ func TestF1_10_SinAudioVaACuarentena(t *testing.T) {
 			asset.State, err)
 	}
 	if asset.PlainReason == "" {
-		t.Error("falta motivo_en_cristiano explicando que no tiene sonido")
+		t.Error("falta motivo_claro explicando que no tiene sonido")
 	}
 }

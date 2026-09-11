@@ -308,7 +308,7 @@ func (r *PlanRepo) anotar(ctx context.Context, tx *sql.Tx, id int64, campo, ante
 	return r.audit.appendIn(ctx, tx, &e)
 }
 
-// estadoDelItem escribe en cristiano cómo queda un ítem, para la bitácora:
+// estadoDelItem escribe en palabras claras cómo queda un ítem, para la bitácora:
 // "fijado a las 14:05 (24 min)".
 func estadoDelItem(fijado bool, hora string, duracionMs int64) string {
 	que := "libre"

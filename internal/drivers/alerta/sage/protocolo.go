@@ -52,7 +52,7 @@ const (
 	// Por el DECODER device **no llega nunca**, y esa es la razón de que este
 	// driver no pueda cerrar solo una interrupción (ver sage.go).
 	TipoFin Tipo = "fin"
-	// TipoTexto — el texto expandido en cristiano que el ENDEC manda detrás de
+	// TipoTexto — el texto expandido en palabras claras que el ENDEC manda detrás de
 	// la cabecera. Es lo que se le puede enseñar a una persona tal cual.
 	TipoTexto Tipo = "texto"
 
@@ -473,7 +473,7 @@ func (a *Analizador) linea(cruda []byte) []Evento {
 	ahora := a.reloj()
 
 	// Los delimitadores del NEWS FEED (§8.4) no son un evento: son el sobre.
-	// Dentro de ese sobre el texto en cristiano va **delante** de la cabecera,
+	// Dentro de ese sobre el texto en palabras claras va **delante** de la cabecera,
 	// al contrario que en el DECODER device, así que se marca el bloque para
 	// no atribuirle esas líneas a la alerta anterior.
 	switch {

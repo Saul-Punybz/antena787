@@ -126,7 +126,7 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
 - **F1-10** [AUTO] — Dado un archivo sin audio detectable, o con
   `ffprobe` reportando error de lectura · Cuando termina el intento de
   ingest · Entonces el archivo queda en estado `cuarentena` con
-  `motivo_en_cristiano` explicando el problema, y **nunca** aparece
+  `motivo_claro` explicando el problema, y **nunca** aparece
   disponible para programarse en una regla.
 
 ### Reglas (§9 paso 2, §15)
@@ -294,7 +294,7 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   programado `dentro_de` que no terminaría antes de las 13:00 · Cuando el
   resolver lo materializa · Entonces **no lo arranca**: el fin del bloque en
   vivo es tan duro como el de un slot de archivo.
-  *Alcance de F1 (9 de septiembre de 2026): el resolver de F1 no materializa ítems `dentro_de` (llegan con F2); lo que F1 verifica es que una regla que arranca dentro de un bloque en vivo no lo recorta ni se desborda de su fin, y que se avisa en cristiano.*
+  *Alcance de F1 (9 de septiembre de 2026): el resolver de F1 no materializa ítems `dentro_de` (llegan con F2); lo que F1 verifica es que una regla que arranca dentro de un bloque en vivo no lo recorta ni se desborda de su fin, y que se avisa en palabras claras.*
 
 ### Material listo para aire (§9 pasos 1 y 3)
 
@@ -356,7 +356,7 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
 - **F1-50** [AUTO] — Dado una hoja importada con 200 filas de las cuales 7 no
   se pueden interpretar · Cuando corre el importador · Entonces importa las
   **193 válidas** y devuelve una lista **fila por fila** de las 7, con el
-  motivo en cristiano. **Nunca rechaza la hoja entera.**
+  motivo claro. **Nunca rechaza la hoja entera.**
 - **F1-51** [AUTO] — Dado una fila de la hoja con hora 2:00 AM y fecha de
   calendario del martes · Cuando corre el importador · Entonces guarda la
   regla con la fecha **corrida un día atrás** (lunes, que es su día de
@@ -465,7 +465,7 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   episodio ya fichó, y otro que nadie fichó · Cuando Biblioteca pide la
   cuarentena · Entonces cada fila trae `titulo` con nombre de persona
   (*«Space Cobra · T1E4 La joya»*; el nombre del archivo sin extensión si no
-  hay ficha), su `motivo_en_cristiano` y el botón de dejarlo pasar bajo un
+  hay ficha), su `motivo_claro` y el botón de dejarlo pasar bajo un
   nombre que queda en `audit_log`. Y mientras quede alguno, **Al aire** enseña
   el aviso *«N archivos en cuarentena»* con camino a Biblioteca; se recalcula
   al arrancar, tras cada ingest y al dejar pasar uno, y se apaga solo cuando
@@ -474,7 +474,7 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   (uno conocido, un `panico_<goroutine>`, uno que la lista aún no conoce) ·
   Cuando se pide `GET /incidentes` · Entonces cada fila trae lo que la
   pantalla pinta (`id`, `tipo`, `inicio`, `fin`, `detalle`) **más `texto`**,
-  la frase en cristiano de su tipo, en un solo sitio del servidor; el pánico
+  la frase clara de su tipo, en un solo sitio del servidor; el pánico
   dice qué parte se relanzó y el desconocido sale legible. Un rango sin
   incidentes es una lista vacía y una fecha mal escrita es `400`. Al aire
   la enseña como tarjeta con lo último y un panel al lado (nunca un modal,
@@ -557,7 +557,7 @@ los criterios comparten el mismo montaje salvo que se indique otra cosa:
   exentos», «No lo sé todavía»— y, debajo, la ayuda del umbral de $3,000,000
   de ingresos brutos anuales (47 CFR 79.1(d)(12)) con la referencia a
   `COMPLIANCE.md`; fuera de ese perfil el selector no aparece. `PUT /ajustes`
-  guarda `obligada`, `exenta` o `no_se` (el default) y rechaza en cristiano
+  guarda `obligada`, `exenta` o `no_se` (el default) y rechaza en palabras claras
   cualquier otro valor sin tocar lo que ya había. Mientras el ajuste siga en
   `no_se`, `GET /estado` trae una alarma de nivel **aviso**, tipo
   `subtitulos_sin_decidir`, con acción a `/ajustes`; decidir `obligada` o
@@ -707,7 +707,7 @@ inventario sin cambiar de pantalla. No hay ruta nueva del servidor.
   (default configurable) · Entonces el motor manda el **cartel** al aire, mata
   el encoder, lo **relanza con el mismo acelerador** y registra un incidente
   `encoder_reiniciado`. Si vuelve a fallar **dos veces en 10 minutos**, lo
-  relanza **por software** y avisa en cristiano: *"tu tarjeta de video dejó de
+  relanza **por software** y avisa en palabras claras: *"tu tarjeta de video dejó de
   responder"*.
 - **F2-12** [AUTO] — Dado un `plan_item` de archivo que falla al reproducirse
   en el aire (error de decodificación, archivo borrado, archivo en cero, o el
@@ -764,7 +764,7 @@ inventario sin cambiar de pantalla. No hay ruta nueva del servidor.
   Mientras tanto hay dos cinturones puestos: `auto` resuelve a **software**
   (`Acelerador.Resolver`), así que nadie acaba en una tarjeta sin haberla
   pedido; y si alguien la pide y no funciona, **F2-11 baja el canal a software
-  y lo dice en cristiano** sin sacarlo del aire. La prueba de humo evita el
+  y lo dice en palabras claras** sin sacarlo del aire. La prueba de humo evita el
   susto; el watchdog evita que el susto tumbe la señal.
 - **F2-16** [AUTO] — Dado un ID de estación programado `dentro_de` el
   bloque de RadioOnce Live! · Cuando llega su hora · Entonces toma el aire
@@ -995,8 +995,8 @@ inventario sin cambiar de pantalla. No hay ruta nueva del servidor.
   Entonces sigue produciéndose sin interrupción ni degradación mientras la
   otra reconecta.
   Construido en T2 (10 sept 2026): `internal/app/salidas.go:App.abrirSalidas`
-  salta la salida que no abre —`salidaNoAbre` la deja apuntada con su motivo en
-  cristiano y publica el aviso— y el canal sale por las demás; al ser ramas del
+  salta la salida que no abre —`salidaNoAbre` la deja apuntada con su motivo en palabras
+  claras y publica el aviso— y el canal sale por las demás; al ser ramas del
   mismo encoder, ninguna puede cortar a otra. Prueba:
   `TestF2_47y49CadaSalidaConSuVolumenYUnaRotaNoCallaALasDemas`.
 - **F2-50** [AUTO] — Dado un canal recién configurado sin salida elegida
@@ -1413,7 +1413,7 @@ inventario sin cambiar de pantalla. No hay ruta nueva del servidor.
   con alarmas ocurriendo en ese tramo · Cuando vuelve la conexión · Entonces el
   canal de avisos manda **todos los mensajes acumulados**, ninguno se perdió, y
   ninguno de los servicios de red falló en silencio mientras no había
-  conexión: cada uno degradó con un aviso en cristiano.
+  conexión: cada uno degradó con un aviso claro.
 
 ### El asistente y las puertas de fase (§13, §16, §22.3, §23)
 

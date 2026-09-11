@@ -33,7 +33,7 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	_ = enc.Encode(v)
 }
 
-// fail contesta con un error en cristiano. field es opcional: el campo del
+// fail contesta con un error claro. field es opcional: el campo del
 // formulario que la persona tiene que arreglar.
 func fail(w http.ResponseWriter, code int, msg, field string) {
 	writeJSON(w, code, errorBody{Error: msg, Field: field})
@@ -44,7 +44,7 @@ func failf(w http.ResponseWriter, code int, field, format string, args ...any) {
 	fail(w, code, fmt.Sprintf(format, args...), field)
 }
 
-// decode lee el cuerpo JSON. El error que devuelve ya está en cristiano.
+// decode lee el cuerpo JSON. El error que devuelve ya está en palabras claras.
 func decode(w http.ResponseWriter, r *http.Request, into any) bool {
 	dec := json.NewDecoder(io.LimitReader(r.Body, maxBody))
 	if err := dec.Decode(into); err != nil {

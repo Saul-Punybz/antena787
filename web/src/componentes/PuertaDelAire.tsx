@@ -171,7 +171,7 @@ function PanelAlAire({
         </span>
       </div>
 
-      {error && <div className="error-en-cristiano">{error}</div>}
+      {error && <div className="error-claro">{error}</div>}
     </Panel>
   )
 }
@@ -247,7 +247,7 @@ function PanelASombra({
         </span>
       </div>
 
-      {error && <div className="error-en-cristiano">{error}</div>}
+      {error && <div className="error-claro">{error}</div>}
     </Panel>
   )
 }

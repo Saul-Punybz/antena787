@@ -29,7 +29,7 @@ type Persist interface {
 	// SaveAsset guarda o actualiza el media_asset y le pone el ID si es nuevo.
 	SaveAsset(ctx context.Context, a *model.MediaAsset) error
 	// SetNormalizeState mueve estado_normalizacion y, si terminó bien, apunta
-	// la ruta normalizada; si terminó mal, el motivo en cristiano.
+	// la ruta normalizada; si terminó mal, el motivo claro.
 	SetNormalizeState(ctx context.Context, assetID int64, state, normalizedPath, plainReason string) error
 	// SetAudioTracks guarda las pistas de sonido que trae el archivo —índice,
 	// idioma, canales y título— y cuál de ellas sale al aire. pistaAire es el
@@ -53,7 +53,7 @@ type PersistLoudness interface {
 	// son los del resultado ya medido (LoudnessReport.OutputLUFS y
 	// OutputTruePeak), pasadas es LoudnessReport.Passes —2 cuando se midió y
 	// se corrigió, 0 cuando el archivo no traía sonido— y nota es el texto
-	// en cristiano que acompaña al registro (hoy
+	// en palabras claras que acompaña al registro (hoy
 	// LoudnessReport.CaptionsNote), vacío si no hay nada que contar.
 	SetLoudness(ctx context.Context, assetID int64, lufs, truePeak float64, pasadas int, nota string) error
 }
@@ -165,7 +165,7 @@ func (q *Queue) Next(ctx context.Context) (Job, bool) {
 
 // Run es el trabajador: toma de la cola, normaliza, y anota en la base cómo
 // fue. Un fallo se reintenta pasado RetryDelay; dos fallos dejan el archivo
-// en fallido con su motivo en cristiano. Corre hasta que se cancele el
+// en fallido con su motivo claro. Corre hasta que se cancele el
 // contexto.
 func (q *Queue) Run(ctx context.Context, p Persist, work NormalizeFunc) error {
 	for {

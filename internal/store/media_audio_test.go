@@ -168,7 +168,7 @@ func TestSetPistaAudioAireVuelveALaColaDeNormalizacion(t *testing.T) {
 		t.Fatalf("las pistas se perdieron al cambiar la que va al aire: %+v", leido.PistasAudio)
 	}
 
-	// Y el cambio queda anotado en la bitácora, en cristiano.
+	// Y el cambio queda anotado en la bitácora, en palabras claras.
 	entradas, err := s.Audit.List(ctx, 0)
 	if err != nil {
 		t.Fatal(err)

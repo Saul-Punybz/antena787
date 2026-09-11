@@ -22,7 +22,7 @@
 //     pedírselo y se dice claro.
 //
 // Nada de aquí entra en pánico ni tumba nada: si no se puede sostener, se
-// devuelve un error en cristiano y quien llame decide (en internal/app, una
+// devuelve un error claro y quien llame decide (en internal/app, una
 // alarma de nivel aviso y un reintento cada cinco minutos).
 package despierto
 

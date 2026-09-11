@@ -44,7 +44,7 @@ permanentemente, no solo el instalador.
 ### ¿Necesita internet?
 
 **No para salir al aire.** Nada de lo que necesita internet saca el canal del
-aire, y nada falla en silencio: todo degrada con un aviso en cristiano.
+aire, y nada falla en silencio: todo degrada con un aviso claro.
 
 La hora se puede tomar de un servidor de la red local; la guía se sigue
 generando y sirviendo localmente; los avisos se acumulan y salen cuando vuelve
@@ -342,7 +342,7 @@ es plata, no papeleo. **No se vende cumplimiento que no existe.**
 Es una herramienta de migración: se usa una vez.
 
 **El importador nunca rechaza la hoja entera.** Trae lo que sirve y lista **fila
-por fila** lo que no pasó y por qué, en cristiano. Sabe además que una hoja hecha
+por fila** lo que no pasó y por qué, en palabras claras. Sabe además que una hoja hecha
 a mano usa fechas de calendario, así que para las filas de la madrugada corre las
 fechas un día atrás —para que coincidan con el día de emisión— y **lo reporta,
 en vez de hacerlo callado**. Y cuando una regla empieza justo al día siguiente

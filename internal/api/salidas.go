@@ -16,7 +16,7 @@ import (
 //
 // Los parámetros de cada driver viajan como JSON tal cual se guardan
 // (`parametros`), y lo que se valida es lo que el driver sabe validar: así
-// nadie tiene que repetir en la API lo que el driver ya dice en cristiano.
+// nadie tiene que repetir en la API lo que el driver ya dice en palabras claras.
 
 // salidasList devuelve las salidas del canal con la frase de a dónde va cada
 // una. Es lo mismo que lleva `salidas` en GET /estado.

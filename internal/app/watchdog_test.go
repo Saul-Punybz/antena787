@@ -197,7 +197,7 @@ func TestF2_11TrasLaColgadaElAireVuelveConElCartel(t *testing.T) {
 
 // F2-11 — una colgada es mala suerte y el canal sigue con su tarjeta; dos en
 // diez minutos es una tarjeta que dejó de responder, y entonces el canal
-// sigue emitiendo por software y lo dice en cristiano.
+// sigue emitiendo por software y lo dice en palabras claras.
 func TestF2_11DosColgadasEnDiezMinutosBajanElCanalAlProcesador(t *testing.T) {
 	olvidarLaTarjeta(t)
 	a := abre(t)
@@ -224,7 +224,7 @@ func TestF2_11DosColgadasEnDiezMinutosBajanElCanalAlProcesador(t *testing.T) {
 		t.Fatalf("dos colgadas en diez minutos dejan el canal en software y quedó en %q", ac)
 	}
 	if !strings.Contains(porque, FraseTarjetaCaida) {
-		t.Fatalf("el porqué tiene que decir %q en cristiano y dice %q", FraseTarjetaCaida, porque)
+		t.Fatalf("el porqué tiene que decir %q en palabras claras y dice %q", FraseTarjetaCaida, porque)
 	}
 	if texto, _ := elIncidente(t, a, model.IncEncoderReiniciado); !strings.Contains(texto, FraseTarjetaCaida) {
 		t.Fatalf("el incidente de la segunda colgada tiene que decir %q y dice %q", FraseTarjetaCaida, texto)

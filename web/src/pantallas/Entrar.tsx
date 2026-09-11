@@ -77,7 +77,7 @@ export function Entrar() {
           />
           <span className="ayuda">Cuatro a seis dígitos.</span>
         </div>
-        {error && <div className="error-en-cristiano">{error}</div>}
+        {error && <div className="error-claro">{error}</div>}
         <button className="boton boton--primario" disabled={!valida || enviando}>
           {enviando ? 'Entrando…' : 'Entrar'}
         </button>

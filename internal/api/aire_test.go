@@ -181,7 +181,7 @@ func TestSalirAlAireSinSalidaLoDiceYNoEnciende(t *testing.T) {
 	var body comprobacionesBody
 	c.json(w, &body)
 	if !strings.Contains(body.Error, "todavía no se puede salir al aire") {
-		t.Fatalf("el error no está en cristiano: %q", body.Error)
+		t.Fatalf("el error no está en palabras claras: %q", body.Error)
 	}
 	if body.Campo == "" || len(body.Comprobaciones) == 0 || body.Puede {
 		t.Fatalf("el 409 no trae las comprobaciones: %+v", body)
@@ -246,8 +246,8 @@ func TestElCanalSaleDeSombraYVuelve(t *testing.T) {
 	}
 }
 
-// hayIncidente comprueba que la bitácora tiene ese tipo, con su frase en
-// cristiano tal como la pinta Al aire.
+// hayIncidente comprueba que la bitácora tiene ese tipo, con su frase en palabras
+// claras tal como la pinta Al aire.
 func (c *cliente) hayIncidente(tipo string) {
 	c.t.Helper()
 	w := c.do("GET", "/api/v1/incidentes", nil)
@@ -267,7 +267,7 @@ func (c *cliente) hayIncidente(tipo string) {
 			continue
 		}
 		if strings.TrimSpace(inc.Texto) == "" || inc.Texto == tipo {
-			c.t.Fatalf("el incidente %q no trae frase en cristiano: %q", tipo, inc.Texto)
+			c.t.Fatalf("el incidente %q no trae frase clara: %q", tipo, inc.Texto)
 		}
 		if !strings.Contains(inc.Detalle, "señal") {
 			c.t.Fatalf("el incidente %q no dice qué pasó con la señal: %q", tipo, inc.Detalle)

@@ -12,7 +12,7 @@ export type TipoCanal = 'tv' | 'radio'
 
 /**
  * Con qué se comprime el video: la tarjeta o el procesador (F2-11). Nunca se
- * enseña la clave: el servidor manda el nombre en cristiano en
+ * enseña la clave: el servidor manda el nombre en palabras claras en
  * `aceleradores_disponibles`.
  */
 export type Acelerador =
@@ -58,7 +58,7 @@ export interface Salida {
   reintentos: number
   ultimo_error: string
   /**
-   * A dónde va, en cristiano y ya escrito por el servidor: «al grupo
+   * A dónde va, en palabras claras y ya escrito por el servidor: «al grupo
    * 239.1.1.1:1234, 4 salto(s) de red · MPEG-2 8000 kb/s …». Cuando lo
    * guardado no se puede abrir, es el motivo.
    */
@@ -80,7 +80,7 @@ export type ResultadoDeComprobacion = 'bien' | 'aviso' | 'falta'
 
 /**
  * Una de las cosas que se miran antes de dejar salir al aire, ya escrita por
- * el servidor en cristiano. `clave` es lo único interno y no se pinta.
+ * el servidor en palabras claras. `clave` es lo único interno y no se pinta.
  */
 export interface Comprobacion {
   clave: string
@@ -239,9 +239,9 @@ export interface Estado {
    * 'auto': el servidor ya lo resolvió.
    */
   acelerador_efectivo?: Acelerador
-  /** Por qué cambió, en cristiano. Vacío cuando es lo que se pidió. */
+  /** Por qué cambió, en palabras claras. Vacío cuando es lo que se pidió. */
   acelerador_porque?: string
-  /** Lo que Ajustes ofrece, ya con el nombre en cristiano desde el servidor. */
+  /** Lo que Ajustes ofrece, ya con el nombre en palabras claras desde el servidor. */
   aceleradores_disponibles?: AceleradorDisponible[]
 }
 
@@ -439,7 +439,7 @@ export interface EnCuarentena {
   id: number
   ruta: string
   titulo: string
-  motivo_en_cristiano: string
+  motivo_claro: string
   creado: Instante
   /**
    * Por qué quedó parado, en clave. "sin_audio" no tiene salida por la vía
@@ -457,7 +457,7 @@ export interface EnCuarentena {
 /**
  * Un incidente es algo que el sistema hizo solo para proteger el aire, o
  * algo que le pasó y anotó (PRD §15, `incidente`). Cuándo, qué, cuánto duró.
- * `fin` es nulo mientras sigue abierto. `texto` es la frase en cristiano del
+ * `fin` es nulo mientras sigue abierto. `texto` es la frase clara del
  * tipo; si un servidor viejo no la manda, la pantalla enseña el tipo legible.
  */
 export interface Incidente {
@@ -539,12 +539,12 @@ export interface TituloSinEmparejar {
   id: number
   /** El nombre tal como venía en la hoja. */
   nombre: string
-  /** La frase en cristiano del servidor: por qué quedó pendiente. */
+  /** La frase clara del servidor: por qué quedó pendiente. */
   texto: string
   candidatos: CandidatoDeTitulo[]
   /** Cuántas reglas lo usan: es lo que se pierde si se quita. */
   reglas: number
-  /** Las franjas donde va, ya en cristiano: «L-V 2:30 PM». */
+  /** Las franjas donde va, ya en palabras claras: «L-V 2:30 PM». */
   franjas: string[]
 }
 
@@ -682,7 +682,7 @@ export interface Instalacion {
   tiempos: Record<string, Instante>
 }
 
-/** Un aviso del resolver (paso 8): siempre trae la frase en cristiano. */
+/** Un aviso del resolver (paso 8): siempre trae la frase clara. */
 export interface AvisoDeParrilla {
   tipo: string
   texto: string

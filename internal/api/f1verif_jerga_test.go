@@ -39,7 +39,7 @@ func (h hallazgo) String() string {
 
 // TestF1Verif56SinJergaEnLaInterfaz revisa el paquete de cadenas que llega a
 // ver el operador: los textos de la interfaz (web/src) y los textos que el
-// servidor le manda en cristiano (errores de la API, motivo_en_cristiano,
+// servidor le manda en palabras claras (errores de la API, motivo_claro,
 // avisos del resolver, motivos del importador).
 func TestF1Verif56SinJergaEnLaInterfaz(t *testing.T) {
 	var todos []hallazgo
@@ -143,7 +143,7 @@ func blanquear(s string) string {
 // ── los textos que manda el servidor ──────────────────────────────────
 
 // sinksUserFacing son las funciones cuyo texto sale tal cual a pantalla: los
-// errores de la API en cristiano, motivo_en_cristiano del ingest, y los
+// errores de la API en palabras claras, motivo_claro del ingest, y los
 // textos con formato que acaban en un aviso o en la bitácora.
 var sinksUserFacing = map[string]bool{
 	"fail": true, "failf": true, "failStore": true,
@@ -154,7 +154,7 @@ var sinksUserFacing = map[string]bool{
 
 // camposUserFacing son los campos de struct que llevan texto para una
 // persona: los avisos del resolver, los motivos del importador y el motivo
-// en cristiano de un archivo en cuarentena.
+// en palabras claras de un archivo en cuarentena.
 var camposUserFacing = map[string]bool{
 	"Text": true, "Reason": true, "PlainReason": true, "Notice": true,
 	"Detail": true, "Motivo": true, "Attribution": true,

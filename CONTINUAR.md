@@ -205,7 +205,7 @@ go test ./... -count=1           # todo debe estar verde
    ingest y al dejar pasar). La **bitácora** vive en Al aire
    (`componentes/Bitacora.tsx`): tarjeta con lo último y panel al lado con
    7/30/90 días agrupado por día; `GET /incidentes` manda `texto`, la frase
-   en cristiano de cada tipo (`app.TextoDeIncidente`, con los tipos de F2
+   en palabras claras de cada tipo (`app.TextoDeIncidente`, con los tipos de F2
    ya escritos), y la pantalla se refresca con cada `{"tipo":"evento"}` del
    WebSocket (`suscribirseAEventos` en `lib/api.ts`). Cambio de semántica:
    **`App.Incident` cierra el suceso en el mismo instante** (`fin` =

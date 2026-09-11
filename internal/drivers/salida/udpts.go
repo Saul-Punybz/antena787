@@ -147,7 +147,7 @@ func leerParamsUDPTS(raw string) (ParamsUDPTS, error) {
 }
 
 // destino parte «239.1.1.1:1234» —con o sin udp:// delante— en dirección y
-// puerto, y lo dice en cristiano cuando no se entiende.
+// puerto, y lo dice en palabras claras cuando no se entiende.
 func destino(s string) (string, int, error) {
 	s = strings.TrimSpace(s)
 	s = strings.TrimPrefix(strings.TrimPrefix(s, "udp://"), "@")
@@ -175,7 +175,7 @@ func esGrupo(host string) bool {
 	return ip != nil && ip.IsMulticast()
 }
 
-// valida dice en cristiano lo que un multiplexor no perdonaría. Nada de
+// valida dice en palabras claras lo que un multiplexor no perdonaría. Nada de
 // «parámetro inválido»: lo que se lee es lo que pasa y qué hacer.
 func (d *udpts) valida() error {
 	p := d.p

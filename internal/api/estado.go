@@ -39,12 +39,12 @@ type estadoBody struct {
 	// Acelerador es con qué se está comprimiendo el video de verdad, que no
 	// siempre es lo que el canal tiene guardado: cuando la tarjeta deja de
 	// responder dos veces en diez minutos, el canal sigue por el procesador
-	// y aquí se ve (F2-11). AceleradorPorque es la frase en cristiano de por
+	// y aquí se ve (F2-11). AceleradorPorque es la frase clara de por
 	// qué cambió, vacía cuando es lo que se pidió.
 	Acelerador       string `json:"acelerador_efectivo"`
 	AceleradorPorque string `json:"acelerador_porque,omitempty"`
 	// AceleradoresDisponibles es la lista que Ajustes ofrece, con el nombre
-	// ya en cristiano y si este ffmpeg de verdad lo trae. Va aquí y no en
+	// ya en palabras claras y si este ffmpeg de verdad lo trae. Va aquí y no en
 	// GET /canal para no cambiarle la forma al canal, que es el modelo pelado.
 	AceleradoresDisponibles []aceleradorEnPantalla `json:"aceleradores_disponibles"`
 }

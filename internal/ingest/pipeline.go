@@ -82,7 +82,7 @@ func (d Deps) thumbDir(path string) string {
 // la corre la Queue aparte, priorizada por hora de aire (AUDITORIA B7).
 //
 // Si algo va mal devuelve el asset ya marcado en cuarentena, con su
-// motivo_en_cristiano puesto, y además el error: el que llama guarda el
+// motivo_claro puesto, y además el error: el que llama guarda el
 // asset igual, porque un archivo en cuarentena también se ve en Biblioteca y
 // tiene su botón de "dejarlo pasar bajo mi responsabilidad" (PRD §9 paso 1).
 func Ingest(ctx context.Context, d Deps, path string) (model.MediaAsset, model.Title, []model.Episode, error) {

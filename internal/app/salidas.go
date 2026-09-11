@@ -31,7 +31,7 @@ type tandaDeSalidas struct {
 
 // abrirSalidas traduce las salidas configuradas del canal a lo que el encoder
 // entiende. Una salida que no se puede abrir —una dirección mal escrita, un
-// PCR imposible— **no calla el canal**: se dice en cristiano, queda apuntada
+// PCR imposible— **no calla el canal**: se dice en palabras claras, queda apuntada
 // en su propia fila, y las demás salen igual (F2-49).
 func (a *App) abrirSalidas(ctx context.Context, formato engine.Format) (*tandaDeSalidas, error) {
 	filas, err := a.Store.Output.List(ctx, a.ChannelID)
@@ -130,7 +130,7 @@ func (t *tandaDeSalidas) cerrar() {
 	}
 }
 
-// texto es a dónde está saliendo el canal, en cristiano, para la bitácora.
+// texto es a dónde está saliendo el canal, en palabras claras, para la bitácora.
 func (t *tandaDeSalidas) texto() string {
 	if len(t.textos) == 0 {
 		return "ninguna salida"

@@ -175,7 +175,7 @@ function TarjetaDeSalida({
       )}
 
       {error && (
-        <div className="error-en-cristiano" style={{ marginTop: 10 }}>
+        <div className="error-claro" style={{ marginTop: 10 }}>
           {error}
         </div>
       )}
@@ -397,7 +397,7 @@ function EditorDeSalida({
         </>
       }
     >
-      {error && <div className="error-en-cristiano">{error}</div>}
+      {error && <div className="error-claro">{error}</div>}
 
       <div className="campo">
         <label htmlFor="s-nombre">Nombre</label>
@@ -438,7 +438,7 @@ function EditorDeSalida({
   )
 }
 
-/** Elegir el tipo de salida en cristiano: nunca la clave sola (PRD §4.3, tipos.ts). */
+/** Elegir el tipo de salida en palabras claras: nunca la clave sola (PRD §4.3, tipos.ts). */
 function SelectorDeTipo({
   lista,
   valor,

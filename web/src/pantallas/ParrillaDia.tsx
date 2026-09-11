@@ -35,7 +35,7 @@ function duracionDe(it: ElementoDelPlan): string {
   return it.duracion ?? duracionLarga(it.duracion_planeada_ms)
 }
 
-/** De dónde viene el bloque, en cristiano. */
+/** De dónde viene el bloque, en palabras claras. */
 function origenDe(it: ElementoDelPlan): string {
   switch (it.origen) {
     case 'relleno':

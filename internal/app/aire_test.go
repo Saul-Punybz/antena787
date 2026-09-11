@@ -248,7 +248,7 @@ func TestSaleAlAireYVuelveASombraConElMotorDeVerdad(t *testing.T) {
 		t.Fatalf("el canal quedó en %q después de apagar", de.Mode)
 	}
 
-	// Los dos incidentes, con quién lo hizo y con su frase en cristiano.
+	// Los dos incidentes, con quién lo hizo y con su frase clara.
 	incs, err := a.Store.Incident.List(ctx, a.ChannelID, a.Now().Add(-time.Hour), a.Now().Add(time.Hour))
 	if err != nil {
 		t.Fatalf("no pude leer los incidentes: %v", err)
@@ -267,7 +267,7 @@ func TestSaleAlAireYVuelveASombraConElMotorDeVerdad(t *testing.T) {
 			t.Fatalf("el incidente %q no dice quién lo hizo: %q", tipo, encontrado.Detail)
 		}
 		if texto := TextoDeIncidente(tipo); texto == tipo || texto == "" {
-			t.Fatalf("el incidente %q no tiene frase en cristiano", tipo)
+			t.Fatalf("el incidente %q no tiene frase clara", tipo)
 		}
 	}
 

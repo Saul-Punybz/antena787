@@ -156,7 +156,7 @@ func TestF1_26_LosErroresDeMoverSeEntienden(t *testing.T) {
 		t.Fatalf("un cambio vacío dio %d: %s", w.Code, w.Body.String())
 	}
 
-	// Y encima de otro bloque: 409 con la frase en cristiano.
+	// Y encima de otro bloque: 409 con la frase clara.
 	w = c.do("PUT", "/api/v1/plan/"+itoa(uno.ID), map[string]any{
 		"instante_planeado": dos.PlannedAt.UTC().Format(time.RFC3339),
 	})

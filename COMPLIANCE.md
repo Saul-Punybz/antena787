@@ -128,7 +128,7 @@ repetición y que no sea noticias (§(d)(8)), o el horario 2 a.m.–6 a.m.
 perfil `us-fcc` (`subtitulos_estado`, F1-77): «Estamos obligados a
 subtitular», «Estamos exentos» o «No lo sé todavía» (el default), con esta
 misma ayuda del umbral de $3M debajo. Mientras el ajuste siga en "no sé",
-`GET /estado` avisa —una vez, en cristiano— y se apaga solo al decidir.*
+`GET /estado` avisa —una vez, en palabras claras— y se apaga solo al decidir.*
 
 ### Archivo de anuncios políticos — 47 CFR 73.1942 / 73.1943
 

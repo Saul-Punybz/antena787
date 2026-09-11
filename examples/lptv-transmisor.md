@@ -52,7 +52,7 @@ PC ──UDP/RTP (Ethernet)──▶ multiplexor ──ASI──▶ excitador �
 | **Retorno de aire** | La tarjeta receptora, que captura la señal **después del ENDEC** — el único sitio donde se puede saber qué salió de verdad *(ADR 0009)*. De ahí sale también el monitor que se ve desde el teléfono. |
 | **Telemetría del transmisor** | Solo lectura. El asistente pregunta qué cables hay —red de manejo, USB, contactos— y prueba cada uno. Potencia directa en cero es fuera del aire, diga lo que diga la red. |
 | **Disco** | Sistema y base en el SSD; biblioteca y grabación en el HDD. Con la biblioteca cargada, quedan semanas de grabación a 720p. |
-| **Importar la hoja** | El importador **nunca rechaza la hoja entera**: trae lo válido y lista fila por fila lo que no pasó y por qué, en cristiano. Después, la parrilla enseña las horas vacías con un botón de un clic para llenarlas con diferido. |
+| **Importar la hoja** | El importador **nunca rechaza la hoja entera**: trae lo válido y lista fila por fila lo que no pasó y por qué, en palabras claras. Después, la parrilla enseña las horas vacías con un botón de un clic para llenarlas con diferido. |
 
 **Lo que cambia el lunes:** llenar el tiempo, cambiar el tiempo, interrumpir la
 programación, añadir y quitar — todo eso deja de ser el trabajo de la semana y

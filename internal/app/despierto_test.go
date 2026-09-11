@@ -97,7 +97,7 @@ func TestDespiertoSostieneALaPrimeraSinAlarma(t *testing.T) {
 func TestFraseDeMaquinaDespierta(t *testing.T) {
 	texto := TextoDeIncidente("maquina_despierta")
 	if texto == "" || strings.Contains(texto, "_") {
-		t.Fatalf("`maquina_despierta` no tiene frase en cristiano: %q", texto)
+		t.Fatalf("`maquina_despierta` no tiene frase clara: %q", texto)
 	}
 }
 
@@ -106,7 +106,7 @@ func TestFraseDeMaquinaDespierta(t *testing.T) {
 func TestFraseDeGuardianCaido(t *testing.T) {
 	texto := TextoDeIncidente("guardian_caido")
 	if texto == "" || strings.Contains(texto, "_") {
-		t.Fatalf("`guardian_caido` no tiene frase en cristiano: %q", texto)
+		t.Fatalf("`guardian_caido` no tiene frase clara: %q", texto)
 	}
 	if texto != TextoGuardianCaido {
 		t.Fatalf("la frase del catálogo (%q) no es TextoGuardianCaido (%q)", texto, TextoGuardianCaido)

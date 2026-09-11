@@ -260,7 +260,7 @@ var nombresDeResultado = map[uint16]string{
 	ResultadoNoUsado:                 "sin usar",
 }
 
-// NombreDeResultado dice en cristiano qué contestó el inyector, para la
+// NombreDeResultado dice en palabras claras qué contestó el inyector, para la
 // bitácora y para la pantalla. Un código que no está en la tabla no es un
 // error: el estándar reserva rangos y cada fabricante puede añadir los suyos.
 func NombreDeResultado(r uint16) string {

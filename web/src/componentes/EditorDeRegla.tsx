@@ -62,7 +62,7 @@ export function reglaDesdeHueco(v: {
   }
 }
 
-/** Validación en cristiano: la local y la que devuelva el servidor. */
+/** Validación en palabras claras: la local y la que devuelva el servidor. */
 function validar(v: {
   titulo: string
   patron: string
@@ -139,7 +139,7 @@ export function EditorDeRegla({
       await api.recalcular().catch(() => {})
       alGuardar()
     } catch (e) {
-      // El texto del error del servidor ya viene en cristiano (docs/API.md).
+      // El texto del error del servidor ya viene en palabras claras (docs/API.md).
       setError(e instanceof ErrorDeApi ? e.message : 'No se pudo guardar la regla.')
     } finally {
       setGuardando(false)
@@ -174,7 +174,7 @@ export function EditorDeRegla({
         </>
       }
     >
-      {error && <div className="error-en-cristiano">{error}</div>}
+      {error && <div className="error-claro">{error}</div>}
 
       {de?.nota && <div className="nota">{de.nota}</div>}
 

@@ -126,8 +126,8 @@ func (a *App) acceptFromPortal(ctx context.Context, path string) {
 }
 
 // IngestFile mide un archivo, lo guarda y encola su normalización. Un archivo
-// que no pasa queda en cuarentena, guardado igual, con su motivo en
-// cristiano: en Biblioteca se ve, y tiene su botón de dejarlo pasar.
+// que no pasa queda en cuarentena, guardado igual, con su motivo en palabras
+// claras: en Biblioteca se ve, y tiene su botón de dejarlo pasar.
 func (a *App) IngestFile(ctx context.Context, path string) {
 	if _, err := a.Store.Media.GetByPath(ctx, path); err == nil {
 		return // ya está: la carpeta vigilada reavisa al reiniciar

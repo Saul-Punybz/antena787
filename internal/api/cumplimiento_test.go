@@ -33,8 +33,8 @@ func (c *cliente) conPerfil(perfil string) *cliente {
 // contrato_test.go) compara por ese texto.
 const textoSinDecidir = "Todavía no dijiste si el canal está obligado a subtitular: dilo en Ajustes → Cumplimiento"
 
-// Los tres valores válidos se guardan tal cual; cualquier otro se rechaza en
-// cristiano y no toca lo que ya había.
+// Los tres valores válidos se guardan tal cual; cualquier otro se rechaza en palabras
+// claras y no toca lo que ya había.
 func TestAjustesSubtitulosValoresValidos(t *testing.T) {
 	c := nuevo(t).conClave().entrar()
 	for _, v := range []string{"obligada", "exenta", "no_se"} {
@@ -61,7 +61,7 @@ func TestAjustesSubtitulosValorInvalido(t *testing.T) {
 	var e errorBody
 	c.json(w, &e)
 	if e.Error == "" {
-		t.Fatal("el rechazo no viene con un mensaje en cristiano")
+		t.Fatal("el rechazo no viene con un mensaje claro")
 	}
 	if got := c.setting(app.KeySubtitulosEstado); got != "obligada" {
 		t.Fatalf("el rechazo tocó el valor que ya había: quedó %q", got)

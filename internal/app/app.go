@@ -215,7 +215,7 @@ type App struct {
 	DataDir string
 	Version string
 
-	// FFmpeg y FFprobe son las rutas encontradas; FFmpegErr dice en cristiano
+	// FFmpeg y FFprobe son las rutas encontradas; FFmpegErr dice en palabras claras
 	// por qué no están, si no están. Que falten no impide arrancar: se puede
 	// entrar a la interfaz y arreglarlo.
 	FFmpeg    string
@@ -361,7 +361,7 @@ func restoreBackup(backup, dbPath string) error {
 	return os.WriteFile(dbPath, in, 0o644)
 }
 
-// findFFmpeg busca las dos herramientas y traduce el fallo a cristiano.
+// findFFmpeg busca las dos herramientas y traduce el fallo a palabras claras.
 func findFFmpeg() (ffmpeg, ffprobe string, err error) {
 	ffmpeg, e1 := engine.FFmpeg()
 	ffprobe, e2 := engine.FFprobe()
@@ -599,7 +599,7 @@ func (a *App) UsandoAcelerador(ac engine.Acelerador) {
 // ForzarAcelerador es lo que llama el watchdog cuando la tarjeta dejó de
 // responder dos veces en diez minutos: a partir de aquí el canal comprime con
 // lo que diga ac —software— sin tocar lo que la persona guardó, y porque
-// explica en cristiano por qué. ForzarAcelerador("", "") lo suelta.
+// explica en palabras claras por qué. ForzarAcelerador("", "") lo suelta.
 func (a *App) ForzarAcelerador(ac engine.Acelerador, porque string) {
 	a.accelMu.Lock()
 	defer a.accelMu.Unlock()

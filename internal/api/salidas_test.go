@@ -8,7 +8,7 @@ import (
 )
 
 // El CRUD de las salidas (T2 de F2): que se puedan escribir, cambiar y quitar,
-// que lo que un multiplexor no aceptaría se conteste en cristiano y no se
+// que lo que un multiplexor no aceptaría se conteste en palabras claras y no se
 // guarde, y que Al aire las reciba en /estado.
 
 func TestLasSalidasSeEscribenSeCambianYSeQuitan(t *testing.T) {

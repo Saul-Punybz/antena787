@@ -49,7 +49,7 @@ func TestInstalacionTraeTodoLoQuePintaLaPantalla(t *testing.T) {
 	}
 	red, _ := cuerpo.Detectado["red"].(string)
 	if !strings.Contains(red, "conectado") && !strings.Contains(red, "sin red") {
-		t.Fatalf("la red no se dice en cristiano: %q", red)
+		t.Fatalf("la red no se dice en palabras claras: %q", red)
 	}
 
 	for _, lista := range []string{"modo", "destino", "retorno", "calidad"} {

@@ -28,7 +28,7 @@ import (
 	"time"
 )
 
-// Los códigos de motivo. El motivo en cristiano es para la persona; el
+// Los códigos de motivo. El motivo claro es para la persona; el
 // código es para el programa, que a veces tiene que hacer algo distinto
 // según por qué se paró un archivo. Se guardan en media_asset.motivo_codigo.
 const (
@@ -76,7 +76,7 @@ func mmss(ms int64) string {
 
 // PlainError es un error con su motivo escrito para una persona que no es
 // técnica. Reason es lo que se muestra en pantalla y lo que se guarda en
-// motivo_en_cristiano; Code es el código de motivo —vacío en casi todos— y
+// motivo_claro; Code es el código de motivo —vacío en casi todos— y
 // Err es el detalle para el registro.
 type PlainError struct {
 	Reason string
@@ -122,14 +122,14 @@ func Motivo(err error) string {
 func EsSinAudio(err error) bool { return Motivo(err) == MotivoSinAudio }
 
 // TextoSinAudio reconoce el motivo de «no trae sonido» ya guardado en
-// motivo_en_cristiano. Hace falta porque después de reiniciar solo queda el
+// motivo_claro. Hace falta porque después de reiniciar solo queda el
 // texto: el código del error no se guarda en ninguna columna.
 func TextoSinAudio(reason string) bool {
 	return strings.Contains(reason, "no trae sonido") && strings.Contains(reason, "pon a su lado")
 }
 
-// Plain devuelve el motivo en cristiano de un error, o su texto si el error
-// no trae uno. Sirve para llenar motivo_en_cristiano sin preguntar tipos.
+// Plain devuelve el motivo claro de un error, o su texto si el error
+// no trae uno. Sirve para llenar motivo_claro sin preguntar tipos.
 func Plain(err error) string {
 	if err == nil {
 		return ""

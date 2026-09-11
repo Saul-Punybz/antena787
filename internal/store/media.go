@@ -21,7 +21,7 @@ type MediaAssetRepo struct {
 const mediaCols = `id, channel_id, ruta, hash, codec, resolucion, fps, canales_audio,
 	duracion_medida_ms, lufs, true_peak, tiene_subtitulos, formato_subtitulos,
 	subtitulos_externos, negro_cabeza_ms, negro_cola_ms, marcas_de_corte_ms,
-	cuadro_miniatura, estado, motivo_en_cristiano, motivo_codigo, estado_normalizacion,
+	cuadro_miniatura, estado, motivo_claro, motivo_codigo, estado_normalizacion,
 	ruta_normalizada, negro_intencional, sin_logo, dejado_pasar_por,
 	pistas_audio, pista_audio_aire, pista_audio_sap, audio_sidecar,
 	subtitulos_sidecar, creado_ms, actualizado_ms`
@@ -84,7 +84,7 @@ func (r *MediaAssetRepo) Insert(ctx context.Context, a *model.MediaAsset) error 
 		INSERT INTO media_asset (channel_id, ruta, hash, codec, resolucion, fps,
 			canales_audio, duracion_medida_ms, lufs, true_peak, tiene_subtitulos,
 			formato_subtitulos, subtitulos_externos, negro_cabeza_ms, negro_cola_ms,
-			marcas_de_corte_ms, cuadro_miniatura, estado, motivo_en_cristiano,
+			marcas_de_corte_ms, cuadro_miniatura, estado, motivo_claro,
 			motivo_codigo, estado_normalizacion, ruta_normalizada, negro_intencional, sin_logo,
 			dejado_pasar_por, pistas_audio, pista_audio_aire, pista_audio_sap,
 			audio_sidecar, subtitulos_sidecar, creado_ms, actualizado_ms)
@@ -121,7 +121,7 @@ func (r *MediaAssetRepo) Update(ctx context.Context, a *model.MediaAsset) error 
 			lufs = ?, true_peak = ?, tiene_subtitulos = ?, formato_subtitulos = ?,
 			subtitulos_externos = ?, negro_cabeza_ms = ?, negro_cola_ms = ?,
 			marcas_de_corte_ms = ?, cuadro_miniatura = ?, estado = ?,
-			motivo_en_cristiano = ?, motivo_codigo = ?, estado_normalizacion = ?, ruta_normalizada = ?,
+			motivo_claro = ?, motivo_codigo = ?, estado_normalizacion = ?, ruta_normalizada = ?,
 			negro_intencional = ?, sin_logo = ?, dejado_pasar_por = ?,
 			pistas_audio = ?, pista_audio_aire = ?, pista_audio_sap = ?,
 			audio_sidecar = ?, subtitulos_sidecar = ?, actualizado_ms = ?
@@ -186,12 +186,12 @@ func (r *MediaAssetRepo) ListReady(ctx context.Context) ([]model.MediaAsset, err
 	return r.List(ctx, model.AssetReady)
 }
 
-// SetState cambia el estado de un archivo y deja escrito el motivo en
-// cristiano — el que se le enseña a la persona cuando algo quedó en
+// SetState cambia el estado de un archivo y deja escrito el motivo en palabras
+// claras — el que se le enseña a la persona cuando algo quedó en
 // cuarentena.
 func (r *MediaAssetRepo) SetState(ctx context.Context, id int64, state model.AssetState, reason string) error {
 	res, err := r.db.ExecContext(ctx, `
-		UPDATE media_asset SET estado = ?, motivo_en_cristiano = ?, actualizado_ms = ?
+		UPDATE media_asset SET estado = ?, motivo_claro = ?, actualizado_ms = ?
 		WHERE id = ?`, string(state), reason, model.Ms(time.Now().UTC()), id)
 	if err != nil {
 		return translate("cambiar el estado del archivo", err)
@@ -284,7 +284,7 @@ func existePista(pistas []model.PistaAudio, indice int) bool {
 	return false
 }
 
-// nombreDePista escribe la pista en cristiano para la bitácora: "pista 2
+// nombreDePista escribe la pista en palabras claras para la bitácora: "pista 2
 // (inglés)" o, si no se sabe nada de ella, "pista 2".
 func nombreDePista(pistas []model.PistaAudio, indice int) string {
 	for _, p := range pistas {

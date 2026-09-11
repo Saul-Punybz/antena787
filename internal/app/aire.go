@@ -7,7 +7,7 @@
 // dejando constancia de quién lo hizo (F2-118).
 //
 // Las comprobaciones no son un examen: son las cosas sin las que la señal
-// saldría negra. Cada una se dice en cristiano, y la que no se cumple dice
+// saldría negra. Cada una se dice en palabras claras, y la que no se cumple dice
 // además qué hacer. Lo que no se puede comprobar se avisa y no se impide:
 // el software nunca regaña y nunca miente.
 package app

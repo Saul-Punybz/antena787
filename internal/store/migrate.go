@@ -31,6 +31,7 @@ var migrations = []Migration{
 	{Version: 5, SQL: migracion5},
 	{Version: 6, SQL: migracion6},
 	{Version: 7, SQL: migracion7},
+	{Version: 8, SQL: migracion8},
 }
 
 // migracion2 cierra tres huecos de integridad del plan (F1-12, F1-22, F1-26
@@ -198,6 +199,20 @@ ALTER TABLE title ADD COLUMN infantil_core INTEGER NOT NULL DEFAULT 0;
 const migracion7 = `
 -- auto | software | nvenc | qsv | vaapi | videotoolbox (engine.Acelerador).
 ALTER TABLE channel ADD COLUMN acelerador TEXT NOT NULL DEFAULT 'auto';
+`
+
+// migracion8 le quita a una columna un modismo que no es de aquí. La columna
+// guarda el motivo por el que un archivo se paró, escrito para que lo lea una
+// persona; se llamaba `motivo_en_cristiano`, que es una expresión de España y
+// que además arrastra un origen histórico que nadie tiene por qué cargar en
+// el nombre de un campo. Se llama `motivo_claro`, que dice lo mismo y se
+// entiende en cualquier sitio (Saul, 11 sept 2026).
+//
+// Las migraciones de más abajo que nombran la columna vieja NO se tocan: se
+// aplican sobre bases que todavía no han subido este escalón, y reescribirlas
+// las rompería.
+const migracion8 = `
+ALTER TABLE media_asset RENAME COLUMN motivo_en_cristiano TO motivo_claro;
 `
 
 // SchemaVersion es la versión a la que lleva este binario.

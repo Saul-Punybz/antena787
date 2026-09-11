@@ -769,7 +769,7 @@ function reponerPendientes(texto: string) {
 
 const LETRAS_DE_DIAS = 'LMMJVSD'
 
-/** El patrón de días, en cristiano: «L-V», «S-D», «todos los días» o «LMV». */
+/** El patrón de días, en palabras claras: «L-V», «S-D», «todos los días» o «LMV». */
 function diasEnCristiano(patron: string): string {
   const puestos = (patron + '_______').slice(0, 7).split('').map((c) => c !== '_' && c !== ' ')
   if (puestos.every(Boolean)) return 'todos los días'
@@ -1053,7 +1053,7 @@ function apuntarPaso(n: number) {
 }
 
 /**
- * Lo que el asistente propone en cada pregunta. Categorías en cristiano: el
+ * Lo que el asistente propone en cada pregunta. Categorías en palabras claras: el
  * valor es interno y nunca sale a pantalla (PRD §10). «Todavía no» está en la
  * lista como una respuesta más, no como el renglón chiquito del final.
  */
@@ -1195,7 +1195,7 @@ function tieneOpcion(lista: Opcion[], valor: string): boolean {
 
 /**
  * Los nueve pasos. Cada uno contesta {paso, siguiente} más lo suyo, y los
- * errores traen la frase en cristiano y el campo, igual que el servidor Go.
+ * errores traen la frase clara y el campo, igual que el servidor Go.
  */
 function pasoDelAsistente(n: number, cuerpo: Record<string, unknown> | undefined): Response {
   const c = cuerpo ?? {}
@@ -1442,10 +1442,10 @@ function textoArchivoDemo(parametros: string): string {
   return p.ruta?.trim() ? `al archivo ${p.ruta.trim()}` : ''
 }
 
-// Los tipos de salida que este demo sabe abrir, con su nombre en cristiano
+// Los tipos de salida que este demo sabe abrir, con su nombre en palabras claras
 // (el mismo que devuelve GET /salidas en `drivers_disponibles`). Se guarda
 // una sola vez para no repetir la lista y para poder nombrar un tipo
-// desconocido en cristiano en vez de por su clave (F1-56).
+// desconocido en palabras claras en vez de por su clave (F1-56).
 const TIPOS_DE_SALIDA_DEMO: DriverDeSalida[] = [
   {
     driver: 'udp-ts',
@@ -1460,7 +1460,7 @@ const TIPOS_DE_SALIDA_DEMO: DriverDeSalida[] = [
   },
 ]
 
-/** La frase en cristiano de a dónde va la salida, como la escribe el servidor. */
+/** La frase clara de a dónde va la salida, como la escribe el servidor. */
 function textoDeSalidaDemo(tipo: string, parametros: string): string {
   if (tipo === 'udp-ts') return textoUDPTSDemo(parametros)
   if (tipo === 'archivo') return textoArchivoDemo(parametros)
@@ -1520,8 +1520,8 @@ export async function responder(ruta: string, init?: RequestInit): Promise<Respo
   }
   if (p === '/estado') return json(estado())
   // Las salidas del canal (§10, F2-46, F2-50, F2-114): la pantalla Salidas.tsx
-  // hace el CRUD completo aquí, con la misma validación y el mismo texto en
-  // cristiano que escribiría el servidor de verdad.
+  // hace el CRUD completo aquí, con la misma validación y el mismo texto en palabras
+  // claras que escribiría el servidor de verdad.
   if (p === '/salidas' && metodo === 'GET') {
     return json({
       salidas,

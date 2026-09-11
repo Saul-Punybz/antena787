@@ -98,7 +98,7 @@ func TestPruebaSemanalRWTDelManual(t *testing.T) {
 	// 1020638 es día 102 (12 de abril) a las 06:38 **UTC**, y el texto
 	// expandido de la misma línea del manual dice «beginning at 02:38 am»:
 	// esas dos horas no se contradicen, la cabecera va en UTC (11.31) y el
-	// texto en cristiano va en la hora local del ENDEC. Confundirlas escribe el
+	// texto en palabras claras va en la hora local del ENDEC. Confundirlas escribe el
 	// as-run cuatro horas corrido, así que aquí se fija en UTC a propósito.
 	quiero := time.Date(2026, 4, 12, 6, 38, 0, 0, time.UTC)
 	if !c.Instante.Equal(quiero) {
@@ -108,7 +108,7 @@ func TestPruebaSemanalRWTDelManual(t *testing.T) {
 		t.Fatalf("la señal de llamada salió %q; los espacios de relleno se recortan", c.Estacion)
 	}
 
-	// El texto en cristiano llega detrás, como eventos propios: la cabecera no
+	// El texto en palabras claras llega detrás, como eventos propios: la cabecera no
 	// se retiene esperándolo, porque la noticia es la alerta y no su prosa.
 	textos := soloTipo(eventos, TipoTexto)
 	if len(textos) != 2 {

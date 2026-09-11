@@ -894,7 +894,7 @@ func tieneAlarma(c *cliente, texto string) bool {
 }
 
 // TestLaBitacoraMandaLoQueLaPantallaPinta: GET /incidentes trae cada fila con
-// lo que `Incidente` declara y, además, la frase en cristiano de su tipo,
+// lo que `Incidente` declara y, además, la frase clara de su tipo,
 // para que Al aire no tenga que saber qué es un `salto_de_reloj` (F1-69).
 func TestLaBitacoraMandaLoQueLaPantallaPinta(t *testing.T) {
 	c := nuevo(t).conClave().entrar()
@@ -936,7 +936,7 @@ func TestLaBitacoraMandaLoQueLaPantallaPinta(t *testing.T) {
 		t.Errorf("pedir la bitácora del futuro tenía que dar una lista vacía: %d %s", w.Code, w.Body.String())
 	}
 	if w := c.do("GET", "/api/v1/incidentes?desde=ayer", nil); w.Code != http.StatusBadRequest {
-		t.Errorf("una fecha mal escrita tenía que ser 400 con frase en cristiano: %d %s", w.Code, w.Body.String())
+		t.Errorf("una fecha mal escrita tenía que ser 400 con frase clara: %d %s", w.Code, w.Body.String())
 	}
 }
 

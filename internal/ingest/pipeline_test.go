@@ -78,7 +78,7 @@ func TestSubtitulosRotosSeRechazan(t *testing.T) {
 		if _, err := ValidateSidecar(p); err == nil {
 			t.Errorf("%s: se esperaba un error y pasó", name)
 		} else if Plain(err) == "" {
-			t.Errorf("%s: el error no trae motivo en cristiano", name)
+			t.Errorf("%s: el error no trae motivo claro", name)
 		}
 	}
 	ok := filepath.Join(dir, "bueno.vtt")
@@ -327,7 +327,7 @@ func TestIngestArchivoVacioVaACuarentena(t *testing.T) {
 		t.Errorf("estado = %q, se esperaba cuarentena", asset.State)
 	}
 	if !strings.Contains(asset.PlainReason, "vacío") {
-		t.Errorf("motivo_en_cristiano = %q", asset.PlainReason)
+		t.Errorf("motivo_claro = %q", asset.PlainReason)
 	}
 	if asset.PlainReason != Plain(err) {
 		t.Error("el motivo del asset y el del error no coinciden")
@@ -349,7 +349,7 @@ func TestIngestArchivoRotoVaACuarentena(t *testing.T) {
 		t.Errorf("estado = %q, se esperaba cuarentena", asset.State)
 	}
 	if asset.PlainReason == "" || strings.Contains(asset.PlainReason, "ffprobe") {
-		t.Errorf("el motivo no está en cristiano: %q", asset.PlainReason)
+		t.Errorf("el motivo no está en palabras claras: %q", asset.PlainReason)
 	}
 }
 

@@ -4,7 +4,7 @@
 //
 // Tres reglas mandan sobre todo lo demás:
 //
-//   - **Los errores están en cristiano.** Un 4xx trae
+//   - **Los errores están en palabras claras.** Un 4xx trae
 //     `{"error": "…", "campo": "…"}` y el texto es el que ve la persona. No
 //     hay códigos crípticos.
 //   - **Todo lo que cambia datos queda en la auditoría**, con `origen:

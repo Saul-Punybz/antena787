@@ -96,7 +96,7 @@ debe tocar `frameserver.go` hasta que T1 esté fusionada.
 > **Decisiones del agente, y lo que T4/T5/T6/T7 heredan:**
 >
 > - `internal/drivers/salida` con el contrato del plan más un tercer método,
->   `Descripcion() string`: la frase en cristiano de a dónde va una salida
+>   `Descripcion() string`: la frase clara de a dónde va una salida
 >   («al grupo 239.1.1.1:1234, 4 salto(s) de red · MPEG-2 8000 kb/s de
 >   imagen…»), que es lo que pinta Al aire y lo que contesta la API. Sin ella,
 >   cada pantalla tendría que volver a interpretar los `parametros`.

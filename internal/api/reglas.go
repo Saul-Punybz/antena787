@@ -20,8 +20,8 @@ type ruleOut struct {
 	Titulo   string       `json:"titulo"`
 	Ficha    *model.Title `json:"ficha,omitempty"`
 	DaysLeft int          `json:"dias_restantes"`
-	Pattern  string       `json:"patron_en_cristiano"`
-	Clock    string       `json:"hora_en_cristiano"`
+	Pattern  string       `json:"patron_claro"`
+	Clock    string       `json:"hora_clara"`
 	// Cómo se llama el programa de la regla que releva y de la que repite:
 	// son las etiquetas «releva a …» y «repite a …» de la pantalla de Reglas,
 	// que con solo el número no se pueden escribir.
@@ -203,7 +203,7 @@ func onlyDay(d model.Day) model.DayPattern {
 	return model.DayPattern(letters)
 }
 
-// prepareRule pone los valores por defecto y valida en cristiano. Devuelve
+// prepareRule pone los valores por defecto y valida en palabras claras. Devuelve
 // false cuando ya contestó con el error.
 func (s *Server) prepareRule(ctx context.Context, w http.ResponseWriter, rule *model.ScheduleRule) bool {
 	rule.ChannelID = s.App.ChannelID

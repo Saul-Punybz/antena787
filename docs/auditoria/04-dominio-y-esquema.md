@@ -165,7 +165,7 @@ términos.
 `salidaNoAbre` (`internal/app/salidas.go:84-93`) tiene el mismo problema en
 general, no solo con `udpts.go`: guarda `err.Error()` tal cual como
 `ultimo_error` para **cualquier** driver de salida, así que cualquier error
-de Go sin envolver en cristiano —un futuro driver que devuelva
+de Go sin envolver en palabras claras —un futuro driver que devuelva
 `"dial tcp: connection refused"`, por ejemplo— saldría directo a pantalla sin
 que F1-56 lo detecte, porque el test de jerga no revisa mensajes armados en
 tiempo de ejecución con `fmt.Errorf`/`%w`, solo cadenas literales del código
@@ -225,7 +225,7 @@ fuente.
    comporta como dato vacío sin ninguna señal.
 4. `salidaNoAbre` expone `err.Error()` crudo en `ultimo_error`
    (§5) para cualquier driver de salida presente o futuro, sin pasar por un
-   texto en cristiano curado — hoy ya deja pasar `PID`/`PCR`/`TTL`/`tsid` del
+   texto en palabras claras curado — hoy ya deja pasar `PID`/`PCR`/`TTL`/`tsid` del
    driver `udpts`.
 5. `plan_item.corte_id` sin `REFERENCES corte(id)` mientras
    `break_marker.corte_id` sí la tiene para el mismo concepto (§3).

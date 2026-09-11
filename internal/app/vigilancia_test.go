@@ -177,7 +177,7 @@ func TestF2_51SilencioAlAireAvisaYQuedaEnLaBitacora(t *testing.T) {
 		t.Errorf("la alarma es de nivel %q y el canal está mudo", al.Nivel)
 	}
 	if !strings.Contains(al.Texto, "sin sonido") {
-		t.Errorf("la alarma dice %q y tenía que decirlo en cristiano", al.Texto)
+		t.Errorf("la alarma dice %q y tenía que decirlo en palabras claras", al.Texto)
 	}
 	incs := incidentesDe(t, a, model.IncSilencioDetectado.String())
 	if len(incs) != 1 {
@@ -189,7 +189,7 @@ func TestF2_51SilencioAlAireAvisaYQuedaEnLaBitacora(t *testing.T) {
 		t.Error("el incidente se cerró en el mismo instante y el silencio sigue")
 	}
 	if TextoDeIncidente(incs[0].Kind) == incs[0].Kind {
-		t.Error("el tipo de incidente no tiene frase en cristiano")
+		t.Error("el tipo de incidente no tiene frase clara")
 	}
 }
 
@@ -332,7 +332,7 @@ func TestElUmbralSeLeeDeAjustesYSeDefiende(t *testing.T) {
 		t.Error("con el umbral en 30 s, treinta y dos segundos no dispararon")
 	}
 
-	// UmbralValido es lo que la API contesta en cristiano.
+	// UmbralValido es lo que la API contesta en palabras claras.
 	if _, err := UmbralValido("15"); err != nil {
 		t.Errorf("15 s tenía que valer: %v", err)
 	}

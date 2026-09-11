@@ -116,7 +116,7 @@ const (
 // los Eventos.
 //
 // **El primer intento es sincrónico a propósito.** Si el puerto no existe o el
-// socket no contesta, Conectar devuelve el error ahí mismo, en cristiano, para
+// socket no contesta, Conectar devuelve el error ahí mismo, en palabras claras, para
 // que la prueba de diez segundos del asistente pueda decir «este cable no» en
 // vez de dejar a alguien mirando una pantalla que no cambia (regla 4 del
 // contrato de drivers). A partir de ahí, cada caída se reconecta sola con

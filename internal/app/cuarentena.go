@@ -10,7 +10,7 @@ package app
 // cuando alguien deja pasar uno.
 //
 // La bitácora es lo que el sistema hizo solo. Cada tipo de incidente tiene
-// su frase en cristiano aquí, en un solo sitio, para que la pantalla, el
+// su frase clara aquí, en un solo sitio, para que la pantalla, el
 // WebSocket y quien lea la API digan lo mismo.
 
 import (
@@ -116,7 +116,7 @@ var textosDeIncidente = map[string]string{
 	"timeout_manual":  "El control manual venció y el aire volvió solo",
 }
 
-// TextoDeIncidente es la frase en cristiano de un tipo de incidente. Un tipo
+// TextoDeIncidente es la frase clara de un tipo de incidente. Un tipo
 // que no está en la lista se enseña legible igual: `panico_ingest` →
 // «Una parte del sistema falló y se relanzó sola (ingest)».
 func TextoDeIncidente(tipo string) string {
