@@ -22,6 +22,9 @@ type ParamsArchivo struct {
 	BitrateMuxKbs   int    `json:"bitrate_mux_kbs"`
 	BitrateVideoKbs int    `json:"bitrate_video_kbs"`
 	Audio           string `json:"audio"`
+	// BitrateAudioKbs es el bitrate del sonido, de 64 a 384. Vacío = 192, que
+	// es el valor de fábrica y el mismo que trae MistServer. CAtv emite a 128.
+	BitrateAudioKbs int `json:"bitrate_audio_kbs"`
 }
 
 // archivo es el driver de la salida a disco: el mismo transport stream, en un
@@ -82,6 +85,7 @@ func (d *archivo) Abrir(engine.Format) (engine.Output, error) {
 		VideoKbs: d.p.BitrateVideoKbs,
 		MuxKbs:   d.p.BitrateMuxKbs,
 		Audio:    d.p.Audio,
+		AudioKbs: d.p.BitrateAudioKbs,
 	}, nil
 }
 

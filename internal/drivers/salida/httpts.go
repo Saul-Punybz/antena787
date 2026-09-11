@@ -56,6 +56,9 @@ type ParamsHTTPTS struct {
 	BitrateVideoKbs int    `json:"bitrate_video_kbs"`
 	BitrateMuxKbs   int    `json:"bitrate_mux_kbs"`
 	Audio           string `json:"audio"`
+	// BitrateAudioKbs es el bitrate del sonido, de 64 a 384. Vacío = 192, que
+	// es el valor de fábrica y el mismo que trae MistServer. CAtv emite a 128.
+	BitrateAudioKbs int `json:"bitrate_audio_kbs"`
 }
 
 // Valores de fábrica de una salida servida por HTTP.
@@ -218,6 +221,7 @@ func (d *httpts) Abrir(engine.Format) (engine.Output, error) {
 		VideoKbs: d.p.BitrateVideoKbs,
 		MuxKbs:   d.p.BitrateMuxKbs,
 		Audio:    d.p.Audio,
+		AudioKbs: d.p.BitrateAudioKbs,
 		PCRms:    engine.PCRmsPorDefecto,
 	}
 	if d.p.Codec == "h264" {

@@ -70,7 +70,8 @@ func TestLaSalidaAlMultiplexorTraeLoQueElMultiplexorExige(t *testing.T) {
 		PIDVideo: PIDVideoPorDefecto, PIDAudio: PIDAudioPorDefecto, PIDPMT: PIDPMTPorDefecto,
 		Programa: ProgramaPorDefecto, TSID: TSIDPorDefecto,
 		PCRms: engine.PCRmsPorDefecto, Audio: AudioPorDefecto,
-		PktSize: engine.PktSizePorDefecto,
+		AudioKbs: engine.AudioKbsPorDefecto,
+		PktSize:  engine.PktSizePorDefecto,
 	}
 	if out != quiere {
 		t.Fatalf("la salida es\n  %+v\ny tenía que ser\n  %+v", out, quiere)
@@ -95,7 +96,8 @@ func TestElMismoDriverMandaAUnGrupoMulticastConSuTTL(t *testing.T) {
 		Name: "transmisor", Kind: "mpeg2-ts", UDP: "udp://239.10.10.10:5000",
 		VideoKbs: 9000, MuxKbs: 12000,
 		PIDVideo: 256, PIDAudio: 257, PIDPMT: 4096, Programa: 7, TSID: 99,
-		PCRms: 30, Audio: "ac3", TTL: 4, PktSize: engine.PktSizePorDefecto,
+		PCRms: 30, Audio: "ac3", AudioKbs: engine.AudioKbsPorDefecto,
+		TTL: 4, PktSize: engine.PktSizePorDefecto,
 	}
 	if out != quiere {
 		t.Fatalf("la salida a un grupo es\n  %+v\ny tenía que ser\n  %+v", out, quiere)
@@ -284,4 +286,37 @@ func esperar(t *testing.T, cond func() bool, queja string) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal(queja)
+}
+
+// TestElSonidoSePuedeCambiarYTieneLimites: el bitrate del audio estuvo
+// cableado en 192 hasta el 11 de septiembre de 2026, y no debía estarlo —
+// siete de ocho sistemas de playout libres lo exponen y CAtv emite a 128.
+// Esta prueba sostiene las tres cosas: que el valor de fábrica sigue siendo
+// 192, que se puede cambiar, y que no se acepta cualquier número.
+func TestElSonidoSePuedeCambiarYTieneLimites(t *testing.T) {
+	abrir := func(kbs int) (engine.Output, error) {
+		p := ParamsUDPTS{Destino: "239.1.1.1:1234", BitrateVideoKbs: 4800,
+			BitrateMuxKbs: 6000, Audio: "mp2", Video: "mpeg2", BitrateAudioKbs: kbs}
+		datos, _ := json.Marshal(p)
+		d, err := nuevoUDPTS(model.Output{Name: "t", Driver: DriverUDPTS, Params: string(datos)}, nil)
+		if err != nil {
+			return engine.Output{}, err
+		}
+		return d.Abrir(engine.CAtv)
+	}
+
+	if out, err := abrir(0); err != nil || out.AudioKbs != engine.AudioKbsPorDefecto {
+		t.Fatalf("sin decir nada el sonido tiene que quedar en %d y quedó en %d (%v)",
+			engine.AudioKbsPorDefecto, out.AudioKbs, err)
+	}
+	// El número de CAtv, que es el caso que motivó todo esto.
+	if out, err := abrir(128); err != nil || out.AudioKbs != 128 {
+		t.Fatalf("128 es lo que emite CAtv y tiene que poder ponerse; quedó en %d (%v)", out.AudioKbs, err)
+	}
+	for _, malo := range []int{32, 512} {
+		if _, err := abrir(malo); err == nil {
+			t.Fatalf("%d kb/s está fuera del rango de %d a %d y se aceptó",
+				malo, engine.AudioKbsMinimo, engine.AudioKbsMaximo)
+		}
+	}
 }

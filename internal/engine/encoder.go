@@ -45,7 +45,19 @@ type Output struct {
 	// Audio es el códec del audio de esta salida: "mp2" (MPEG capa II, lo
 	// que CAtv emite hoy) o "ac3". Vacío saca las dos pistas, que es lo que
 	// medía la F0 cuando había que decidir cuál se quedaba.
+	//
+	// AC-3, Dolby Digital y A/52 son el mismo códec con tres nombres: el
+	// técnico, el comercial de Dolby, y el número del documento del ATSC que
+	// lo especifica. El equipo de una estación puede tenerlo escrito de
+	// cualquiera de las tres formas.
 	Audio string
+	// AudioKbs es el bitrate del audio. Estuvo cableado en 192 hasta el 11 de
+	// septiembre de 2026, y no debía estarlo: siete de ocho sistemas de
+	// playout libres lo exponen como campo editable, y los comerciales
+	// documentados van de 64 a 384
+	// (docs/investigacion/BITRATE-QUE-EXPONEN-LOS-PLAYOUT-2026-09-11.md).
+	// CAtv emite a 128. En cero cae en AudioKbsPorDefecto.
+	AudioKbs int
 	// TTL y PktSize son de la propia red: cuántos saltos vive el paquete
 	// —hace falta para multicast (F2-114)— y de qué tamaño sale.
 	TTL     int
@@ -81,6 +93,16 @@ const (
 	PktSizePorDefecto = 1316
 	// PATPeriodo es cada cuánto se repiten PAT y PMT, en segundos.
 	PATPeriodo = "0.1"
+	// AudioKbsPorDefecto es el bitrate del audio cuando nadie dijo otra cosa.
+	// 192 es lo que traía cableado y lo mismo que trae MistServer de fábrica;
+	// se queda como valor de fábrica, pero ahora se puede cambiar.
+	AudioKbsPorDefecto = 192
+	// AudioKbsMinimo y AudioKbsMaximo son el rango que se acepta, tomado de
+	// lo que ofrecen Cinegy y PlayBox (64 a 384). Por debajo de 64 el sonido
+	// de una estación no es aceptable, y por encima de 384 se está gastando
+	// canal sin que nadie lo oiga.
+	AudioKbsMinimo = 64
+	AudioKbsMaximo = 384
 )
 
 // Acelerador es con qué se comprime el video: la tarjeta de video o el
@@ -363,7 +385,8 @@ func (o Output) argsMPEG2TS() []string {
 		"-b:v", fmt.Sprintf("%dk", kb), "-minrate", fmt.Sprintf("%dk", kb), "-maxrate", fmt.Sprintf("%dk", kb),
 		"-bufsize", fmt.Sprintf("%dk", kb/2))
 	for i, c := range codecs {
-		args = append(args, fmt.Sprintf("-c:a:%d", i), c, fmt.Sprintf("-b:a:%d", i), "192k")
+		args = append(args, fmt.Sprintf("-c:a:%d", i), c,
+			fmt.Sprintf("-b:a:%d", i), fmt.Sprintf("%dk", o.audioKbs()))
 	}
 	args = append(args, "-max_muxing_queue_size", "1024")
 	args = append(args, o.streamIDs(len(codecs))...)
@@ -552,6 +575,14 @@ func (o Output) urlUDP() string {
 		url += fmt.Sprintf("&ttl=%d", o.TTL)
 	}
 	return url
+}
+
+// audioKbs es el bitrate del audio de esta salida, ya resuelto.
+func (o Output) audioKbs() int {
+	if o.AudioKbs >= AudioKbsMinimo && o.AudioKbs <= AudioKbsMaximo {
+		return o.AudioKbs
+	}
+	return AudioKbsPorDefecto
 }
 
 // WriteFrame manda un cuadro yuv420p al encoder.

@@ -38,6 +38,9 @@ type ParamsUDPTS struct {
 	TSID            int    `json:"tsid"`
 	PCRms           int    `json:"pcr_ms"`
 	Audio           string `json:"audio"` // ac3 | mp2
+	// BitrateAudioKbs es el bitrate del sonido, de 64 a 384. Vacío = 192, que
+	// es el valor de fábrica y el mismo que trae MistServer. CAtv emite a 128.
+	BitrateAudioKbs int    `json:"bitrate_audio_kbs"`
 	Video           string `json:"video"` // mpeg2
 }
 
@@ -120,6 +123,9 @@ func leerParamsUDPTS(raw string) (ParamsUDPTS, error) {
 	if p.PIDVideo == 0 {
 		p.PIDVideo = PIDVideoPorDefecto
 	}
+	if p.BitrateAudioKbs == 0 {
+		p.BitrateAudioKbs = engine.AudioKbsPorDefecto
+	}
 	if p.PIDAudio == 0 {
 		p.PIDAudio = PIDAudioPorDefecto
 	}
@@ -194,6 +200,9 @@ func (d *udpts) valida() error {
 			p.BitrateVideoKbs, p.BitrateMuxKbs, MargenDelMuxKbs)
 	case p.Audio != "mp2" && p.Audio != "ac3":
 		return fmt.Errorf("el audio del multiplexor es MPEG capa II (mp2) o AC-3 (ac3), y pusiste %q; CAtv emite hoy en mp2", p.Audio)
+	case p.BitrateAudioKbs != 0 && (p.BitrateAudioKbs < engine.AudioKbsMinimo || p.BitrateAudioKbs > engine.AudioKbsMaximo):
+		return fmt.Errorf("el sonido va de %d a %d kb/s y pusiste %d; por debajo de %d no suena como una estación, y por encima de %d estás gastando canal que nadie oye",
+			engine.AudioKbsMinimo, engine.AudioKbsMaximo, p.BitrateAudioKbs, engine.AudioKbsMinimo, engine.AudioKbsMaximo)
 	case p.Video != "mpeg2":
 		return fmt.Errorf("un multiplexor de ATSC 1.0 espera video MPEG-2 y pusiste %q: el H.264 sale por una salida de internet", p.Video)
 	case p.Programa < 1 || p.Programa > 65535:
@@ -243,6 +252,7 @@ func (d *udpts) Abrir(engine.Format) (engine.Output, error) {
 		TSID:     d.p.TSID,
 		PCRms:    d.p.PCRms,
 		Audio:    d.p.Audio,
+		AudioKbs: d.p.BitrateAudioKbs,
 		TTL:      d.p.TTL,
 		PktSize:  engine.PktSizePorDefecto,
 	}, nil
