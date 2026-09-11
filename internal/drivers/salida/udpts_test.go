@@ -2,6 +2,8 @@ package salida
 
 import (
 	"context"
+	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -171,9 +173,15 @@ func TestUnDriverQueNoExisteTodaviaSeDice(t *testing.T) {
 
 // La salida a un archivo crea su carpeta sola: nadie tiene que acordarse.
 func TestLaSalidaAArchivoCreaSuCarpeta(t *testing.T) {
-	ruta := t.TempDir() + "/aire/nuevo/salida.ts"
+	ruta := filepath.Join(t.TempDir(), "aire", "nuevo", "salida.ts")
+	// La ruta va por el codificador de JSON, no pegada a mano: en Windows
+	// `C:\Users\...` lleva barras invertidas y `\U` es un escape inválido.
+	params, err := json.Marshal(map[string]string{"ruta": ruta})
+	if err != nil {
+		t.Fatal(err)
+	}
 	d, err := Para(model.Output{Name: "archivo", Driver: DriverArchivo,
-		Params: `{"ruta": "` + ruta + `"}`}, nil)
+		Params: string(params)}, nil)
 	if err != nil {
 		t.Fatalf("el driver no abrió: %v", err)
 	}
