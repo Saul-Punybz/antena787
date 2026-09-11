@@ -761,6 +761,20 @@ inventario sin cambiar de pantalla. No hay ruta nueva del servidor.
   que la validación de `PUT /canal` lo aceptaría y el fallo saldría al
   encender el aire. Cerrarlo es comprimir unos cuadros de verdad con cada
   candidato antes de confiarle nada — que es justo lo que pide este criterio.
+  **Y le falta la mitad del trabajo, que es la cara (Saul, 11 sept 2026).** Este
+  criterio dice «cada **encoder** candidato», y el ADR 0001 y el §14 del PRD
+  dicen lo mismo: toda la aceleración de este proyecto está definida del lado
+  de *comprimir*. Pero **`PRD.md:1626` ya decía que «la aceleración se gasta en
+  decodificar la biblioteca (H.264)»** — y esa frase nunca bajó a un criterio,
+  así que nunca se construyó: `internal/engine/decoder.go` no tiene una sola
+  aparición de `-hwaccel`, y `git log -S hwaccel --all` confirma que nunca la
+  tuvo. No se descartó: se quedó en prosa. Y los números dicen que la prosa
+  tenía razón — medido el 11 sept sobre un HEVC 1080p real
+  (`docs/investigacion/MEDICION-CPU-2026-09-11.md`): **decode 0.40 núcleos,
+  encode MPEG-2 0.15**. Se aceleró el tercio más barato.
+  **Antes de construir nada, medir en la máquina de la torre**: medio núcleo de
+  diez no justifica meter dependencias de tarjeta de video. Si allá también son
+  décimas de núcleo, lo que se escribe es por qué no se construye.
   Mientras tanto hay dos cinturones puestos: `auto` resuelve a **software**
   (`Acelerador.Resolver`), así que nadie acaba en una tarjeta sin haberla
   pedido; y si alguien la pide y no funciona, **F2-11 baja el canal a software
