@@ -201,7 +201,7 @@ func readMarkers(ffmpeg, tsPath string, fm engine.Format, byID map[int]ClipSpec)
 	if err != nil {
 		return nil, err
 	}
-	if err := cmd.Start(); err != nil {
+	if err := engine.Arrancar(cmd); err != nil {
 		return nil, err
 	}
 	r := bufio.NewReaderSize(pipe, 4<<20)
@@ -415,7 +415,7 @@ func checkAudio(ffmpeg, tsPath string, fm engine.Format, cuts []engine.Event, fr
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := cmd.Start(); err != nil {
+	if err := engine.Arrancar(cmd); err != nil {
 		return nil, nil, err
 	}
 	r := bufio.NewReaderSize(pipe, 1<<20)

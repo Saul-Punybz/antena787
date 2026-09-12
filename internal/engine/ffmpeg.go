@@ -74,3 +74,17 @@ func Comando(ctx context.Context, nombre string, args ...string) *exec.Cmd {
 	cmd.Stdin = nil
 	return cmd
 }
+
+// Arrancar lanza el proceso y lo mete en la jaula, para que no sobreviva a
+// Antena787 si esto se va de golpe (ver jaula_windows.go).
+//
+// **Úsalo en vez de cmd.Start() para cualquier proceso de larga vida**: el
+// encoder, los decodificadores, las normalizaciones. Para un ffprobe de dos
+// segundos da igual, pero tampoco estorba.
+func Arrancar(cmd *exec.Cmd) error {
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	enjaular(cmd)
+	return nil
+}

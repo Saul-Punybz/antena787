@@ -310,7 +310,7 @@ func StartEncoder(parent context.Context, ffmpeg string, f Format, outs []Output
 	}
 	e.Cmd = Comando(nil, ffmpeg, args...)
 	e.Cmd.Stderr = &e.Stderr
-	if err := e.Cmd.Start(); err != nil {
+	if err := Arrancar(e.Cmd); err != nil {
 		cancel()
 		return nil, fmt.Errorf("encoder: %w", err)
 	}

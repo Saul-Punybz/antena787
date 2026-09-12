@@ -137,11 +137,11 @@ func StartDecoder(parent context.Context, ffmpeg, ffprobe string, f Format, clip
 		cancel()
 		return nil, err
 	}
-	if err := d.vcmd.Start(); err != nil {
+	if err := Arrancar(d.vcmd); err != nil {
 		cancel()
 		return nil, fmt.Errorf("decodificador de video: %w", err)
 	}
-	if err := d.acmd.Start(); err != nil {
+	if err := Arrancar(d.acmd); err != nil {
 		cancel()
 		d.vcmd.Wait()
 		return nil, fmt.Errorf("decodificador de audio: %w", err)
