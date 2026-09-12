@@ -515,11 +515,15 @@ type fuenteDelPlan struct {
 	cartel  engine.Clip // el cartel de la estación, hecho al arrancar el motor
 
 	mu      sync.Mutex
-	cargado map[int64]bool          // plan_item ya marcado como cargado
-	fallos  map[int64]time.Time     // último fallo por media_asset (F2-12)
-	dicho   map[string]bool         // lo que ya se dijo una vez
-	decks   map[int64]model.Deck    // deck_id → deck, para saber quién manda
-	avance  map[int64]time.Duration // por dónde va cada bloque que ya salió (F2-07)
+	cargado map[int64]bool      // plan_item ya marcado como cargado
+	fallos  map[int64]time.Time // último fallo por media_asset (F2-12)
+	// vivosAusentes es desde cuándo lleva sin llegar la señal de cada bloque
+	// en vivo. Es lo que hace que la gracia cuente desde la primera ausencia
+	// y no desde cada reintento (F2-116, F2-19).
+	vivosAusentes map[int64]time.Time
+	dicho         map[string]bool         // lo que ya se dijo una vez
+	decks         map[int64]model.Deck    // deck_id → deck, para saber quién manda
+	avance        map[int64]time.Duration // por dónde va cada bloque que ya salió (F2-07)
 	// Quién tiene el aire ahora mismo, para saber cuándo se pausa un bloque
 	// y cuándo cambia de deck.
 	sirviendo int64
@@ -534,11 +538,12 @@ type fuenteDelPlan struct {
 func (a *App) nuevaFuenteDelPlan(ctx context.Context, formato engine.Format) *fuenteDelPlan {
 	f := &fuenteDelPlan{
 		app: a, ctx: ctx, formato: formato,
-		cargado: map[int64]bool{},
-		fallos:  map[int64]time.Time{},
-		dicho:   map[string]bool{},
-		decks:   map[int64]model.Deck{},
-		avance:  map[int64]time.Duration{},
+		cargado:       map[int64]bool{},
+		fallos:        map[int64]time.Time{},
+		vivosAusentes: map[int64]time.Time{},
+		dicho:         map[string]bool{},
+		decks:         map[int64]model.Deck{},
+		avance:        map[int64]time.Duration{},
 	}
 	// Los cuatro decks del canal. Si la base no los tiene —una base a medio
 	// migrar—, el motor sigue: sin decks, todo se trata como programa.
@@ -597,9 +602,21 @@ func (f *fuenteDelPlan) Next(now time.Time) (engine.Clip, time.Time, error) {
 
 	clip, err := f.clipDe(item, now)
 	if err != nil {
+		// Una señal que no llegó no es un archivo roto: se reintenta, no se
+		// saca de la parrilla.
+		if item.Origin == model.OriginLiveSource {
+			return f.faltaElVivo(item, now, hasta, err)
+		}
 		f.registrarFallo(item, err.Error())
 		f.sueltaElAire(now, model.DeckFiller, "relleno")
 		return f.Filler(), hasta, nil
+	}
+	// La señal volvió: se olvida que faltó, para que la próxima ausencia
+	// empiece a contar su gracia desde cero.
+	if item.Origin == model.OriginLiveSource {
+		f.mu.Lock()
+		delete(f.vivosAusentes, item.ID)
+		f.mu.Unlock()
 	}
 	f.tomaElAire(item, now, clip.Name)
 	f.cargar(item)
@@ -787,14 +804,7 @@ func (f *fuenteDelPlan) clipDe(item model.PlanItem, now time.Time) (engine.Clip,
 		c.Ref = item.ID
 		return c, nil
 	case model.OriginLiveSource:
-		// Las fuentes en vivo son otra tanda. Hasta entonces la franja sale
-		// con relleno y se dice una vez, no cada vez que se pregunta.
-		if f.primeraVez("vivo", item.ID) {
-			f.app.Publish("motor", "plan", fmt.Sprintf(
-				"el bloque de las %s es una fuente en vivo y el vivo todavía no está construido: sale el relleno",
-				item.PlannedAt.Format("15:04")))
-		}
-		return engine.Clip{}, errors.New("las fuentes en vivo todavía no están construidas")
+		return f.clipDeVivo(item)
 	case model.OriginAsset, model.OriginFiller:
 	default:
 		return engine.Clip{}, fmt.Errorf("origen %q que el motor no sabe poner", item.Origin)
@@ -832,6 +842,114 @@ func (f *fuenteDelPlan) clipDe(item model.PlanItem, now time.Time) (engine.Clip,
 		clip.SeekMs = dentro.Milliseconds()
 	}
 	return clip, nil
+}
+
+// clipDeVivo arma el clip de una señal que está pasando en otro sitio
+// (F2-116). Lo que devuelve no es un archivo: es una dirección, y el
+// decodificador lo sabe por Clip.EnVivo.
+//
+// La clave, si la fuente tiene una, se saca aquí y **solo aquí**: viaja de la
+// base cifrada a los argumentos de ffmpeg sin quedar escrita en ningún sitio.
+func (f *fuenteDelPlan) clipDeVivo(item model.PlanItem) (engine.Clip, error) {
+	if item.LiveSourceID == nil {
+		return engine.Clip{}, errors.New("el bloque dice que es en vivo pero no dice de qué señal")
+	}
+	fuente, err := f.app.Store.Live.Get(f.ctx, *item.LiveSourceID)
+	if err != nil {
+		return engine.Clip{}, fmt.Errorf("la señal de ese bloque ya no está: %w", err)
+	}
+	if fuente.Kind == model.FuenteCaptura {
+		// Una tarjeta de captura no se abre con una dirección: se enumera con
+		// el driver del sistema. Decirlo es mejor que fallar raro.
+		return engine.Clip{}, errors.New("las tarjetas de captura todavía no se pueden poner al aire")
+	}
+	destino := fuente.ListenPoint
+	if u, c := f.app.CredencialesDeFuente(f.ctx, fuente.ID); u != "" || c != "" {
+		if con, err := conCredenciales(destino, u, c); err == nil {
+			destino = con
+		}
+	}
+	return engine.Clip{Path: destino, Name: fuente.Name, Ref: item.ID, EnVivo: true}, nil
+}
+
+// ReintentoDeVivo es cada cuánto se vuelve a intentar abrir una señal que no
+// llegó. Dos segundos, que es lo que hace nginx-rtmp para lo que va a buscar
+// (docs/investigacion/ENTRADAS-POR-URL-COMPARADAS-2026-09-11.md). Mientras
+// tanto sale el relleno: nunca negro.
+const ReintentoDeVivo = 2 * time.Second
+
+// GraciaDeVivoPorDefecto es lo que se espera a una señal cuando la fuente no
+// dice otra cosa. Treinta segundos, que es lo que trae el esquema.
+const GraciaDeVivoPorDefecto = 30 * time.Second
+
+// faltaElVivo es lo que pasa cuando una señal en vivo no está. **No es lo
+// mismo que un archivo que falla**, y tratarlo igual sería el error:
+//
+//   - Un archivo que falla está roto y hay que sacarlo de la parrilla.
+//   - Una señal que falla casi siempre vuelve: el otro lado se reinició, la
+//     red parpadeó, el proveedor tuvo un mal minuto.
+//
+// Mientras quede gracia sale relleno y se reintenta cada dos segundos, sin
+// marcar nada como fallido. Pasada la gracia sí: queda el incidente
+// `vivo_ausente` y el relleno cubre lo que queda de la franja.
+func (f *fuenteDelPlan) faltaElVivo(item model.PlanItem, now, hasta time.Time, motivo error) (engine.Clip, time.Time, error) {
+	gracia := f.graciaDe(item)
+
+	f.mu.Lock()
+	desde, habia := f.vivosAusentes[item.ID]
+	if !habia {
+		desde = now
+		f.vivosAusentes[item.ID] = desde
+	}
+	f.mu.Unlock()
+
+	if !habia {
+		f.app.Publish("motor", "vivo", fmt.Sprintf(
+			"la señal del bloque de las %s no llegó (%s): sale el relleno mientras se reintenta",
+			item.PlannedAt.Format("15:04"), motivo))
+	}
+
+	f.sueltaElAire(now, model.DeckFiller, "relleno")
+	if now.Sub(desde) < gracia {
+		fin := now.Add(ReintentoDeVivo)
+		if fin.After(hasta) {
+			fin = hasta
+		}
+		return f.Filler(), fin, nil
+	}
+
+	if f.primeraVez("vivo_ausente", item.ID) {
+		f.app.Incident(model.IncVivoAusente.String(), fmt.Sprintf(
+			"la señal «%s» no llegó en %s; el relleno cubre el bloque de las %s",
+			f.nombreDeLaSenal(item), gracia.Round(time.Second), item.PlannedAt.Format("15:04")))
+		if err := f.app.Store.Plan.SetState(f.ctx, item.ID, model.Failed); err != nil && f.ctx.Err() == nil {
+			f.app.Publish("motor", "plan", fmt.Sprintf("no pude marcar el bloque %d como fallido: %v", item.ID, err))
+		}
+	}
+	return f.Filler(), hasta, nil
+}
+
+// graciaDe es cuánto se aguanta esperando a una señal. Sale de la propia
+// fuente, que lo trae desde el esquema de la versión 1.
+func (f *fuenteDelPlan) graciaDe(item model.PlanItem) time.Duration {
+	if item.LiveSourceID == nil {
+		return GraciaDeVivoPorDefecto
+	}
+	fuente, err := f.app.Store.Live.Get(f.ctx, *item.LiveSourceID)
+	if err != nil || fuente.GraceSeconds <= 0 {
+		return GraciaDeVivoPorDefecto
+	}
+	return time.Duration(fuente.GraceSeconds) * time.Second
+}
+
+func (f *fuenteDelPlan) nombreDeLaSenal(item model.PlanItem) string {
+	if item.LiveSourceID == nil {
+		return "en vivo"
+	}
+	if fuente, err := f.app.Store.Live.Get(f.ctx, *item.LiveSourceID); err == nil {
+		return fuente.Name
+	}
+	return "en vivo"
 }
 
 // Filler es el relleno vigente: lo primero de la biblioteca de relleno y, si

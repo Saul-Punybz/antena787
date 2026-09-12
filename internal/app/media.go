@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -1023,4 +1024,41 @@ func hostDe(direccion string) string {
 		return ""
 	}
 	return h
+}
+
+// CredencialesDeFuente saca el usuario y la clave de una señal en vivo, si
+// tiene. **Es el único sitio donde la clave sale de la base**, y sale para ir
+// directa a los argumentos de ffmpeg: no se guarda en ninguna variable que
+// viva más que la llamada, no se escribe en la bitácora, y no sale por la API.
+//
+// Si la clave no se puede descifrar —otra instalación, o alguien tocó la
+// base— se devuelve vacía y la señal se intenta abrir sin ella. Fallar al
+// conectar es mejor que no intentarlo: el error que salga va a decir que
+// rechazaron la clave, que es una pista, y no un silencio.
+func (a *App) CredencialesDeFuente(ctx context.Context, fuenteID int64) (usuario, clave string) {
+	cs, err := a.Store.Conexion.List(ctx, a.ChannelID, "entrada")
+	if err != nil {
+		return "", ""
+	}
+	for _, c := range cs {
+		var p struct {
+			FuenteID int64  `json:"fuente_id"`
+			Usuario  string `json:"usuario"`
+		}
+		if json.Unmarshal([]byte(c.Params), &p) != nil || p.FuenteID != fuenteID {
+			continue
+		}
+		if !c.TieneSecreto {
+			return p.Usuario, ""
+		}
+		completa, err := a.Store.Conexion.Get(ctx, c.ID)
+		if err != nil {
+			// La clave existe y no se pudo leer: se dice una vez, porque si
+			// no, la señal falla al conectar y nadie sabe por qué.
+			a.Publish("motor", "vivo", "hay una clave guardada para esa señal y no se pudo leer: "+err.Error())
+			return p.Usuario, ""
+		}
+		return p.Usuario, completa.Secret
+	}
+	return "", ""
 }

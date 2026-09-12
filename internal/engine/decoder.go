@@ -26,6 +26,16 @@ type Clip struct {
 	// Ref es de quien pone el clip; el motor no la mira. internal/app guarda
 	// ahí el id del plan_item, para cerrar el as-run cuando el clip sale.
 	Ref int64
+	// EnVivo dice que esto no es un archivo, es una señal que está pasando
+	// ahora en otro sitio (F2-116). Cambia tres cosas y las tres importan:
+	//
+	//   - **No se le mide la duración.** Un vivo no tiene final, y preguntarlo
+	//     cuelga o devuelve cero.
+	//   - **No se entra por el medio.** Entrar por el minuto 7 de algo que
+	//     está pasando ahora no significa nada; se entra donde va.
+	//   - **Se le dice a ffmpeg que insista.** Un archivo que se corta está
+	//     roto; una señal que se corta casi siempre vuelve.
+	EnVivo bool
 }
 
 // Decoder es la pareja de procesos ffmpeg que convierten un clip a cuadros
@@ -83,7 +93,9 @@ func StartDecoder(parent context.Context, ffmpeg, ffprobe string, f Format, clip
 	ctx, cancel := context.WithCancel(parent)
 	d := &Decoder{Clip: clip, Format: f, cancel: cancel, frames: make(chan []byte, prerollFrames), vdone: make(chan error, 1)}
 
-	if dur, err := probeDuration(ffprobe, clip.Path); err == nil {
+	// A un vivo no se le pregunta cuánto dura: no tiene final, y ffprobe se
+	// queda esperando a que lo tenga.
+	if dur, err := probeDuration(ffprobe, clip.Path); err == nil && !clip.EnVivo {
 		dur -= float64(clip.SeekMs) / 1000 // lo que queda desde el seek
 		if dur < 0 {
 			dur = 0
@@ -94,6 +106,11 @@ func StartDecoder(parent context.Context, ffmpeg, ffprobe string, f Format, clip
 	// El seek va antes de -i: así ffmpeg salta por índice y no decodifica lo
 	// que no va a salir. Un archivo sin índice cae solo en el modo lento.
 	seek := seekArgs(clip.SeekMs)
+	if clip.EnVivo {
+		// Entrar por el medio de algo que está pasando ahora no significa
+		// nada, y los argumentos de insistir van delante de -i como el seek.
+		seek = argsDeVivo(clip.Path)
+	}
 
 	d.vcmd = exec.CommandContext(ctx, ffmpeg, append(append([]string{
 		"-nostdin", "-hide_banner", "-loglevel", "error"}, seek...),
@@ -225,4 +242,36 @@ func probeDuration(ffprobe, path string) (float64, error) {
 		return 0, err
 	}
 	return strconv.ParseFloat(strings.TrimSpace(string(out)), 64)
+}
+
+// argsDeVivo son los argumentos que se le ponen a ffmpeg **antes** de -i
+// cuando lo que abre es una señal y no un archivo.
+//
+// Los números salen de lo que hace la gente que ya lo resolvió
+// (docs/investigacion/ENTRADAS-POR-URL-COMPARADAS-2026-09-11.md): nginx-rtmp
+// reintenta cada 2 segundos para lo que va a buscar, sin límite de intentos.
+// Aquí el reintento de ffmpeg cubre el corte corto —el que no llega a notarse
+// al aire— y el motor cubre el largo volviendo a abrir el decodificador; entre
+// los dos no hay hueco.
+func argsDeVivo(ruta string) []string {
+	// rw_timeout vale para todo: sin él, una señal que acepta la conexión y
+	// después se calla deja al decodificador colgado para siempre, y desde
+	// fuera parece que está funcionando.
+	args := []string{"-rw_timeout", "8000000"} // 8 s sin un byte y se rinde
+	if esHTTP(ruta) {
+		// Estos solo los entiende el protocolo http de ffmpeg. Ponérselos a
+		// un srt:// no rompe nada, pero tampoco hace nada: mejor no mentir
+		// sobre lo que está puesto.
+		args = append(args,
+			"-reconnect", "1",
+			"-reconnect_streamed", "1",
+			"-reconnect_on_network_error", "1",
+			"-reconnect_delay_max", "2")
+	}
+	return args
+}
+
+func esHTTP(ruta string) bool {
+	r := strings.ToLower(ruta)
+	return strings.HasPrefix(r, "http://") || strings.HasPrefix(r, "https://")
 }
