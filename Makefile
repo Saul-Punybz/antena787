@@ -7,7 +7,8 @@ BIN  ?= bin
 DIST ?= dist
 GO   ?= go
 
-.PHONY: build vet test f0 windows linux arm64 clean ui antena antena-windows paquete-windows
+.PHONY: build vet test f0 windows linux arm64 clean ui antena \
+	antena-windows paquete-windows paquete-mac paquete-linux paquetes
 
 ## build — compila el ejecutable de la F0 en bin/
 build:
@@ -28,15 +29,16 @@ f0: build
 	$(BIN)/f0 run -hours 0.1
 	$(BIN)/f0 analyze
 
-## windows — compilacion cruzada, Windows x86-64
+## windows / linux / arm64 — compilacion cruzada del ARNES de medicion.
+## Para el PRODUCTO son los objetivos `paquete-*` de mas abajo: durante
+## meses estos tres fueron lo unico que existia, y cmd/antena no se
+## compilaba nunca fuera de un Mac. Que el nombre no vuelva a enganar.
 windows:
 	GOOS=windows GOARCH=amd64 $(GO) build -o $(DIST)/f0-windows-amd64.exe ./cmd/f0
 
-## linux — compilacion cruzada, Linux x86-64
 linux:
 	GOOS=linux GOARCH=amd64 $(GO) build -o $(DIST)/f0-linux-amd64 ./cmd/f0
 
-## arm64 — compilacion cruzada, Linux ARM64
 arm64:
 	GOOS=linux GOARCH=arm64 $(GO) build -o $(DIST)/f0-linux-arm64 ./cmd/f0
 
@@ -79,3 +81,37 @@ paquete-windows: antena-windows
 	cp LICENSE $(DIST)/Antena787-windows/
 	cd $(DIST) && zip -qr Antena787-windows.zip Antena787-windows
 	@echo "Listo: $(DIST)/Antena787-windows.zip"
+
+
+## paquete-mac — el producto para Mac, Apple Silicon e Intel en un solo
+##               ejecutable. Se entrega igual que el de Windows: se
+##               descomprime y se abre.
+paquete-mac: ui
+	rm -rf $(DIST)/Antena787-mac
+	mkdir -p $(DIST)/Antena787-mac
+	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 $(GO) build -ldflags "-s -w" -o $(DIST)/antena-arm64 ./cmd/antena
+	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 $(GO) build -ldflags "-s -w" -o $(DIST)/antena-amd64 ./cmd/antena
+	lipo -create -output $(DIST)/Antena787-mac/antena $(DIST)/antena-arm64 $(DIST)/antena-amd64 \
+		|| cp $(DIST)/antena-arm64 $(DIST)/Antena787-mac/antena
+	rm -f $(DIST)/antena-arm64 $(DIST)/antena-amd64
+	cp docs/INSTALAR-MAC-LINUX.md $(DIST)/Antena787-mac/LEEME.md
+	cp scripts/arrancar-antena787.sh $(DIST)/Antena787-mac/
+	chmod +x $(DIST)/Antena787-mac/arrancar-antena787.sh
+	cp LICENSE $(DIST)/Antena787-mac/
+	@echo "Listo: $(DIST)/Antena787-mac"
+
+## paquete-linux — el producto para Linux, x86-64 y ARM64 (una Raspberry
+##                 grande o un servidor chico de la estacion).
+paquete-linux: ui
+	rm -rf $(DIST)/Antena787-linux
+	mkdir -p $(DIST)/Antena787-linux
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build -ldflags "-s -w" -o $(DIST)/Antena787-linux/antena-amd64 ./cmd/antena
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 $(GO) build -ldflags "-s -w" -o $(DIST)/Antena787-linux/antena-arm64 ./cmd/antena
+	cp docs/INSTALAR-MAC-LINUX.md $(DIST)/Antena787-linux/LEEME.md
+	cp scripts/arrancar-antena787.sh $(DIST)/Antena787-linux/
+	chmod +x $(DIST)/Antena787-linux/arrancar-antena787.sh
+	cp LICENSE $(DIST)/Antena787-linux/
+	@echo "Listo: $(DIST)/Antena787-linux"
+
+## paquetes — los tres de una vez.
+paquetes: paquete-windows paquete-mac paquete-linux

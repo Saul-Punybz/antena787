@@ -317,3 +317,55 @@ jobs:
           name: Antena787-windows
           path: dist/Antena787-windows
           retention-days: 30
+
+  # Los paquetes de Mac y Linux. El de Windows va aparte porque allá el
+  # ejecutable se arma EN Windows y lleva ffmpeg dentro; aquí no hace falta
+  # ninguna de las dos cosas.
+  paquetes-mac-linux:
+    name: paquetes para Mac y Linux
+    needs: [verificar, interfaz]
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: armar los dos
+        run: make paquete-mac paquete-linux
+
+      # Que el de Mac arranque de verdad, no solo que compile. El de Linux no
+      # se puede arrancar aquí —esto es un Mac— y queda dicho en vez de
+      # fingir que se comprobó.
+      - name: el de Mac arranca y sirve la interfaz
+        shell: bash
+        run: |
+          set -e
+          cd dist/Antena787-mac
+          ./antena -datos "$(mktemp -d)" -escucha 127.0.0.1:7897 > arranque.log 2>&1 &
+          pid=$!
+          ok=0
+          for i in $(seq 1 40); do
+            if curl -fsS --max-time 2 http://127.0.0.1:7897/api/v1/estado >/dev/null 2>&1; then ok=1; break; fi
+            sleep 1
+          done
+          [ "$ok" = "1" ] || { echo "no arrancó:"; cat arranque.log; exit 1; }
+          curl -fsS --max-time 5 http://127.0.0.1:7897/ | grep -q 'id="raiz"' || {
+            echo "el binario de Mac no lleva la interfaz dentro"; exit 1; }
+          kill "$pid" 2>/dev/null || true
+          echo "el paquete de Mac arranca y sirve la interfaz"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Antena787-mac
+          path: dist/Antena787-mac
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Antena787-linux
+          path: dist/Antena787-linux
+          retention-days: 30
