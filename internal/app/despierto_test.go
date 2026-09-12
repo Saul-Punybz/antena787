@@ -24,14 +24,25 @@ func alarmaDespierto(a *App) *Alarma {
 // funcionando. Cuando el sistema deja —en el reintento—, la alarma se va y
 // queda el incidente `maquina_despierta` una sola vez.
 func TestDespiertoAvisaCuandoNoPudeYSeCallaCuandoSi(t *testing.T) {
-	var intentos int64
+	// La máquina no deja hasta que esta prueba diga lo contrario.
+	//
+	// Antes esto era «el primer intento falla y el segundo funciona», y con un
+	// reintento de 20 ms **la alarma existía durante 20 milisegundos**: en un
+	// Mac se cazaba sondeando y en un runner de Windows cargado no, así que la
+	// prueba fallaba sola sin que nadie hubiera roto nada (CI del 11 de
+	// septiembre de 2026). Una prueba que depende de llegar a tiempo a un
+	// estado que dura un parpadeo no prueba nada: prueba la máquina donde
+	// corre.
+	//
+	// Ahora el estado dura hasta que la prueba lo cambia, y no hay carrera.
+	var noDeja atomic.Bool
+	noDeja.Store(true)
 	var soltadas int64
 	a := abre(t, func(o *Options) {
 		o.NoMaintenance = false // el bucle de no-dormir va con el mantenimiento
 		o.DespiertoRetry = 20 * time.Millisecond
 		o.Sostener = func(context.Context) (func(), error) {
-			// El primer intento falla: es una máquina que no deja.
-			if atomic.AddInt64(&intentos, 1) == 1 {
+			if noDeja.Load() {
 				return nil, errors.New("esta máquina no tiene systemd-inhibit: apaga la suspensión a mano")
 			}
 			return func() { atomic.AddInt64(&soltadas, 1) }, nil
@@ -56,7 +67,8 @@ func TestDespiertoAvisaCuandoNoPudeYSeCallaCuandoSi(t *testing.T) {
 		t.Fatalf("el detalle se comió el motivo del sistema: %q", al.Detalle)
 	}
 
-	// Y en el reintento, el silencio.
+	// Y ahora la máquina sí deja: en el reintento, el silencio.
+	noDeja.Store(false)
 	esperar(t, 3*time.Second, func() bool { return alarmaDespierto(a) == nil },
 		"el reintento sostuvo la máquina y la alarma se quedó puesta")
 
