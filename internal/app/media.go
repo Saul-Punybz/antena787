@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -785,4 +788,239 @@ func (a *App) setting(ctx context.Context, key string) string {
 		return ""
 	}
 	return strings.TrimSpace(v)
+}
+
+// ── probar una señal antes de guardarla (F2-116) ──────────────────────
+
+// FuenteAProbar es lo que se quiere abrir. La clave viene en claro porque
+// esto se llama **antes** de guardar, así que todavía no hay dónde tenerla
+// cifrada; no se escribe en ningún sitio y no sale de esta función.
+type FuenteAProbar struct {
+	Tipo      string
+	Direccion string
+	Usuario   string
+	Clave     string
+}
+
+// ResultadoDeProbar es qué se encontró al otro lado.
+type ResultadoDeProbar struct {
+	Responde bool
+	Texto    string
+	Detalle  string
+	Video    string
+	Audio    string
+	Duracion string
+	Avisos   []string
+}
+
+// PlazoDeProbar es lo que se espera a que una señal conteste. Cinco segundos:
+// una fuente que no dice nada en cinco segundos no sirve para salir al aire, y
+// quien está probando no puede quedarse mirando una rueda girar.
+const PlazoDeProbar = 5 * time.Second
+
+// ProbarFuente abre la señal de verdad y cuenta qué hay. **No guarda nada.**
+//
+// De todos los sistemas que se miraron, ninguno prueba antes de guardar: lo
+// más cercano es la vista previa de MistServer, y es después
+// (docs/investigacion/ENTRADAS-POR-URL-COMPARADAS-2026-09-11.md). Para quien
+// es su propio departamento de IT —que es el caso— la diferencia es entre
+// pegar una dirección y rezar, o saberlo en tres segundos.
+func (a *App) ProbarFuente(ctx context.Context, f FuenteAProbar) ResultadoDeProbar {
+	if a.FFprobe == "" {
+		return ResultadoDeProbar{Texto: "todavía no encuentro ffprobe, así que no puedo mirar la señal",
+			Detalle: fmt.Sprint(a.FFmpegErr)}
+	}
+	if f.Tipo == model.FuenteCaptura {
+		// Una tarjeta de captura no se abre con una URL: se enumera con el
+		// driver del sistema, y eso es T4. Decirlo es mejor que fallar raro.
+		return ResultadoDeProbar{Texto: "las tarjetas de captura todavía no se pueden probar desde aquí"}
+	}
+
+	// La dirección se revisa SIEMPRE, no solo cuando hay clave: una dirección
+	// mal escrita sin credenciales se colaba y el fallo salía como un error de
+	// ffprobe que no decía nada. Decirlo aquí es gratis y es exacto.
+	if err := revisarDireccion(f.Direccion); err != nil {
+		return ResultadoDeProbar{Texto: err.Error()}
+	}
+	destino := f.Direccion
+	if f.Usuario != "" || f.Clave != "" {
+		var err error
+		if destino, err = conCredenciales(destino, f.Usuario, f.Clave); err != nil {
+			return ResultadoDeProbar{Texto: "esa dirección no la entiendo como dirección de red", Detalle: err.Error()}
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, PlazoDeProbar)
+	defer cancel()
+
+	// El nombre se resuelve aquí, antes de llamar a ffprobe, porque ffmpeg
+	// reporta un fallo de DNS como «Input/output error» y eso no le dice nada
+	// a nadie. Preguntarlo antes cuesta milisegundos y convierte un mensaje
+	// inútil en uno exacto.
+	if host := hostDe(f.Direccion); host != "" {
+		if _, err := net.DefaultResolver.LookupHost(ctx, host); err != nil {
+			return ResultadoDeProbar{
+				Texto:   fmt.Sprintf("esta máquina no sabe quién es %q: revisa cómo está escrito, o si hace falta el DNS de la estación", host),
+				Detalle: err.Error(),
+			}
+		}
+	}
+
+	m, err := ingest.ProbeRemoto(ctx, a.FFprobe, destino)
+	if err != nil {
+		// El detalle es lo que dijo ffprobe DE VERDAD, no el mensaje de
+		// ingest pensado para archivos locales: ése dice «no se puede abrir
+		// el archivo» de una dirección de red, que es exactamente el tipo de
+		// pista falsa que hace perder una tarde.
+		crudo := motivoCrudo(err)
+		return ResultadoDeProbar{
+			Texto:   textoDeFalloAlProbar(ctx, crudo),
+			Detalle: crudo,
+		}
+	}
+
+	res := ResultadoDeProbar{Responde: true, Texto: "la señal responde"}
+	if m.Width > 0 && m.Height > 0 {
+		res.Video = fmt.Sprintf("%s %dx%d", m.Codec, m.Width, m.Height)
+		if m.FPS != "" {
+			res.Video += " a " + m.FPS
+		}
+	} else {
+		res.Avisos = append(res.Avisos, "no trae imagen: si esto no es una señal de solo audio, algo está mal")
+	}
+	switch {
+	case m.AudioChannels > 0:
+		res.Audio = fmt.Sprintf("%d canal(es)", m.AudioChannels)
+	default:
+		res.Avisos = append(res.Avisos, "no trae sonido: todo lo que sale al aire tiene que llevar audio")
+	}
+	if m.DurationMs > 0 {
+		res.Duracion = (time.Duration(m.DurationMs) * time.Millisecond).Round(time.Second).String()
+	} else {
+		// Una señal en vivo no tiene final, y eso está bien: es la diferencia
+		// entre un archivo y un vivo.
+		res.Duracion = "en vivo (sin final)"
+	}
+	return res
+}
+
+// textoDeFalloAlProbar traduce el fallo a algo accionable. Es la parte que
+// Rolando pidió sin pedirla: él perdió una tarde con un video que marcaba
+// 0:00:00 porque el problema era el nombre del archivo, no el códec, y nada
+// se lo dijo.
+func textoDeFalloAlProbar(ctx context.Context, crudo string) string {
+	if ctx.Err() != nil {
+		return fmt.Sprintf("la dirección no contestó en %s: comprueba que el otro lado esté encendido y que esta máquina llegue hasta ahí",
+			PlazoDeProbar)
+	}
+	t := strings.ToLower(crudo)
+	switch {
+	case strings.Contains(t, "401") || strings.Contains(t, "unauthorized"):
+		return "la dirección responde pero rechaza el usuario o la clave"
+	case strings.Contains(t, "403") || strings.Contains(t, "forbidden"):
+		return "la dirección responde pero no deja entrar desde aquí"
+	case strings.Contains(t, "404"):
+		return "esa dirección existe pero no hay nada ahí: revisa la ruta"
+	case strings.Contains(t, "connection refused"):
+		return "nadie está escuchando en esa dirección y ese puerto"
+	case strings.Contains(t, "no route") || strings.Contains(t, "unreachable"):
+		return "esta máquina no llega hasta ahí: es cosa de la red, no de la señal"
+	case strings.Contains(t, "no such host") || strings.Contains(t, "name resolution"):
+		return "ese nombre no existe: revisa cómo está escrito"
+	case strings.Contains(t, "certificate"):
+		return "el otro lado usa un certificado que esta máquina no reconoce"
+	case strings.Contains(t, "invalid data") || strings.Contains(t, "invalid argument"):
+		return "ahí hay algo, pero no es una señal de video que yo sepa leer"
+	case strings.Contains(t, "protocol not found") || strings.Contains(t, "protocol_whitelist"):
+		return "no reconozco esa forma de dirección: prueba a poner http://, https://, srt:// o rtmp:// delante"
+	case strings.Contains(t, "timed out") || strings.Contains(t, "timeout"):
+		return "el otro lado aceptó la conexión pero no mandó nada"
+	case strings.Contains(t, "server returned 5"):
+		return "el servidor del otro lado está fallando él: no es cosa tuya"
+	default:
+		// Sin pista, se dice que no se sabe, y el detalle queda debajo. Decir
+		// una causa inventada es peor que no decir ninguna: manda a la persona
+		// a buscar donde no es.
+		return "no se pudo abrir la señal, y el sistema no dijo por qué"
+	}
+}
+
+// motivoCrudo saca lo que de verdad dijo ffprobe, desenvolviendo el mensaje
+// que ingest pone encima para los archivos locales.
+func motivoCrudo(err error) string {
+	if err == nil {
+		return ""
+	}
+	// El de más adentro es el que trae la salida de ffprobe.
+	for {
+		dentro := errors.Unwrap(err)
+		if dentro == nil {
+			break
+		}
+		err = dentro
+	}
+	t := strings.TrimSpace(err.Error())
+	// ffprobe escribe varias líneas y la última suele ser la que importa.
+	if lineas := strings.Split(t, "\n"); len(lineas) > 1 {
+		for i := len(lineas) - 1; i >= 0; i-- {
+			if l := strings.TrimSpace(lineas[i]); l != "" {
+				return l
+			}
+		}
+	}
+	return t
+}
+
+// revisarDireccion comprueba lo que se puede comprobar sin salir a la red, y
+// lo dice con la forma correcta delante. Es lo más barato que existe: caza el
+// error más común —olvidar el principio— antes de gastar cinco segundos
+// esperando a una dirección que nunca iba a funcionar.
+func revisarDireccion(direccion string) error {
+	u, err := url.Parse(strings.TrimSpace(direccion))
+	if err != nil {
+		return fmt.Errorf("esa dirección no la entiendo: %s", direccion)
+	}
+	if !slices.Contains(esquemasDeSenal, strings.ToLower(u.Scheme)) {
+		return fmt.Errorf("a la dirección le falta el principio: prueba con http://%s", strings.TrimPrefix(direccion, "//"))
+	}
+	if u.Host == "" && u.Scheme != "file" {
+		return fmt.Errorf("a la dirección le falta la máquina: http://LAMAQUINA:PUERTO/loquesea")
+	}
+	return nil
+}
+
+// conCredenciales mete usuario y clave en la URL, que es como los protocolos
+// de red los esperan. Se hace **solo al llamar**, nunca al guardar: en la base
+// el usuario y la clave viven separados y la clave, cifrada.
+func conCredenciales(direccion, usuario, clave string) (string, error) {
+	u, err := url.Parse(direccion)
+	if err != nil {
+		return "", err
+	}
+	// Ojo con esto: url.Parse("localhost:8080/hls") **no falla**. Devuelve
+	// Scheme "localhost", así que comprobar que el esquema no esté vacío no
+	// sirve de nada. Hay que comprobar que sea uno de los que existen.
+	if !slices.Contains(esquemasDeSenal, strings.ToLower(u.Scheme)) {
+		return "", fmt.Errorf("le falta el principio: http://, https://, srt://, rtmp://, rtsp:// o udp://")
+	}
+	u.User = url.UserPassword(usuario, clave)
+	return u.String(), nil
+}
+
+// esquemasDeSenal son los principios de dirección que ffmpeg sabe abrir y que
+// tienen sentido como fuente de un canal.
+var esquemasDeSenal = []string{"http", "https", "srt", "rtmp", "rtmps", "rtsp", "udp", "rtp", "file"}
+
+// hostDe saca la máquina de una dirección, o cadena vacía si no la tiene o si
+// ya es un número (una IP no hay que resolverla).
+func hostDe(direccion string) string {
+	u, err := url.Parse(strings.TrimSpace(direccion))
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	h := u.Hostname()
+	if h == "" || net.ParseIP(h) != nil {
+		return ""
+	}
+	return h
 }

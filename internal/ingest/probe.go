@@ -106,17 +106,33 @@ func Probe(ctx context.Context, ffprobe, path string) (Measure, error) {
 // probeWith es Probe con argumentos extra —el portal le pasa
 // -protocol_whitelist file— y un límite de tiempo propio.
 func probeWith(ctx context.Context, ffprobe, path string, extra []string, timeout time.Duration) (Measure, error) {
+	return probeDe(ctx, ffprobe, path, extra, timeout, false)
+}
+
+// probeDe es probeWith con la diferencia que importa: si lo que se mide está
+// **en la red** en vez de en el disco.
+//
+// Las comprobaciones de archivo de abajo —que exista, que no sea una carpeta,
+// que no esté vacío— son buenas para un archivo y **mentira para una
+// dirección**: una URL no pasa un os.Stat, así que salía «no se puede abrir el
+// archivo» de algo que no es un archivo, y ffprobe no llegaba a correr nunca.
+// Exactamente el tipo de pista falsa que hace perder una tarde (Rolando, 11
+// sept 2026: «el problema era por el nombre del archivo, no porque tuviera un
+// error de codecs»).
+func probeDe(ctx context.Context, ffprobe, path string, extra []string, timeout time.Duration, remoto bool) (Measure, error) {
 	m := Measure{Path: path, CaptionStream: -1}
-	st, err := os.Stat(path)
-	if err != nil {
-		return m, Plainf(err, "no se puede abrir el archivo %q", trimName(path))
-	}
-	if st.IsDir() {
-		return m, Plainf(nil, "%q es una carpeta, no un archivo", trimName(path))
-	}
-	m.SizeBytes = st.Size()
-	if m.SizeBytes == 0 {
-		return m, Plainf(nil, "el archivo está vacío (0 bytes): la copia no terminó o el origen falló")
+	if !remoto {
+		st, err := os.Stat(path)
+		if err != nil {
+			return m, Plainf(err, "no se puede abrir el archivo %q", trimName(path))
+		}
+		if st.IsDir() {
+			return m, Plainf(nil, "%q es una carpeta, no un archivo", trimName(path))
+		}
+		m.SizeBytes = st.Size()
+		if m.SizeBytes == 0 {
+			return m, Plainf(nil, "el archivo está vacío (0 bytes): la copia no terminó o el origen falló")
+		}
 	}
 
 	cctx := ctx
@@ -141,7 +157,13 @@ func probeWith(ctx context.Context, ffprobe, path string, extra []string, timeou
 			detail = err.Error()
 		}
 		if cctx.Err() == context.DeadlineExceeded {
+			if remoto {
+				return m, Plainf(fmt.Errorf("%s", detail), "la dirección no contestó a tiempo")
+			}
 			return m, Plainf(fmt.Errorf("%s", detail), "el archivo tardó demasiado en abrirse: puede estar dañado o en un disco que no responde")
+		}
+		if remoto {
+			return m, Plainf(fmt.Errorf("%s", detail), "no se pudo abrir la señal de esa dirección")
 		}
 		return m, Plainf(fmt.Errorf("%s", detail), "el archivo no se puede leer: está incompleto o dañado")
 	}
@@ -516,4 +538,31 @@ func sinopsisLegible(s string) string {
 		return ""
 	}
 	return s
+}
+
+// ProbeRemoto mira una señal que está en la red en vez de en el disco: un
+// HLS, un RTMP, un SRT. Es lo que sostiene el botón de «probar antes de
+// guardar» (F2-116).
+//
+// Se diferencia de Probe en dos cosas, y las dos importan:
+//
+//   - **El plazo lo pone quien llama**, por el contexto, y es corto. Un
+//     archivo roto merece los sesenta segundos de ProbeTimeout; una señal que
+//     no contesta en cinco no sirve para salir al aire, y quien está probando
+//     no puede quedarse mirando una rueda girar.
+//   - **Se le dice a ffprobe que no se quede esperando el final**, porque un
+//     vivo no tiene final: con -analyzeduration corto contesta con lo primero
+//     que ve y se va.
+func ProbeRemoto(ctx context.Context, ffprobe, url string) (Measure, error) {
+	plazo := ProbeTimeout
+	if fin, hay := ctx.Deadline(); hay {
+		if queda := time.Until(fin); queda > 0 {
+			plazo = queda
+		}
+	}
+	return probeDe(ctx, ffprobe, url, []string{
+		"-analyzeduration", "3000000", // 3 s mirando, no los 5 que trae de serie
+		"-probesize", "5000000",
+		"-rw_timeout", "4000000", // 4 s sin un byte y se rinde, en vez de colgarse
+	}, plazo, true)
 }

@@ -736,3 +736,46 @@ func scanDriverConfig(sc interface{ Scan(...any) error }) (model.DriverConfig, [
 	c.TieneSecreto = len(cred) > 0
 	return c, cred, nil
 }
+
+// Get busca una fuente en vivo por id.
+func (r *LiveSourceRepo) Get(ctx context.Context, id int64) (model.LiveSource, error) {
+	row := r.db.QueryRowContext(ctx, `SELECT `+liveCols+` FROM live_source WHERE id = ?`, id)
+	l, err := scanLive(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return model.LiveSource{}, fmt.Errorf("fuente %d: %w", id, ErrNotFound)
+	}
+	return l, translate("leer la fuente", err)
+}
+
+// EnUso dice cuántas reglas y cuántos bloques del plan dependen de esta
+// fuente. Es lo que hay que enseñar antes de dejar borrarla: borrar una
+// fuente que RadioOnce Live! usa los lunes deja el lunes sin nada.
+func (r *LiveSourceRepo) EnUso(ctx context.Context, id int64) (reglas, bloques int, err error) {
+	q := `SELECT
+		(SELECT COUNT(*) FROM schedule_rule WHERE live_source_id = ?),
+		(SELECT COUNT(*) FROM plan_item WHERE live_source_id = ? AND estado NOT IN ('aired','skipped'))`
+	err = r.db.QueryRowContext(ctx, q, id, id).Scan(&reglas, &bloques)
+	return reglas, bloques, translate("contar dónde se usa la fuente", err)
+}
+
+// Delete borra una fuente. **Se niega si algo la está usando**: una regla que
+// se queda sin fuente es un hueco en la parrilla que nadie pidió, y la base lo
+// rechazaría igual por la clave foránea — pero con un error que no dice nada.
+// Mejor decirlo aquí, con el número delante.
+func (r *LiveSourceRepo) Delete(ctx context.Context, id int64) error {
+	reglas, bloques, err := r.EnUso(ctx, id)
+	if err != nil {
+		return err
+	}
+	if reglas > 0 || bloques > 0 {
+		return fmt.Errorf("esa señal la usan %d regla(s) y %d bloque(s) que todavía no salieron: quita eso primero o quedan huecos en la programación", reglas, bloques)
+	}
+	res, err := r.db.ExecContext(ctx, `DELETE FROM live_source WHERE id = ?`, id)
+	if err != nil {
+		return translate("borrar la fuente", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("fuente %d: %w", id, ErrNotFound)
+	}
+	return nil
+}

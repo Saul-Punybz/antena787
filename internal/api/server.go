@@ -116,6 +116,21 @@ func (s *Server) routes() {
 	// ordena por hora de aire y se aparta cuando el aire sufre.
 	api("POST /api/v1/material/{id}/volver-a-preparar", s.volverAPreparar)
 
+	// Las señales en vivo: de dónde sale lo que no es un archivo (F2-116).
+	// La tabla y el repositorio existían desde el principio y no había una
+	// sola ruta que los alcanzara: se podía programar un vivo que no se podía
+	// crear.
+	api("GET /api/v1/fuentes", s.fuentesList)
+	api("POST /api/v1/fuentes", s.fuentesPost)
+	api("PUT /api/v1/fuentes/{id}", s.fuentesPut)
+	api("DELETE /api/v1/fuentes/{id}", s.fuentesDelete)
+	// Probar antes de guardar. De todo lo que se miró, **nadie lo hace**: lo
+	// más cercano es la vista previa de MistServer, y es DESPUÉS de guardar
+	// (docs/investigacion/ENTRADAS-POR-URL-COMPARADAS-2026-09-11.md). Para
+	// quien es su propio departamento de IT, es la diferencia entre pegar una
+	// dirección y rezar, o saberlo en tres segundos.
+	api("POST /api/v1/fuentes/probar", s.fuentesProbar)
+
 	// Reglas y plan
 	api("GET /api/v1/reglas", s.reglasList)
 	api("POST /api/v1/reglas", s.reglasPost)

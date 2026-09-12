@@ -336,11 +336,20 @@ type FillerAsset struct {
 }
 
 type LiveSource struct {
-	ID                int64  `json:"id" db:"id"`
-	ChannelID         int64  `json:"channel_id" db:"channel_id"`
-	Name              string `json:"nombre" db:"nombre"`
-	Kind              string `json:"tipo" db:"tipo"` // srt | rtmp | captura
-	ListenPoint       string `json:"punto_de_escucha" db:"punto_de_escucha"`
+	ID        int64  `json:"id" db:"id"`
+	ChannelID int64  `json:"channel_id" db:"channel_id"`
+	Name      string `json:"nombre" db:"nombre"`
+	// Kind: srt | rtmp | captura | url. Los tres primeros son formas de
+	// **recibir** —alguien nos empuja la señal, o entra por una tarjeta—; el
+	// cuarto es **ir a buscarla**, que es como se alimenta CAtv hoy (esquema
+	// v11, F2-116).
+	Kind string `json:"tipo" db:"tipo"`
+	// ListenPoint es dónde se escucha, si se recibe; y de dónde se tira, si es
+	// de tipo `url`. El nombre viene de cuando solo existía lo primero.
+	ListenPoint string `json:"punto_de_escucha" db:"punto_de_escucha"`
+	// ConexionID apunta a la conexión de driver_config donde vive la clave,
+	// cuando la fuente pide una. Nulo = abierta. La clave NUNCA viaja aquí.
+	ConexionID        *int64 `json:"conexion_id" db:"-"`
 	AudioOnly         bool   `json:"solo_audio" db:"solo_audio"`
 	PlannedDurationMs int64  `json:"duracion_prevista_ms" db:"duracion_prevista_ms"`
 	BackupFillerID    *int64 `json:"filler_de_respaldo" db:"filler_de_respaldo"`
@@ -617,3 +626,29 @@ type DriverConfig struct {
 	// clave guardada o el campo está vacío.
 	TieneSecreto bool `json:"tiene_secreto" db:"-"`
 }
+
+// Los tipos de fuente en vivo. Van aquí y no como cadenas sueltas: el CHECK
+// del esquema y la validación de la API tienen que decir lo mismo, y cuando
+// no lo dicen, la base rechaza lo que la pantalla dejó escribir.
+const (
+	// FuenteSRT y FuenteRTMP son **recibir**: se abre un puerto y se espera a
+	// que alguien empuje la señal.
+	FuenteSRT  = "srt"
+	FuenteRTMP = "rtmp"
+	// FuenteCaptura es una tarjeta de captura metida en la máquina.
+	FuenteCaptura = "captura"
+	// FuenteURL es **ir a buscarla**: HLS, HTTP, RTSP, un `udp://@` — lo que
+	// ffmpeg sepa abrir. Es como se alimenta CAtv hoy (F2-116).
+	FuenteURL = "url"
+)
+
+// TiposDeFuente son los cuatro, para validar sin repetir la lista.
+func TiposDeFuente() []string {
+	return []string{FuenteSRT, FuenteRTMP, FuenteCaptura, FuenteURL}
+}
+
+// SeVaABuscar dice si esta fuente se tira (pull) en vez de esperarse (push).
+// La diferencia no es cosmética: una que se espera necesita un puerto abierto
+// y quien empuja tiene que saber la dirección; una que se busca necesita salir
+// a la red y puede necesitar una clave.
+func (l LiveSource) SeVaABuscar() bool { return l.Kind == FuenteURL }
