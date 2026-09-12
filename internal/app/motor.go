@@ -271,7 +271,11 @@ func (a *App) correrMotor(ctx context.Context, ch model.Channel) error {
 	// encoder no llega a encender, cada salida queda con su motivo escrito.
 	salidas.vigilar(ctx)
 	// Y el que mira si alguien apagó el aire: apagar tiene que apagar.
-	go a.vigilarElModo(ctx, cancel)
+	// También entra en el WaitGroup: consulta la base en cada vuelta, y sin
+	// esto Close() podía cerrarla debajo (auditoría de concurrencia, 12 sept
+	// 2026).
+	a.wg.Add(1)
+	go func() { defer a.wg.Done(); a.vigilarElModo(ctx, cancel) }()
 	enc, err := engine.StartEncoder(ctx, a.FFmpeg, formato, salidas.outs)
 	if err != nil {
 		salidas.avisar(err)

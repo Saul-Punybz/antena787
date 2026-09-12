@@ -22,6 +22,18 @@ type NormalizeOptions struct {
 	SourceDurationMs int64 // duración medida del original; hace falta para recortar la cola
 	TrimHeadMs       int64 // negro y silencio de cabeza que se recorta
 	TrimTailMs       int64 // negro y silencio de cola que se recorta
+	// NoTocar deja el archivo como viene: no se convierte ni se vuelve a
+	// comprimir. Para material que ya llega en el formato de casa, donde
+	// pasarlo otra vez por un encoder solo lo puede empeorar (esquema v10).
+	NoTocar bool
+	// GananciaExtraDB corrige un archivo que viene bajo o alto, **además** de
+	// la normalización. «Este viene 3 dB bajito» es distinto de «normaliza a
+	// otro número».
+	GananciaExtraDB float64
+	// ObjetivoLUFS cambia a cuánto se normaliza, para una estación fuera del
+	// perfil de fábrica. En cero manda el perfil regulatorio del canal, que es
+	// lo correcto en casi todos los casos.
+	ObjetivoLUFS float64
 
 	Deinterlace bool // el original viene entrelazado (Measure.Interlaced)
 
@@ -170,6 +182,12 @@ func Normalize(ctx context.Context, ffmpeg, src, dst string, f engine.Format, ta
 	// ── pasada 2: corregir y conformar ────────────────────────────────
 	rep.VideoFilter = videoConform(f, opts.Deinterlace)
 	rep.AudioFilter = audioConform(f, targetLUFS, truePeak, opts.measured)
+	// La corrección de un preset va DESPUÉS de normalizar, no en vez de: el
+	// archivo se lleva a su objetivo y después se le suma lo que la persona
+	// dijo que le faltaba. Al revés, loudnorm se comería la corrección.
+	if opts.GananciaExtraDB != 0 {
+		rep.AudioFilter += fmt.Sprintf(",volume=%.2fdB", opts.GananciaExtraDB)
+	}
 
 	args := normalizeArgs(src, dst, f, opts, rep, true)
 	if err := runFFmpeg(ctx, ffmpeg, args); err != nil {

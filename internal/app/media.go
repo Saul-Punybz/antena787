@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"net/url"
 	"os"
@@ -69,8 +70,15 @@ func (a *App) watch(ctx context.Context, dir string, portal bool) error {
 	if err != nil {
 		return err
 	}
-	go func() { _ = w.Run(ctx) }()
+	// Las dos entran en el WaitGroup que espera Close(). Sin eso, Close hacía
+	// cancel(), wg.Wait() y cerraba la base **mientras estas seguían a mitad
+	// de un Insert o un Update**: apagar el canal justo cuando entra un
+	// archivo podía dejar la base a medias. Lo encontró la auditoría de
+	// concurrencia del 12 de septiembre de 2026.
+	a.wg.Add(2)
+	go func() { defer a.wg.Done(); _ = w.Run(ctx) }()
 	go func() {
+		defer a.wg.Done()
 		for found := range w.Events() {
 			if ctx.Err() != nil {
 				return
@@ -567,9 +575,19 @@ func (a *App) normalizeOne(ctx context.Context, j ingest.Job) (string, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
+	// «No tocar»: el archivo ya viene bien y volver a comprimirlo solo lo
+	// puede empeorar. Sale al aire tal como llegó, y la cola no gasta nada.
+	if p := a.PresetDe(ctx, asset); p.NoTocar != nil && *p.NoTocar {
+		a.Publish("normalizacion", "sin tocar",
+			asset.Path+" sale tal como vino: su preset dice que no hay que prepararlo")
+		return asset.Path, nil
+	}
 	dst := ingest.NormalizedPathFor(dir, asset.Path, ".mkv")
 	lufs, peak := a.loudnessTarget(ctx)
 	opts := ingest.NormalizeOptionsFor(asset, m, a.preferenciasDe(ctx, asset))
+	// Y encima, lo que diga el preset que gobierna a este archivo: primero el
+	// del canal, encima el del programa, encima el del archivo (esquema v10).
+	a.aplicarPreset(ctx, &opts, asset)
 	// Y el tope de hilos: con el canal al aire se le apartan núcleos a la
 	// señal, con el canal apagado ffmpeg se queda con la máquina entera.
 	opts.Threads = a.HilosParaPreparar(ctx)
@@ -580,6 +598,13 @@ func (a *App) normalizeOne(ctx context.Context, j ingest.Job) (string, error) {
 	plazo := a.normalizeDeadline(asset.DurationMs)
 	nctx, cancel := context.WithTimeout(ctx, plazo)
 	defer cancel()
+	// Un preset puede cambiar a cuánto se normaliza. Es lo único de aquí que
+	// no es un gusto: en Estados Unidos el CALM Act manda −24 LKFS, así que
+	// cambiarlo viene con su aviso (App.AvisoDeVolumen) y solo se hace a
+	// propósito.
+	if opts.ObjetivoLUFS != 0 {
+		lufs = opts.ObjetivoLUFS
+	}
 	reporte, err := ingest.Normalize(nctx, a.FFmpeg, asset.Path, dst, FormatOf(ch.FormatProfile), lufs, peak, opts)
 	if err != nil {
 		if errors.Is(nctx.Err(), context.DeadlineExceeded) && ctx.Err() == nil {
@@ -1061,4 +1086,138 @@ func (a *App) CredencialesDeFuente(ctx context.Context, fuenteID int64) (usuario
 		return p.Usuario, completa.Secret
 	}
 	return "", ""
+}
+
+// ── los presets: los tres niveles, resueltos ──────────────────────────
+
+// PresetDe devuelve los ajustes que gobiernan a este archivo, ya resueltos:
+// se empieza por el canal, encima manda el título, y encima manda el archivo.
+//
+// **Un nivel que no dice nada no tapa al de arriba: hereda.** Por eso los
+// campos de AjustesDePreset son punteros — «cero» y «no dicho» son cosas
+// distintas, y confundirlas haría que un preset con un campo vacío pisara el
+// del canal con un cero.
+//
+// Sin ningún preset puesto devuelve todo vacío, que es exactamente lo que
+// pasaba antes de que los presets existieran: los valores de fábrica del
+// código. Añadir esto no cambia el comportamiento de una instalación que no
+// los use.
+func (a *App) PresetDe(ctx context.Context, asset model.MediaAsset) model.AjustesDePreset {
+	var out model.AjustesDePreset
+
+	// 1) El canal: el nivel más general.
+	if ch, err := a.Store.Channel.Get(ctx, a.ChannelID); err == nil {
+		a.encimaDe(ctx, &out, ch.PresetID)
+	}
+	// 2) El título al que pertenece el archivo, si lo tiene.
+	if t, err := a.Store.Title.ByAsset(ctx, asset.ID); err == nil {
+		a.encimaDe(ctx, &out, t.PresetID)
+	}
+	// 3) Y el archivo, que manda sobre todos.
+	a.encimaDe(ctx, &out, asset.PresetID)
+	return out
+}
+
+// encimaDe vuelca un preset sobre lo que ya hay, sin borrar lo que no dice.
+func (a *App) encimaDe(ctx context.Context, out *model.AjustesDePreset, id *int64) {
+	if id == nil {
+		return
+	}
+	p, err := a.Store.Preset.Get(ctx, *id)
+	if err != nil {
+		return
+	}
+	var nuevo model.AjustesDePreset
+	if json.Unmarshal([]byte(p.Settings), &nuevo) != nil {
+		return
+	}
+	if nuevo.NoTocar != nil {
+		out.NoTocar = nuevo.NoTocar
+	}
+	if nuevo.VolumenRelativoDB != nil {
+		out.VolumenRelativoDB = nuevo.VolumenRelativoDB
+	}
+	if nuevo.ObjetivoVolumenLKFS != nil {
+		out.ObjetivoVolumenLKFS = nuevo.ObjetivoVolumenLKFS
+	}
+	if nuevo.RecorteCabezaMs != nil {
+		out.RecorteCabezaMs = nuevo.RecorteCabezaMs
+	}
+	if nuevo.RecorteColaMs != nil {
+		out.RecorteColaMs = nuevo.RecorteColaMs
+	}
+	if nuevo.GOPSegundos != nil {
+		out.GOPSegundos = nuevo.GOPSegundos
+	}
+	if nuevo.Calidad != "" {
+		out.Calidad = nuevo.Calidad
+	}
+	if nuevo.CodecVideo != "" {
+		out.CodecVideo = nuevo.CodecVideo
+	}
+	if nuevo.CodecAudio != "" {
+		out.CodecAudio = nuevo.CodecAudio
+	}
+	if nuevo.BitrateAudio != "" {
+		out.BitrateAudio = nuevo.BitrateAudio
+	}
+}
+
+// crfDeCalidad traduce «alta», «normal» y «baja» al número que entiende
+// ffmpeg. El número no se le enseña a nadie: quien opera una estación sabe si
+// quiere calidad alta, no lo que es un CRF.
+func crfDeCalidad(calidad string) int {
+	switch calidad {
+	case "alta":
+		return 17
+	case "baja":
+		return 24
+	default:
+		return 0 // lo de fábrica
+	}
+}
+
+// aplicarPreset vuelca sobre las opciones de preparación lo que diga el preset
+// que gobierna este archivo. Lo que el preset no dice no se toca: quedan los
+// valores que la normalización ya había calculado.
+func (a *App) aplicarPreset(ctx context.Context, opts *ingest.NormalizeOptions, asset model.MediaAsset) {
+	p := a.PresetDe(ctx, asset)
+
+	// «No tocar» no es un ajuste más: es decir que este archivo ya viene bien
+	// y que pasarlo otra vez por un encoder solo lo puede empeorar. Se marca
+	// aquí y la cola lo respeta.
+	if p.NoTocar != nil && *p.NoTocar {
+		opts.NoTocar = true
+		return
+	}
+	if p.RecorteCabezaMs != nil {
+		opts.TrimHeadMs = *p.RecorteCabezaMs
+	}
+	if p.RecorteColaMs != nil {
+		opts.TrimTailMs = *p.RecorteColaMs
+	}
+	if p.GOPSegundos != nil && *p.GOPSegundos > 0 {
+		opts.GOPFrames = *p.GOPSegundos * int(math.Round(FormatOf("").FPS()))
+	}
+	if crf := crfDeCalidad(p.Calidad); crf > 0 {
+		opts.CRF = crf
+	}
+	if p.CodecVideo != "" {
+		opts.VideoEncoder = p.CodecVideo
+	}
+	if p.CodecAudio != "" {
+		opts.AudioEncoder = p.CodecAudio
+	}
+	if p.BitrateAudio != "" {
+		opts.AudioBitrate = p.BitrateAudio
+	}
+	// La corrección de volumen va aparte: se suma a la normalización, no la
+	// sustituye. «Este viene 3 dB bajito» es distinto de «normaliza a otro
+	// número».
+	if p.VolumenRelativoDB != nil {
+		opts.GananciaExtraDB = *p.VolumenRelativoDB
+	}
+	if p.ObjetivoVolumenLKFS != nil {
+		opts.ObjetivoLUFS = *p.ObjetivoVolumenLKFS
+	}
 }
