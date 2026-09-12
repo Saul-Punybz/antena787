@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { MonitorDeAire } from '../componentes/MonitorDeAire'
 import { Link } from 'react-router'
 import { EncabezadoDeAire } from '../componentes/EncabezadoDeAire'
 import { Caratula } from '../componentes/Caratula'
@@ -90,6 +91,13 @@ export function AlAire() {
               <span className={enSombra ? 'tally tally--apagado' : 'tally'} />
               {enSombra ? 'MODO SOMBRA' : 'EN VIVO'}
             </span>
+
+            {/*
+              El monitor: cuando el canal está al aire, aquí se ve lo que está
+              produciendo (F2-117). En sombra no hay nada que ver y lo dice el
+              cartel de abajo.
+            */}
+            <MonitorDeAire monitor={estado?.monitor} enSombra={enSombra} />
 
             {enSombra && (
               <div

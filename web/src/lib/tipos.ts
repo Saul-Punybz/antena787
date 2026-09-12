@@ -249,6 +249,8 @@ export interface Estado {
   acelerador_porque?: string
   /** Lo que Ajustes ofrece, ya con el nombre en palabras claras desde el servidor. */
   aceleradores_disponibles?: AceleradorDisponible[]
+  /** Si hay dónde mirar la señal que el canal produce (F2-117). */
+  monitor?: Monitor
 }
 
 // ── reglas ────────────────────────────────────────────────────────────
@@ -944,4 +946,20 @@ export interface PruebaDeFuente {
   audio?: string
   duracion?: string
   avisos?: string[]
+}
+
+/**
+ * El monitor (F2-117): si hay dónde mirar la señal que el canal produce, y de
+ * dónde tirarla.
+ *
+ * **Enseña lo que el canal PRODUCE, no lo que salió por la antena.** Lo
+ * segundo es el retorno de aire, que es otra cosa; confundirlos haría creer a
+ * alguien que verifica su transmisor cuando verifica el software.
+ */
+export interface Monitor {
+  hay: boolean
+  url?: string
+  /** Qué falta, cuando falta algo. Ya escrito para una persona. */
+  porque?: string
+  salida_id?: number
 }

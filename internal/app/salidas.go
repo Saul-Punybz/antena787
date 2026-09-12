@@ -10,6 +10,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -179,3 +180,58 @@ type SalidaEnPantalla struct {
 // DriversDeSalida son los drivers de salida que se pueden ofrecer hoy, con su
 // nombre de pantalla. `udp-ts` está entre ellos desde F2 (F2-50).
 func DriversDeSalida() []salida.Ficha { return salida.Disponibles() }
+
+// ── el monitor: ver lo que el canal está produciendo (F2-117) ─────────
+
+// Monitor dice si hay dónde mirar la señal y de dónde tirarla.
+type Monitor struct {
+	// Hay es si existe una salida que un navegador pueda pintar.
+	Hay bool `json:"hay"`
+	// URL es de dónde tira el navegador. Relativa al propio servidor cuando
+	// la salida escucha en esta máquina.
+	URL string `json:"url,omitempty"`
+	// Porque explica qué falta, cuando falta algo.
+	Porque string `json:"porque,omitempty"`
+	// SalidaID es la salida que hace de monitor, si la hay.
+	SalidaID int64 `json:"salida_id,omitempty"`
+}
+
+// ElMonitor busca entre las salidas del canal una que sirva para mirar: tiene
+// que ser `http-ts` —porque el navegador tira de ella por HTTP— y en H.264,
+// **porque ningún navegador sabe decodificar MPEG-2**.
+//
+// Eso último es la razón de que el monitor sea una salida aparte y no una
+// vista de la que va al transmisor: son los mismos cuadros comprimidos de otra
+// forma. Es lo que en una estación se llama un *confidence monitor*, y hay que
+// decir qué es y qué no: **enseña lo que el canal está produciendo, no lo que
+// salió por la antena**. Lo segundo es el retorno de aire, que es otra cosa.
+func (a *App) ElMonitor(ctx context.Context) Monitor {
+	salidas, err := a.Store.Output.List(ctx, a.ChannelID)
+	if err != nil {
+		return Monitor{Porque: "no se pudieron leer las salidas del canal"}
+	}
+	var hayHTTP bool
+	for _, s := range salidas {
+		if s.Driver != salida.DriverHTTPTS {
+			continue
+		}
+		hayHTTP = true
+		var p salida.ParamsHTTPTS
+		if json.Unmarshal([]byte(s.Params), &p) != nil {
+			continue
+		}
+		if p.Codec != "h264" {
+			continue
+		}
+		ruta := p.Ruta
+		if ruta == "" {
+			ruta = "/stream.ts"
+		}
+		return Monitor{Hay: true, SalidaID: s.ID,
+			URL: fmt.Sprintf("http://%s:%d%s", "127.0.0.1", p.Puerto, ruta)}
+	}
+	if hayHTTP {
+		return Monitor{Porque: "hay una salida para ver desde otra computadora, pero está en MPEG-2 y un navegador no sabe pintarlo: hace falta una en H.264"}
+	}
+	return Monitor{Porque: "todavía no hay una salida para ver la señal desde el navegador"}
+}

@@ -44,6 +44,11 @@ type estadoBody struct {
 	// qué cambió, vacía cuando es lo que se pidió.
 	Acelerador       string `json:"acelerador_efectivo"`
 	AceleradorPorque string `json:"acelerador_porque,omitempty"`
+	// Monitor es si hay dónde mirar la señal que el canal está produciendo, y
+	// de dónde tirarla (F2-117). Ojo con lo que significa: enseña lo que el
+	// canal PRODUCE, no lo que salió por la antena — eso es el retorno de
+	// aire, que es otra cosa.
+	Monitor app.Monitor `json:"monitor"`
 	// AceleradoresDisponibles es la lista que Ajustes ofrece, con el nombre
 	// ya en palabras claras y si este ffmpeg de verdad lo trae. Va aquí y no en
 	// GET /canal para no cambiarle la forma al canal, que es el modelo pelado.
@@ -109,6 +114,7 @@ func (s *Server) estado(w http.ResponseWriter, r *http.Request) {
 	ac, porque := s.App.AceleradorEnCurso()
 	body.Acelerador, body.AceleradorPorque = string(ac), porque
 	body.AceleradoresDisponibles = s.losAceleradores()
+	body.Monitor = s.App.ElMonitor(ctx)
 	body.Salidas = []app.SalidaEnPantalla{}
 	if al := s.App.AlarmaSubtitulos(ctx); al != nil {
 		body.Alarmas = append(body.Alarmas, *al)
