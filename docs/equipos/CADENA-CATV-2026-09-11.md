@@ -83,3 +83,59 @@ mejora, no un capricho.
 - **Los PIDs nunca fueron el bloqueo.** No escribe ninguno.
 - **TTL 1 de fábrica era lo correcto** para un equipo en el mismo switch.
 - **Multicast como camino principal**, no como opción.
+
+---
+
+## El síntoma que lo confirma todo · Rolando, 11 sep 2026 (tarde)
+
+Después de leer el análisis del audio, contestó:
+
+> «El mpeg y aac son los estandares. Los q tu pones los tira vlc, los coge el
+> tp1000 los transmite el transmisor **pero no todos los tvs lo cogen**.»
+
+**Esa última frase es el hallazgo más valioso del despliegue hasta ahora**, y no
+vino como pregunta: vino como algo que él ya sabía y daba por normal.
+
+### Por qué encaja
+
+La cadena «funciona» hasta el transmisor porque **el TP1000 y el excitador no
+validan el estándar: solo pasan los bits**. Quien lo valida es el televisor del
+televidente. Un fallo de cumplimiento no se ve en la sala de control — se ve en
+las casas, y solo en algunas.
+
+Y una corrección de vocabulario que importa: **en ATSC 1.0 el audio de emisión
+es AC-3, no AAC**. AAC es de ATSC 3.0, de ISDB y de DVB. MPEG capa II es de DVB.
+El 47 CFR 73.682 incorpora el A/52 (AC-3) y el A/53 Parte 5 lo confirma
+(`docs/investigacion/BITRATE-ATSC-EEUU-2026-09-11.md`).
+
+### Las dos causas candidatas, las dos ya identificadas hoy
+
+| | Qué le pasa al televidente | Evidencia |
+|---|---|---|
+| **Audio en MPEG capa II, no AC-3** | Sintoniza pero **sin sonido**, o el televisor descarta el programa | La línea de VLC: `acodec=mpga` |
+| **PSIP en blanco** | **El canal no aparece en el barrido**: sin TVCT el televisor no sabe a qué canal virtual mapearlo | Él mismo: «al no tener contenido desde el multicast lo pone en blanco» |
+
+De fondo, además, el muestreo a 44100 Hz cuando ATSC pide 48.
+
+**Las dos explican «no todos»**, que es la palabra clave: un televisor con
+decodificador de capa II «de más» sí lo coge; uno que cae al canal físico sin
+PSIP también. Los estrictos, no.
+
+### La prueba que no cuesta nada
+
+Se le propuso cambiar en su VLC `acodec=mpga` → **`a52`**, `samplerate` 44100 →
+**48000**, `ab` 128 → **192**, y mirar si los televisores que no lo cogían ahora
+sí. **Cinco minutos, reversible, y no depende de Antena787.**
+
+- Si lo arregla → era el audio, y Antena787 lo resuelve con un desplegable:
+  ya trabaja a 48 kHz y ya sabe emitir AC-3 (`internal/drivers/salida/udpts.go`).
+- Si no lo arregla → es el PSIP, y entonces la guía en PMCP que se arregló hoy
+  deja de ser «una función más» y pasa a ser **lo que hace que lo vean**.
+
+### Lo que esto le hace al producto
+
+Si la hipótesis se confirma, Antena787 deja de ser «un sustituto de VLC» para
+CAtv y pasa a ser **lo que hace que sus televidentes lo vean**. Y el valor de
+fábrica `mp2` de `udpts.go` —que se puso copiando lo que CAtv emite hoy— sería
+copiar el defecto. **No se cambia hasta tener su respuesta**, pero queda
+señalado aquí para no olvidarlo.
