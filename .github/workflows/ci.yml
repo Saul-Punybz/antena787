@@ -266,6 +266,42 @@ jobs:
           kill "$pid" 2>/dev/null || true
           echo "arranca en Windows y sirve la interfaz de verdad"
 
+      # ffmpeg va DENTRO del paquete. Antena787 lo busca junto al ejecutable
+      # antes que en el PATH, así que con esto la estación no tiene que
+      # instalar nada: se descomprime y se abre.
+      #
+      # Es una compilación estática de gyan.dev, la que recomienda el propio
+      # proyecto ffmpeg para Windows. Se guarda su licencia al lado y se deja
+      # escrito de dónde salió: ffmpeg es software libre y quien reciba el
+      # binario tiene derecho a saber dónde está su código.
+      - name: ffmpeg dentro del paquete
+        shell: bash
+        run: |
+          set -e
+          url="https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+          curl -fsSL "$url" -o ffmpeg.zip
+          unzip -q ffmpeg.zip -d ffmpeg-tmp
+          bin="$(find ffmpeg-tmp -name ffmpeg.exe -print -quit)"
+          [ -n "$bin" ] || { echo "no vino ffmpeg.exe en el paquete"; exit 1; }
+          dir="$(dirname "$bin")"
+          mkdir -p dist/Antena787-windows
+          cp "$dir/ffmpeg.exe" "$dir/ffprobe.exe" dist/Antena787-windows/
+          lic="$(find ffmpeg-tmp -iname 'LICENSE*' -print -quit)"
+          [ -n "$lic" ] && cp "$lic" dist/Antena787-windows/LICENCIA-ffmpeg.txt
+          {
+            echo "ffmpeg incluido en este paquete"
+            echo
+            echo "Compilacion: $url"
+            echo "Version:     $("$dir/ffmpeg.exe" -version 2>/dev/null | head -1)"
+            echo
+            echo "ffmpeg es software libre. Su codigo fuente y las instrucciones"
+            echo "para compilarlo estan en https://ffmpeg.org/download.html y en"
+            echo "https://www.gyan.dev/ffmpeg/builds/ , que publica las fuentes"
+            echo "exactas de cada compilacion. La licencia va en"
+            echo "LICENCIA-ffmpeg.txt."
+          } > dist/Antena787-windows/SOBRE-ffmpeg.txt
+          "$dir/ffmpeg.exe" -version | head -1
+
       - name: armar el paquete
         shell: bash
         run: |
@@ -274,6 +310,7 @@ jobs:
           cp docs/INSTALAR-WINDOWS.md dist/Antena787-windows/LEEME.md
           cp scripts/Arrancar-Antena787.bat dist/Antena787-windows/
           cp LICENSE dist/Antena787-windows/
+          echo "== lo que se entrega =="; ls -la dist/Antena787-windows/
 
       - uses: actions/upload-artifact@v4
         with:

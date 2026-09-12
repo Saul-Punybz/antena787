@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"antena787/internal/model"
@@ -164,7 +165,12 @@ func TestConOtraLlaveNoSeLee(t *testing.T) {
 // POSIX no significan lo mismo, así que ahí no se comprueba —la protección de
 // esa plataforma es DPAPI, que se prueba en la máquina y no aquí—.
 func TestLaLlaveNoQuedaAbiertaATodoElMundo(t *testing.T) {
-	if os.Getenv("GOOS") == "windows" {
+	// runtime.GOOS, no os.Getenv("GOOS"): GOOS es una constante de
+	// compilación, no una variable de entorno, así que Getenv devuelve
+	// siempre vacío y el salto no saltaba nunca. La prueba comprobaba
+	// permisos de Unix en Windows y fallaba ahí — lo cazó el CI el 12 de
+	// septiembre de 2026, no esta máquina.
+	if runtime.GOOS == "windows" {
 		t.Skip("en Windows la protección es DPAPI, no los permisos del archivo")
 	}
 	dir := t.TempDir()

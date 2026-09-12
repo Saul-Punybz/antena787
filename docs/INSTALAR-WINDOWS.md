@@ -9,38 +9,28 @@ un minuto da menos miedo que lo que se mete por dentro del sistema.
 
 ---
 
-## Antes de empezar: te hace falta ffmpeg
+## Qué te hace falta: nada
 
-Antena787 no comprime video por su cuenta — **usa ffmpeg**, que es el programa
-que ya usan casi todas las estaciones del mundo por debajo, incluido VLC.
+En serio, nada. **Todo va dentro de la carpeta**, incluido `ffmpeg`, que es el
+programa que comprime el video y que usan por debajo casi todas las estaciones
+del mundo — VLC incluido.
 
-Si no lo tienes:
+No hay que bajar nada más, ni instalar nada, ni tener internet en la máquina
+de la torre.
 
-1. Ve a **https://www.gyan.dev/ffmpeg/builds/** y baja el que dice
-   **«release essentials»** (un `.7z` o `.zip`).
-2. Descomprímelo en `C:\ffmpeg`.
-3. Dentro va a haber una carpeta `bin` con `ffmpeg.exe` y `ffprobe.exe`.
-
-**Cómo saber si ya lo tienes:** abre el símbolo del sistema (busca `cmd` en el
-menú de inicio) y escribe:
-
-```
-ffmpeg -version
-```
-
-Si contesta con un montón de texto, ya está. Si dice que no reconoce el
-comando, hay que bajarlo.
-
-> Antena787 lo busca solo en los sitios normales. Si no lo encuentra, te lo
-> dice en la pantalla en vez de fallar raro, y puedes decirle dónde está.
-
----
+**Lo único que sí importa: Windows 10 o Windows 11.** En Windows 8 no funciona
+y no es algo que se pueda arreglar del lado nuestro: el lenguaje con el que
+está hecho Antena787 dejó de soportar Windows 8 hace años.
 
 ## Ponerlo a andar
 
 1. **Descomprime la carpeta `Antena787-windows`** donde quieras. En el
    escritorio está bien. En `C:\Antena787` está mejor, porque una ruta corta da
    menos problemas.
+
+   Dentro vas a ver `antena.exe`, `ffmpeg.exe`, `ffprobe.exe`, el arranque y
+   estos papeles. **Los tres ejecutables tienen que quedarse juntos**: Antena787
+   busca a ffmpeg a su lado.
 
 2. **Doble clic en `Arrancar-Antena787.bat`.**
 
