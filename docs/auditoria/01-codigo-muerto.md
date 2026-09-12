@@ -35,7 +35,7 @@ todo `internal/`, a mano, tabla por tabla.
 | `capture_input` | 0 | **(B)** | Solo aparece en comentarios (`internal/app/asistente.go:76`, doc de `hdhomerun.go:1`) | **T8** la llena (`docs/f2/PLAN-F2.md:285`: "nuevo: `CaptureInput`... nuevos repos"). |
 | `alert_event` | 0 | **(B)** | Cero coincidencias en todo el repo | **T8**, con la retención de 24 meses de F2-85. |
 | `overlay` | 0 | **(B)** | Cero coincidencias | Documentado ya en `CONTINUAR.md`: "ponerlo en la señal es F2 (**T7**)". |
-| `manual_hold` | 0 | **(B)** | Cero coincidencias | **T5** ("Manual: tomar, soltar, un solo tenedor", `docs/f2/PLAN-F2.md:223`), aún no empezada. |
+| `manual_hold` | 0 | **(B)** | Cero coincidencias | **Cerrado el 12 sept 2026** (T5): `internal/store/manual.go`, `internal/app/manual.go`, `internal/api/manual.go`, panel en `AlAire.tsx`. |
 | `air_recording` | 0 | **(B)** | Cero coincidencias; se menciona en `docs/ACEPTACION.md:1230` como lo que leerá el driver `signal-compare` | **T8** (mismo `signal-compare.go` de la tanda). |
 | `corte` | 0 INSERT/UPDATE (solo se **lee** su id como columna de `plan_item.corte_id`, `internal/store/plan.go:28-48`) | **(B)**, sin tanda clara | Nadie inserta una fila en `corte`; solo existe la columna que la referenciaría | Ligado al mismo hueco de `scte104`/`break_marker`: falta decidir quién escribe un corte real. |
 | `break_marker` | 0 | **(B)**, sin tanda clara | Cero sentencias SQL; solo dos comentarios en `scte104/mensajes.go:463,639` que la nombran como "el puente" | Misma nota que `corte` y `scte104`: falta asignar tanda. |
@@ -128,7 +128,7 @@ alguien creyó que quedaba conectado y no quedó.
 - Los cuatro paquetes de drivers (`sage`, `same`, `hdhomerun` y las tablas
   `capture_input`/`alert_event`/`air_recording`) esperan a **T8**; ya está
   escrito en su propio código y en `docs/f2/PLAN-F2.md`. No tocar.
-- `overlay` espera a **T7**; `manual_hold` espera a **T5**. Ya documentado
+- `overlay` espera a **T7**; `manual_hold` se cerró el 12 sept 2026. Ya documentado
   en `CONTINUAR.md`.
 - `/api/v1/salidas` sin pantalla: ya documentado como el hueco #1 de
   `CONTINUAR.md` ("adelantar T9"); esta auditoría lo confirma con evidencia

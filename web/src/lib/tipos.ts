@@ -902,6 +902,39 @@ export interface PresetsDelCanal {
   volumen_porque: string
 }
 
+// ── el control manual del aire (PRD §9 paso 6, T5) ────────────────────
+
+/** Una retención pasada: quién tuvo el aire y cómo lo soltó. */
+export interface RetencionManual {
+  quien: string
+  desde: Instante
+  hasta?: Instante
+  motivo?: string
+  /** El motivo ya escrito para una persona: aquí no se interpretan claves. */
+  texto: string
+}
+
+/** Cuerpo de `GET /manual`. */
+export interface ControlManual {
+  en_manual: boolean
+  quien?: string
+  desde?: Instante
+  /**
+   * Cuándo se entrega el aire de verdad, cuando alguien ya pulsó «volver al
+   * automático» y se está esperando a que acabe lo que suena (F2-31).
+   */
+  soltandose_en?: Instante
+  /** Cuándo vuelve solo porque se acaba el bloque que había al tomarlo (F2-32). */
+  fin_de_bloque?: Instante
+  /**
+   * Si quien mira es quien tiene el control. Es la diferencia entre enseñar
+   * el panel de disparo y enseñar «Rolando tiene el control desde las 3:12 PM»
+   * con el botón de quitárselo (F2-77).
+   */
+  soy_yo: boolean
+  historial: RetencionManual[]
+}
+
 // ── las señales en vivo (F2-116) ──────────────────────────────────────
 
 /**

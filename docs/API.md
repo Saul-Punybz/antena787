@@ -27,6 +27,42 @@ asistente está abierto.
 | `GET /ajustes` · `PUT /ajustes` | Mapa clave→valor de `settings` (sin la clave de estación). Los secretos (`clave_tmdb`, `avisos_telegram_token`, `avisos_smtp_clave`) salen tapados con `••••••`; devolverlos tapados en un `PUT` no los cambia. |
 | `WS /ws` | Empuja `{"tipo":"estado", ...}` cada segundo y `{"tipo":"evento", ...}` en cada incidente o cambio de plan. El empujón lleva `salidas`, `al_aire` y `siguiente` igual que `GET /estado`: las dos últimas van siempre, con `null` cuando no hay nada al aire. |
 
+## El control manual del aire (PRD §9 paso 6, T5)
+
+**Una persona a la vez.** Mientras alguien tiene el aire, el plan no lo toca:
+los bloques cuya hora pasa durante la retención no salen y quedan marcados
+`manual_hold` —distinto de `aired` y distinto de `skipped`—, porque cuando
+alguien pregunte por qué no salió un spot pagado esa diferencia es la
+respuesta (F2-62).
+
+Quién lo hace **no se manda**: sale de la sesión, que es el nombre que se
+escribió al entrar.
+
+| Método y ruta | Qué hace |
+|---|---|
+| `GET /manual` | `{en_manual, quien, desde, soltandose_en, fin_de_bloque, soy_yo, historial}`. `soy_yo` es la diferencia entre enseñar el panel de disparo y enseñar «Rolando tiene el control desde las 3:12 PM» con el botón de quitárselo. `historial` trae las últimas ocho con el motivo ya escrito para una persona. |
+| `POST /manual/tomar` | Toma el aire. `409` con `{error, campo:"quien", quien, desde, manual}` si lo tiene otra persona — no `400`: no es que la petición esté mal escrita, es que el aire está ocupado. Pedirlo dos veces la **misma** persona no es conflicto: ya lo tiene. `409` también en modo sombra, donde no hay aire que tomar. |
+| `POST /manual/quitar` | Se lo quita a quien lo tenga y se lo queda. Es otra ruta a propósito: quitarle el aire a una persona no puede ser lo que pasa al pulsar el mismo botón dos veces. La retención de la otra persona se cierra con `quitado`, no con `soltado` — ella no soltó nada (F2-77). |
+| `POST /manual/soltar` | Devuelve el aire **sin cortar nada por el medio**: espera a que termine lo que suena, como máximo 60 s, y entonces entrega (F2-31). Contesta `{manual, cuando, texto}` — `cuando` es la hora real de entrega, porque un botón que parece no hacer nada durante cuarenta segundos se pulsa tres veces más. |
+| `POST /manual/parar` | Corta **en seco**, ahora mismo (F2-78). Lo que se quede a medias queda con `parcial = true`, que es lo que distingue este corte de una emisión completa cuando alguien vaya a facturar el spot. Se cierra con `parar_todo`. |
+| `POST /manual/disparar` | `{material_id}` → pone ese archivo al aire ahora, en el deck manual, que es el de más prioridad. Se crea como un bloque del plan y no como un caso aparte: así sale por el mismo camino que todo lo demás y cuenta en el as-run. `409` sin el control tomado, y `409` si el archivo no está preparado para el aire. |
+
+**Las seis formas en que se acaba una retención**, y por qué son seis y no
+una: `soltado` (lo soltó), `fin_de_bloque` (se acabó el bloque que había al
+tomarlo, F2-32), `timeout` (silencio o negro al aire pasado el umbral, F2-30),
+`caida_del_sistema` (el servicio se reinició con alguien al mando, F2-79),
+`parar_todo` y `quitado`. Un registro que dijera «soltado» cuando en realidad
+se cayó el servicio mentiría sobre lo que pasó esa noche.
+
+Dos detalles que no se ven en la tabla:
+
+- **Tomar el control sobre relleno no programa una vuelta automática.** En una
+  instalación nueva el plan empieza con un bloque de cartel que puede durar
+  días; tratarlo como «el bloque» dejaría `fin_de_bloque` a dos días vista. De
+  un hueco no se sale por fin de bloque: se sale soltándolo o por silencio.
+- **El canal siempre arranca en automático** (F2-27). Lo que se quedó abierto
+  de la última vez se cierra al arrancar.
+
 ## Presets de preparación — cómo se prepara el material (esquema v10)
 
 Un preset dice **cómo se prepara** lo que entra: volumen, recortes y calidad.

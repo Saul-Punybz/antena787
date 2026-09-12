@@ -10,13 +10,18 @@ import { IconoMano } from '../componentes/Iconos'
 import { useEstado } from '../lib/estado'
 import { api } from '../lib/api'
 import { cuentaRegresiva, duracionLarga, hora } from '../lib/fechas'
-import type { Alarma, FilaDelPlan } from '../lib/tipos'
+import type { Alarma, ControlManual, FilaDelPlan, TituloDeBiblioteca } from '../lib/tipos'
 import { esHueco } from '../lib/tipos'
 
 export function AlAire() {
   const { estado } = useEstado()
   const [huecos, setHuecos] = useState<FilaDelPlan[]>([])
   const [panelControl, setPanelControl] = useState(false)
+  // El control manual (T5). Se pide al entrar y se refresca al abrir el
+  // panel: no hace falta sondearlo cada segundo porque cada acción devuelve
+  // el estado nuevo, y lo que cambia por su cuenta —el fin de bloque, el
+  // timeout— llega por la bitácora.
+  const [manual, setManual] = useState<ControlManual | null>(null)
 
   const zona = estado?.canal.zona_horaria ?? 'UTC'
   const dia = estado?.dia_emision
@@ -28,6 +33,10 @@ export function AlAire() {
       .then((filas) => setHuecos(filas.filter(esHueco)))
       .catch(() => setHuecos([]))
   }, [dia])
+
+  useEffect(() => {
+    api.manual().then(setManual).catch(() => setManual(null))
+  }, [])
 
   if (!estado) {
     return (
@@ -301,17 +310,26 @@ export function AlAire() {
           <div className="tarjeta" style={{ padding: '16px 18px', textAlign: 'center' }}>
             <button
               className="boton"
-              style={{ width: '100%', color: 'var(--aqua)' }}
+              style={{ width: '100%', color: manual?.en_manual ? 'var(--ambar)' : 'var(--aqua)' }}
               disabled={enSombra}
-              onClick={() => setPanelControl(true)}
+              onClick={() => {
+                setPanelControl(true)
+                api.manual().then(setManual).catch(() => {})
+              }}
             >
-              <IconoMano tamano={17} color="var(--aqua)" />
-              Tomar el control
+              <IconoMano tamano={17} color={manual?.en_manual ? 'var(--ambar)' : 'var(--aqua)'} />
+              {manual?.en_manual
+                ? manual.soy_yo
+                  ? 'Tienes el control'
+                  : `${manual.quien} tiene el control`
+                : 'Tomar el control'}
             </button>
             <p className="ayuda" style={{ marginTop: 10 }}>
               {enSombra
                 ? 'En modo sombra no hay aire que tomar: Antena787 todavía no está alimentando el transmisor.'
-                : 'Llega con el motor: hoy el aire no se puede tomar a mano'}
+                : manual?.en_manual
+                  ? 'Mientras alguien tiene el aire, la parrilla no lo toca.'
+                  : 'El aire pasa a una persona hasta que lo suelte o termine el bloque.'}
             </p>
           </div>
 
@@ -321,29 +339,12 @@ export function AlAire() {
       </div>
 
       {panelControl && (
-        <Panel
-          titulo="Tomar el control"
-          descripcion="Todavía no: el control manual llega con el motor."
+        <PanelDeControl
+          manual={manual}
+          zona={zona}
+          alCambiar={setManual}
           alCerrar={() => setPanelControl(false)}
-          pie={
-            <button className="boton" onClick={() => setPanelControl(false)}>
-              Cerrar
-            </button>
-          }
-        >
-          <p className="subtitulo">
-            Quien manda el video al transmisor —el motor— es lo que se está
-            construyendo ahora. Hasta que esté, no hay aire que pasar a una persona:
-            aquí no hay ningún botón que apretar, y es mejor decirlo que enseñar uno
-            que no hace nada.
-          </p>
-          <p className="subtitulo">
-            Cuando llegue: el aire pasa a ti hasta que lo sueltes o termine el bloque,
-            con el panel de disparo, una cuenta regresiva del regreso automático y tu
-            nombre anotado en la bitácora. Una persona a la vez. La vista de aire de la
-            izquierda no se detiene ni se tapa.
-          </p>
-        </Panel>
+        />
       )}
     </>
   )
@@ -383,6 +384,283 @@ function TarjetaDeAlarma({ alarma }: { alarma: Alarma }) {
           </Link>
         )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * El panel del control manual (T5).
+ *
+ * Tres estados, y la pantalla no es la misma en ninguno:
+ *
+ * 1. **Nadie tiene el aire** — un botón para tomarlo, y ya.
+ * 2. **Lo tiene otra persona** — su nombre y desde cuándo, y un botón
+ *    explícito para quitárselo. No se le quita por accidente: es otro botón,
+ *    con otro texto, y queda anotado quién lo hizo (F2-77).
+ * 3. **Lo tienes tú** — el panel de disparo, que **solo existe aquí**: en
+ *    automático no se enseña ni apagado (F2-35).
+ *
+ * Y dos formas de devolverlo que no son la misma: soltar espera a que acabe
+ * lo que está sonando —como máximo un minuto— y parar todo corta en seco. La
+ * diferencia importa cuando lo que suena es un spot que alguien pagó (F2-31
+ * frente a F2-78).
+ */
+function PanelDeControl({
+  manual,
+  zona,
+  alCambiar,
+  alCerrar,
+}: {
+  manual: ControlManual | null
+  zona: string
+  alCambiar: (m: ControlManual) => void
+  alCerrar: () => void
+}) {
+  const [error, setError] = useState('')
+  const [aviso, setAviso] = useState('')
+  const [ocupado, setOcupado] = useState(false)
+
+  async function hacer(que: () => Promise<ControlManual>, texto = '') {
+    setOcupado(true)
+    setError('')
+    try {
+      alCambiar(await que())
+      setAviso(texto)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo.')
+    } finally {
+      setOcupado(false)
+    }
+  }
+
+  async function soltar() {
+    setOcupado(true)
+    setError('')
+    try {
+      const r = await api.soltarElControl()
+      alCambiar(r.manual)
+      setAviso(r.texto)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo soltar el control.')
+    } finally {
+      setOcupado(false)
+    }
+  }
+
+  const suyo = manual?.en_manual === true && manual.soy_yo
+  const deOtro = manual?.en_manual === true && !manual.soy_yo
+
+  return (
+    <Panel
+      titulo={suyo ? 'Tienes el control' : deOtro ? 'El aire lo tiene otra persona' : 'Tomar el control'}
+      descripcion={
+        suyo
+          ? 'Mientras lo tengas, la parrilla no toca el aire.'
+          : deOtro
+            ? 'Una persona a la vez: es lo que impide que dos saquen cosas distintas al mismo tiempo.'
+            : 'El aire pasa a ti hasta que lo sueltes o termine el bloque.'
+      }
+      alCerrar={alCerrar}
+      pie={
+        <button className="boton" onClick={alCerrar}>
+          Cerrar
+        </button>
+      }
+    >
+      {error && <div className="error-claro">{error}</div>}
+      {aviso && <div className="nota nota--aviso">{aviso}</div>}
+
+      {deOtro && manual && (
+        <>
+          <p className="subtitulo">
+            <strong>{manual.quien}</strong> tiene el control desde las{' '}
+            {manual.desde ? hora(manual.desde, zona) : '—'}.
+          </p>
+          <button
+            className="boton boton--peligro"
+            disabled={ocupado}
+            onClick={() => void hacer(api.quitarElControl, `le quitaste el control a ${manual.quien}`)}
+          >
+            Quitárselo
+          </button>
+          <p className="ayuda">Queda anotado en la bitácora con tu nombre y la hora.</p>
+        </>
+      )}
+
+      {!manual?.en_manual && (
+        <button
+          className="boton boton--primario"
+          disabled={ocupado}
+          onClick={() => void hacer(api.tomarElControl, 'el aire es tuyo')}
+        >
+          <IconoMano tamano={16} />
+          Tomar el control
+        </button>
+      )}
+
+      {suyo && manual && (
+        <>
+          <p className="subtitulo">
+            Desde las {manual.desde ? hora(manual.desde, zona) : '—'}.
+            {manual.fin_de_bloque && (
+              <>
+                {' '}
+                Vuelve solo al automático a las {hora(manual.fin_de_bloque, zona)}, cuando
+                se acabe el bloque.
+              </>
+            )}
+          </p>
+          {manual.soltandose_en && (
+            <div className="nota nota--aviso">
+              El aire vuelve al automático a las {hora(manual.soltandose_en, zona)}, cuando
+              acabe lo que está sonando. Si hace falta antes, «parar todo» corta en seco.
+            </div>
+          )}
+
+          <PanelDeDisparo
+            alDisparar={async (id) => {
+              setError('')
+              try {
+                const r = await api.dispararAlAire(id)
+                alCambiar(r.manual)
+                setAviso('al aire')
+              } catch (e) {
+                setError(e instanceof Error ? e.message : 'No se pudo poner al aire.')
+              }
+            }}
+          />
+
+          <div className="fila" style={{ gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
+            <button className="boton" disabled={ocupado} onClick={() => void soltar()}>
+              Volver al automático
+            </button>
+            <button
+              className="boton boton--peligro"
+              disabled={ocupado}
+              onClick={() => void hacer(api.pararTodo, 'el aire se cortó y volvió al automático')}
+            >
+              Parar todo
+            </button>
+          </div>
+          <p className="ayuda">
+            <strong>Volver al automático</strong> espera a que acabe lo que está sonando,
+            como máximo un minuto: no corta nada por el medio.{' '}
+            <strong>Parar todo</strong> corta en seco, ahora mismo, y lo que se quede a
+            medias queda marcado como tal.
+          </p>
+        </>
+      )}
+
+      {manual && manual.historial.length > 0 && (
+        <div style={{ marginTop: 18 }}>
+          <div className="rotulo" style={{ marginBottom: 8 }}>
+            QUIÉN HA TENIDO EL AIRE
+          </div>
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6 }}>
+            {manual.historial.map((h, i) => (
+              <li key={i} className="entre" style={{ fontSize: 13.5 }}>
+                <span>
+                  {h.quien || 'estación'}{' '}
+                  <span className="tenue">
+                    {hora(h.desde, zona)}
+                    {h.hasta ? ` – ${hora(h.hasta, zona)}` : ''}
+                  </span>
+                </span>
+                <span className="tenue">{h.texto}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </Panel>
+  )
+}
+
+/**
+ * El panel de disparo: qué se pone al aire ahora mismo.
+ *
+ * Solo aparece con el control tomado (F2-35), y por eso vive dentro del bloque
+ * que ya comprobó que el aire es tuyo — no se enseña apagado ni escondido: en
+ * automático no existe.
+ *
+ * La biblioteca se pide al montarse, no al abrir el panel de control: cuando
+ * una persona llega hasta aquí es porque ya sabe que quiere sacar algo, y
+ * esperar una lista es justo lo que no se puede hacer en ese momento.
+ */
+function PanelDeDisparo({ alDisparar }: { alDisparar: (materialId: number) => Promise<void> }) {
+  const [titulos, setTitulos] = useState<TituloDeBiblioteca[] | null>(null)
+  const [busca, setBusca] = useState('')
+
+  useEffect(() => {
+    api
+      .biblioteca()
+      .then(setTitulos)
+      .catch(() => setTitulos([]))
+  }, [])
+
+  const listos = (titulos ?? []).filter(
+    (t) => t.material_id !== undefined && t.estado_material === 'listo',
+  )
+  const filtrados = busca.trim()
+    ? listos.filter((t) => t.nombre.toLowerCase().includes(busca.trim().toLowerCase()))
+    : listos
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div className="rotulo" style={{ marginBottom: 8 }}>
+        PONER AL AIRE AHORA
+      </div>
+      {titulos === null && <p className="cargando">Buscando el material…</p>}
+      {titulos !== null && listos.length === 0 && (
+        <p className="ayuda">
+          No hay nada preparado para el aire todavía. Lo que está a medio preparar no se
+          puede disparar: saldría en otro formato y con otro volumen.
+        </p>
+      )}
+      {listos.length > 0 && (
+        <>
+          <div className="campo">
+            <label htmlFor="disparo-busca">Buscar</label>
+            <input
+              id="disparo-busca"
+              value={busca}
+              placeholder="parte del nombre"
+              onChange={(e) => setBusca(e.target.value)}
+            />
+          </div>
+          <ul
+            style={{
+              listStyle: 'none',
+              margin: 0,
+              padding: 0,
+              display: 'grid',
+              gap: 6,
+              maxHeight: 260,
+              overflowY: 'auto',
+            }}
+          >
+            {filtrados.map((t) => (
+              <li key={t.id} className="entre" style={{ gap: 10 }}>
+                <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {t.nombre}{' '}
+                  <span className="tenue" style={{ fontSize: 12.5 }}>
+                    {duracionLarga(t.duracion_ms)}
+                  </span>
+                </span>
+                <button
+                  className="boton"
+                  onClick={() => void alDisparar(t.material_id as number)}
+                >
+                  Al aire
+                </button>
+              </li>
+            ))}
+            {filtrados.length === 0 && (
+              <li className="ayuda">nada que se llame así entre lo que está listo</li>
+            )}
+          </ul>
+        </>
+      )}
     </div>
   )
 }

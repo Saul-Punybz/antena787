@@ -287,6 +287,14 @@ type App struct {
 	// despiertoAvisado dice que el incidente `maquina_despierta` ya se
 	// escribió: se deja una sola vez por arranque, no en cada reintento.
 	despiertoAvisado atomic.Bool
+
+	// manualMu y manual son el control manual del aire (internal/app/manual.go,
+	// tanda T5). Se guarda en memoria porque el motor lo pregunta una vez por
+	// clip —a veces cada pocos segundos— y eso es el camino del aire: ahí no
+	// se va a la base. La verdad sigue estando en `manual_hold`; esto es lo
+	// que se recuerda de ella entre consulta y consulta.
+	manualMu sync.RWMutex
+	manual   retencion
 }
 
 // Open abre la base y deja la aplicación lista para Start.
@@ -411,6 +419,12 @@ func (a *App) Start(parent context.Context) {
 	a.RefreshPendientes(a.ctx)
 	// Igual con los archivos en cuarentena: el aviso no espera al próximo ingest.
 	a.RefreshCuarentena(a.ctx)
+	// El control manual: cierra lo que se quedó abierto de la última vez y
+	// deja el canal en automático, que es como tiene que arrancar siempre
+	// (F2-27, F2-79). Y se instala en el hueco que T3 dejó preparado, que es
+	// lo que hace que el silencio al aire devuelva el control (F2-30).
+	a.CargarElManual(a.ctx)
+	PonerControlDelAire(controlManual{a})
 
 	a.guard("resolver", a.resolverLoop)
 	a.guard("ingest", a.ingestLoop)
@@ -430,6 +444,10 @@ func (a *App) Start(parent context.Context) {
 
 // Close para todas las goroutines y cierra la base.
 func (a *App) Close() error {
+	// El control del aire es una variable de paquete —un proceso, un canal—,
+	// así que al cerrar hay que soltarla: si no, una aplicación cerrada
+	// seguiría contestando por la que venga después.
+	PonerControlDelAire(nil)
 	if a.cancel != nil {
 		a.cancel()
 	}

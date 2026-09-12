@@ -111,7 +111,6 @@ asustar: es la misma protección que tienen tus llaves de SSH.
 Lo mismo que en Windows, y por las mismas razones:
 
 - **No graba lo que salió al aire.** Se está construyendo.
-- **No se puede tomar el control a mano** para meter algo ahora mismo.
 - **No pone el logo del canal** en la señal.
 - **No hay anuncios ni cobros.** Es lo último del plan a propósito: de nada
   sirve poder venderle a un cliente si el aire todavía se te puede caer.

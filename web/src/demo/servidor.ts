@@ -25,6 +25,7 @@ import type {
   Guia,
   Instalacion,
   MesDelPlan,
+  ControlManual,
   Opcion,
   OpcionesDelAsistente,
   Preset,
@@ -105,6 +106,29 @@ let presetsDemo: Preset[] = [
 ]
 /** El preset de cada archivo suelto: el nivel que manda sobre todos. */
 const presetDeArchivo = new Map<number, number | null>()
+
+/**
+ * El control manual del aire (T5). Va en la demostración desde el primer día
+ * por lo de siempre: una pantalla vacía en la demostración se lee como una
+ * función rota.
+ *
+ * El historial trae una retención pasada a propósito — así se ve para qué
+ * sirve la lista sin que nadie tenga que tomar y soltar el control tres veces
+ * para poblarla.
+ */
+let manualDemo: ControlManual = {
+  en_manual: false,
+  soy_yo: false,
+  historial: [
+    {
+      quien: 'Rolando',
+      desde: '2026-09-08T19:12:00Z',
+      hasta: '2026-09-08T19:41:00Z',
+      motivo: 'soltado',
+      texto: 'lo soltó',
+    },
+  ],
+}
 
 /**
  * Lo que alguien movió a mano en la parrilla. El servidor de verdad lo guarda
@@ -1607,6 +1631,98 @@ export async function responder(ruta: string, init?: RequestInit): Promise<Respo
   }
   if (/^\/fuentes\/\d+$/.test(p) && metodo === 'DELETE') {
     return json({ borrada: Number(p.split('/')[2]) })
+  }
+
+  // ── el control manual del aire (T5) ────────────────────────────────
+  if (p === '/manual' && metodo === 'GET') return json(manualDemo)
+  if (p === '/manual/tomar' && metodo === 'POST') {
+    if (canal.modo !== 'aire')
+      return json(
+        {
+          error:
+            'en modo sombra no hay aire que tomar: Antena787 todavía no está alimentando el transmisor',
+        },
+        409,
+      )
+    if (manualDemo.en_manual)
+      return json(
+        {
+          error: `${manualDemo.quien} tiene el control desde las ${new Date(manualDemo.desde!).toLocaleTimeString('es-PR', { hour: 'numeric', minute: '2-digit' })}`,
+          campo: 'quien',
+          quien: manualDemo.quien,
+          desde: manualDemo.desde,
+          manual: manualDemo,
+        },
+        409,
+      )
+    const ahora = ahoraDemo().toISOString()
+    manualDemo = {
+      ...manualDemo,
+      en_manual: true,
+      soy_yo: true,
+      quien: 'Saul',
+      desde: ahora,
+      soltandose_en: undefined,
+      // Se tomó durante un bloque: vuelve solo cuando se acabe (F2-32).
+      fin_de_bloque: new Date(ahoraDemo().getTime() + 18 * 60_000).toISOString(),
+      historial: [
+        { quien: 'Saul', desde: ahora, texto: 'lo tiene ahora mismo' },
+        ...manualDemo.historial,
+      ],
+    }
+    return json(manualDemo)
+  }
+  if (p === '/manual/quitar' && metodo === 'POST') {
+    const aQuien = manualDemo.quien ?? ''
+    const ahora = ahoraDemo().toISOString()
+    manualDemo = {
+      ...manualDemo,
+      en_manual: true,
+      soy_yo: true,
+      quien: 'Saul',
+      desde: ahora,
+      soltandose_en: undefined,
+      historial: [
+        { quien: 'Saul', desde: ahora, texto: 'lo tiene ahora mismo' },
+        ...manualDemo.historial.map((h, i) =>
+          i === 0 && !h.hasta && h.quien === aQuien
+            ? { ...h, hasta: ahora, motivo: 'quitado', texto: 'se lo quitaron' }
+            : h,
+        ),
+      ],
+    }
+    return json(manualDemo)
+  }
+  if (p === '/manual/soltar' && metodo === 'POST') {
+    if (!manualDemo.en_manual) return json({ error: 'el aire ya está en automático' }, 409)
+    // Soltar no corta: espera a que acabe lo que suena, con tope de un minuto
+    // (F2-31). En la demostración esa espera son 20 segundos.
+    const cuando = new Date(ahoraDemo().getTime() + 20_000).toISOString()
+    manualDemo = { ...manualDemo, soltandose_en: cuando }
+    return json({
+      manual: manualDemo,
+      cuando,
+      texto: 'el aire vuelve al automático en 20s, cuando acabe lo que está sonando',
+    })
+  }
+  if (p === '/manual/parar' && metodo === 'POST') {
+    if (!manualDemo.en_manual) return json({ error: 'el aire ya está en automático' }, 409)
+    const ahora = ahoraDemo().toISOString()
+    manualDemo = {
+      en_manual: false,
+      soy_yo: false,
+      historial: manualDemo.historial.map((h, i) =>
+        i === 0 && !h.hasta ? { ...h, hasta: ahora, motivo: 'parar_todo', texto: 'paró todo' } : h,
+      ),
+    }
+    return json(manualDemo)
+  }
+  if (p === '/manual/disparar' && metodo === 'POST') {
+    if (!manualDemo.en_manual)
+      return json({ error: 'para disparar algo hay que tener el control del aire' }, 409)
+    const id = Number((cuerpo as { material_id?: number })?.material_id ?? 0)
+    if (!id) return json({ error: 'dime qué archivo hay que poner al aire', campo: 'material_id' }, 400)
+    return json({ bloque: { id: siguienteId++, media_asset_id: id }, manual: manualDemo })
   }
 
   // ── los presets de preparación (esquema v10) ────────────────────────

@@ -129,8 +129,6 @@ siempre la respuesta está ahí. Si no, mándame una foto de esa pantalla.
 Esto es una versión para probar, no para poner el canal encima todavía.
 
 - **No graba lo que salió al aire.** Se está construyendo.
-- **No se puede tomar el control a mano** para meter algo ahora mismo: el botón
-  está pero todavía no hace nada.
 - **No pone el logo del canal** en la señal.
 - **No hay pantalla de anuncios ni cobros.** Es lo último del plan, a propósito:
   de nada sirve poder venderle a un cliente si el aire todavía se te puede caer.

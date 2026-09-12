@@ -131,6 +131,20 @@ func (s *Server) routes() {
 	// dirección y rezar, o saberlo en tres segundos.
 	api("POST /api/v1/fuentes/probar", s.fuentesProbar)
 
+	// El control manual del aire (PRD §9 paso 6, T5). Hasta hoy el botón de
+	// «Tomar el control» estaba en la pantalla y no llamaba a nada, y la
+	// tabla `manual_hold` no la tocaba una línea de código.
+	api("GET /api/v1/manual", s.manualGet)
+	api("POST /api/v1/manual/tomar", s.manualTomar)
+	// Quitárselo a otra persona es una puerta aparte a propósito: no puede
+	// ser lo que pasa al pulsar el mismo botón dos veces (F2-77).
+	api("POST /api/v1/manual/quitar", s.manualQuitar)
+	api("POST /api/v1/manual/soltar", s.manualSoltar)
+	// Parar todo corta en seco; soltar espera a que acabe lo que suena. Son
+	// dos cosas distintas y por eso son dos rutas (F2-78 frente a F2-31).
+	api("POST /api/v1/manual/parar", s.manualParar)
+	api("POST /api/v1/manual/disparar", s.manualDisparar)
+
 	// Reglas y plan
 	api("GET /api/v1/reglas", s.reglasList)
 	api("POST /api/v1/reglas", s.reglasPost)

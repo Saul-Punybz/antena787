@@ -70,6 +70,7 @@ type Store struct {
 	Deck     *DeckRepo
 	Plan     *PlanRepo
 	Incident *IncidentRepo
+	Manual   *ManualHoldRepo
 	Audit    *AuditRepo
 	Settings *SettingsRepo
 }
@@ -161,6 +162,7 @@ func (s *Store) wire() {
 	// sonido que va al aire), así que necesita la cadena de auditoría.
 	s.Media = &MediaAssetRepo{db: s.db, audit: s.Audit}
 	s.Preset = &PresetRepo{db: s.db}
+	s.Manual = &ManualHoldRepo{db: s.db}
 	s.Conexion = &DriverConfigRepo{db: s.db, sec: s.sec}
 	// El catálogo anota en la bitácora lo que se empareja a mano (F1-66,
 	// F1-67), así que necesita la cadena de auditoría.

@@ -427,13 +427,17 @@ type Deck struct {
 type PlanState string
 
 const (
-	Planned    PlanState = "planned"
-	Cued       PlanState = "cued"
-	Aired      PlanState = "aired"
-	Skipped    PlanState = "skipped"
-	Preempted  PlanState = "preempted"
-	Failed     PlanState = "fallido"
-	ManualHold PlanState = "manual_hold"
+	Planned   PlanState = "planned"
+	Cued      PlanState = "cued"
+	Aired     PlanState = "aired"
+	Skipped   PlanState = "skipped"
+	Preempted PlanState = "preempted"
+	Failed    PlanState = "fallido"
+	// EnManual es el bloque que no salió porque una persona tenía el aire
+	// (F2-62). Se llama así y no `ManualHold` porque ese nombre es el de la
+	// retención en sí (`model.ManualHold`), que es otra cosa: la retención
+	// es el rato, esto es lo que le pasó a un bloque durante ese rato.
+	EnManual PlanState = "manual_hold"
 )
 
 // PlanItem es una emisión resuelta a un instante exacto. Es también el
@@ -473,6 +477,48 @@ type PlanItem struct {
 func (p PlanItem) End() time.Time {
 	return p.PlannedAt.Add(time.Duration(p.PlannedMs) * time.Millisecond)
 }
+
+// ── el aire en manos de una persona (PRD §9 paso 6, T5) ───────────────
+
+// ManualHold es una retención manual: el rato en que una persona le quitó el
+// aire al plan y disparó lo que quiso.
+//
+// **Solo puede haber una abierta a la vez por canal** (F2-77). No es un
+// detalle de implementación: dos personas disparando sobre el mismo aire es
+// exactamente cómo se emite un spot pagado encima de otro, y nadie sabría
+// cuál de las dos lo hizo.
+type ManualHold struct {
+	ID        int64      `json:"id" db:"id"`
+	ChannelID int64      `json:"channel_id" db:"channel_id"`
+	Start     time.Time  `json:"inicio" db:"inicio_ms"`
+	End       *time.Time `json:"fin" db:"fin_ms"`
+	// EndReason es por qué se acabó, y tiene que ser exacto: un registro que
+	// dice «soltado» cuando en realidad se cayó el servicio miente sobre lo
+	// que pasó esa noche (F2-79).
+	EndReason string `json:"motivo_fin" db:"motivo_fin"`
+	User      string `json:"usuario" db:"usuario"`
+}
+
+// Abierta dice si la retención sigue en pie.
+func (m ManualHold) Abierta() bool { return m.End == nil }
+
+// Los seis finales de una retención manual. Son los del CHECK del esquema y
+// no hay más: cualquier otro valor lo rechaza la base.
+const (
+	// FinSoltado — la persona pulsó «volver al automático» (F2-31).
+	FinSoltado = "soltado"
+	// FinDeBloque — se acabó el bloque y el aire volvió solo (F2-32).
+	FinDeBloque = "fin_de_bloque"
+	// FinPorTimeout — silencio o negro pasado del umbral (F2-30).
+	FinPorTimeout = "timeout"
+	// FinCaidaDelSistema — el servicio se cayó con la retención abierta y al
+	// arrancar la cerró él (F2-79).
+	FinCaidaDelSistema = "caida_del_sistema"
+	// FinPararTodo — corte en seco a mitad de lo que fuera (F2-78).
+	FinPararTodo = "parar_todo"
+	// FinQuitado — otra persona se lo quitó, y queda dicho quién (F2-77).
+	FinQuitado = "quitado"
+)
 
 // ── lo que el sistema hizo solo ───────────────────────────────────────
 

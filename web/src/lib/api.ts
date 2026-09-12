@@ -14,6 +14,8 @@ import type {
   FuentesDelCanal,
   PruebaDeFuente,
   AjustesDePreset,
+  ControlManual,
+  Instante,
   Preset,
   PresetsDelCanal,
   Ajustes,
@@ -165,6 +167,29 @@ export const api = {
     pedir<{ encolado: number; texto: string }>(
       `/material/${id}/volver-a-preparar`,
       conCuerpo('POST', {}),
+    ),
+
+  // El control manual del aire (PRD §9 paso 6, T5). Quién lo hace no se
+  // manda: lo sabe el servidor por la sesión, que es el nombre que se
+  // escribió al entrar. Pedirlo otra vez en cada botón sería pedirle a
+  // alguien que se identifique tres veces para sacar un spot al aire.
+  manual: () => pedir<ControlManual>('/manual'),
+  tomarElControl: () => pedir<ControlManual>('/manual/tomar', conCuerpo('POST', {})),
+  // Quitárselo a otra persona es otra ruta a propósito: no puede ser lo que
+  // pasa al pulsar el mismo botón dos veces (F2-77).
+  quitarElControl: () => pedir<ControlManual>('/manual/quitar', conCuerpo('POST', {})),
+  soltarElControl: () =>
+    pedir<{ manual: ControlManual; cuando: Instante; texto: string }>(
+      '/manual/soltar',
+      conCuerpo('POST', {}),
+    ),
+  // Parar todo corta en seco; soltar espera a que acabe lo que suena. Son dos
+  // cosas distintas y por eso son dos botones (F2-78 frente a F2-31).
+  pararTodo: () => pedir<ControlManual>('/manual/parar', conCuerpo('POST', {})),
+  dispararAlAire: (materialId: number) =>
+    pedir<{ bloque: unknown; manual: ControlManual }>(
+      '/manual/disparar',
+      conCuerpo('POST', { material_id: materialId }),
     ),
 
   // Las señales en vivo (F2-116). `clave` solo se manda cuando cambia:

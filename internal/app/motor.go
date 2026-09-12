@@ -596,6 +596,13 @@ func (f *fuenteDelPlan) Next(now time.Time) (engine.Clip, time.Time, error) {
 		return f.Filler(), now.Add(RellenoSuelto), err
 	}
 
+	// El aire en manos de una persona: mientras dure, el plan no lo toca
+	// (T5). Los bloques cuya hora pase durante la retención quedan marcados
+	// al soltarla, que es donde se sabe cuáles fueron (F2-62).
+	if f.app.revisarElManual(f.ctx, now) {
+		items = f.soloElDeckManual(items)
+	}
+
 	item, hay := f.queToca(items, now)
 	if !hay {
 		// Hueco: sale el relleno hasta que empiece lo siguiente.
@@ -625,6 +632,25 @@ func (f *fuenteDelPlan) Next(now time.Time) (engine.Clip, time.Time, error) {
 	f.tomaElAire(item, now, clip.Name)
 	f.cargar(item)
 	return clip, hasta, nil
+}
+
+// soloElDeckManual deja pasar únicamente lo que disparó la persona que tiene
+// el aire. Lo demás no desaparece del plan: simplemente no sale mientras
+// alguien está al mando, y cuando se suelte el control quedará dicho por qué
+// no salió (F2-62).
+//
+// Si no ha disparado nada todavía, no queda nada: sale el relleno, que es lo
+// correcto — nunca negro, nunca silencio (F2-09, F2-10).
+func (f *fuenteDelPlan) soloElDeckManual(items []model.PlanItem) []model.PlanItem {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := items[:0:0]
+	for _, it := range items {
+		if d, hay := f.decks[it.DeckID]; hay && d.Kind == model.DeckManual {
+			out = append(out, it)
+		}
+	}
+	return out
 }
 
 // tomaElAire apunta que este bloque tiene el aire desde este instante, y
