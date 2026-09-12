@@ -1,6 +1,7 @@
 package ingest
 
 import (
+	"antena787/internal/engine"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -10,7 +11,6 @@ import (
 	"io"
 	"math"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -146,7 +146,7 @@ func probeDe(ctx context.Context, ffprobe, path string, extra []string, timeout 
 	args = append(args, extra...)
 	args = append(args, path)
 
-	cmd := exec.CommandContext(cctx, ffprobe, args...)
+	cmd := engine.Comando(cctx, ffprobe, args...)
 	var out, errb bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errb
@@ -214,7 +214,7 @@ func HashFile(ctx context.Context, path string) (string, error) {
 func CheckDecodable(ctx context.Context, ffmpeg, path string) error {
 	cctx, cancel := context.WithTimeout(ctx, ProbeTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(cctx, ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error",
+	cmd := engine.Comando(cctx, ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error",
 		"-xerror", "-t", "0.5", "-i", path, "-f", "null", "-")
 	var errb bytes.Buffer
 	cmd.Stderr = &errb

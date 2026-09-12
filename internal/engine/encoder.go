@@ -62,6 +62,16 @@ type Output struct {
 	// —hace falta para multicast (F2-114)— y de qué tamaño sale.
 	TTL     int
 	PktSize int
+	// LocalAddr es la dirección IP de la tarjeta de red por la que sale el
+	// multicast. Vacía deja que el sistema escoja, y **ahí está el problema**:
+	// en una máquina con dos tarjetas —el caso normal en una torre, donde el
+	// multiplexor tiene un puerto para el video y otro para manejarlo—
+	// Windows escoge por su tabla de rutas y puede escoger la equivocada.
+	//
+	// Y no avisa. UDP no dice si nadie lo recibió: la señal se va por el cable
+	// que no es, todo parece estar bien, y el canal no sale. Es el fallo más
+	// caro de diagnosticar de todos los que hay aquí.
+	LocalAddr string
 	// TCP es «127.0.0.1:puerto» de una escucha de ESTE proceso a la que
 	// ffmpeg entrega el transport stream para que Go lo reparta a varios
 	// clientes por HTTP (F2-115). Es el tercer destino posible, junto a UDP
@@ -238,7 +248,7 @@ func (a Acelerador) Disponible(ffmpeg string) bool {
 	default:
 		return false
 	}
-	out, err := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error", "-encoders").Output()
+	out, err := Comando(nil, ffmpeg, "-hide_banner", "-loglevel", "error", "-encoders").Output()
 	if err != nil {
 		return false
 	}
@@ -298,7 +308,7 @@ func StartEncoder(parent context.Context, ffmpeg string, f Format, outs []Output
 	if os.Getenv("ANTENA_DEBUG") != "" {
 		fmt.Fprintln(os.Stderr, "encoder:", ffmpeg, strings.Join(args, " "))
 	}
-	e.Cmd = exec.Command(ffmpeg, args...)
+	e.Cmd = Comando(nil, ffmpeg, args...)
 	e.Cmd.Stderr = &e.Stderr
 	if err := e.Cmd.Start(); err != nil {
 		cancel()
@@ -573,6 +583,10 @@ func (o Output) urlUDP() string {
 	url := fmt.Sprintf("%s?pkt_size=%d", o.UDP, pkt)
 	if o.TTL > 0 {
 		url += fmt.Sprintf("&ttl=%d", o.TTL)
+	}
+	if o.LocalAddr != "" {
+		// Por aquí sale, y no por donde el sistema operativo prefiera.
+		url += "&localaddr=" + o.LocalAddr
 	}
 	return url
 }

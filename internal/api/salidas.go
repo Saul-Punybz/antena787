@@ -26,8 +26,9 @@ func (s *Server) salidasList(w http.ResponseWriter, r *http.Request) {
 		out = []app.SalidaEnPantalla{}
 	}
 	writeJSON(w, http.StatusOK, salidasBody{
-		Salidas: out,
-		Drivers: app.DriversDeSalida(),
+		Salidas:  out,
+		Drivers:  app.DriversDeSalida(),
+		Tarjetas: app.TarjetasDeRed(),
 	})
 }
 
@@ -36,7 +37,10 @@ func (s *Server) salidasList(w http.ResponseWriter, r *http.Request) {
 // ve la palabra driver (PRD §10, F2-50).
 type salidasBody struct {
 	Salidas []app.SalidaEnPantalla `json:"salidas"`
-	Drivers []salida.Ficha         `json:"drivers_disponibles"`
+	Drivers []salida.Ficha         `json:"drivers_disponibles"` // Tarjetas son las de red de esta máquina, para que quien configure una
+	// salida multicast escoja por cuál cable sale en vez de tener que saberse
+	// su propia dirección IP.
+	Tarjetas []app.TarjetaDeRed `json:"tarjetas"`
 }
 
 // salidasPost crea una salida. Se prueba antes de guardarla: si el driver no

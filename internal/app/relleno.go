@@ -22,7 +22,6 @@ import (
 	"image/draw"
 	"image/png"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -339,7 +338,7 @@ func correrFFmpegDelCartel(ctx context.Context, ffmpeg, cuadro, dst string, f en
 		dst,
 	)
 
-	cmd := exec.CommandContext(ctx, ffmpeg, args...)
+	cmd := engine.Comando(ctx, ffmpeg, args...)
 	cmd.Stdin = nil
 	salida, err := cmd.CombinedOutput()
 	if err != nil {

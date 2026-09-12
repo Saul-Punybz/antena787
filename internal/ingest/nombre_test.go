@@ -191,3 +191,26 @@ func TestSinopsisLegibleTiraLaFirmaDelEncoder(t *testing.T) {
 		}
 	}
 }
+
+// Windows no deja ciertos caracteres ni ciertos nombres, y los nombres los
+// pone quien sube el archivo. Un título con dos puntos —«Solo Leveling:
+// Season 2»— entra sin problema en un Mac y revienta en Windows con un error
+// del sistema que no dice nada.
+func TestNombreDeArchivoSeguro(t *testing.T) {
+	casos := []struct{ entra, sale, porque string }{
+		{"Solo Leveling: Season 2.mkv", "Solo Leveling- Season 2.mkv", "los dos puntos son comunísimos en títulos de serie"},
+		{`que*pasa?.mp4`, "que-pasa-.mp4", "los comodines no se pueden usar en un nombre"},
+		{"CON.mp4", "_CON.mp4", "CON está tomado por Windows desde MS-DOS, y falla hasta con extensión"},
+		{"nul.mkv", "_nul.mkv", "los reservados no distinguen mayúsculas"},
+		{"peli .mp4 ", "peli.mp4", "Windows se come los espacios del final sin avisar, y dos nombres distintos acaban siendo el mismo"},
+		{"normal.mp4", "normal.mp4", "lo que ya está bien no se toca"},
+		{"con acentos ñ.mkv", "con acentos ñ.mkv", "los acentos y la eñe sí valen"},
+		{"../../etc/passwd", "passwd", "una ruta no puede escaparse de la carpeta"},
+		{"", "", "sin nombre no hay archivo"},
+	}
+	for _, c := range casos {
+		if got := NombreDeArchivoSeguro(c.entra); got != c.sale {
+			t.Errorf("%q dio %q y tenía que dar %q — %s", c.entra, got, c.sale, c.porque)
+		}
+	}
+}

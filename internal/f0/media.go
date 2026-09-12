@@ -3,12 +3,13 @@
 package f0
 
 import (
+	"antena787/internal/engine"
 	"encoding/json"
 	"fmt"
 	"math"
 	"math/rand"
 	"os"
-	"os/exec"
+
 	"path/filepath"
 	"strings"
 )
@@ -174,7 +175,7 @@ func makeOne(ffmpeg string, s ClipSpec) error {
 		args = append(args, "-movflags", "+faststart")
 	}
 	args = append(args, s.File)
-	cmd := exec.Command(ffmpeg, args...)
+	cmd := engine.Comando(nil, ffmpeg, args...)
 	outb, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%v\n%s", err, outb)

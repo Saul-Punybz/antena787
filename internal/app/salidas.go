@@ -12,7 +12,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"antena787/internal/drivers/salida"
@@ -234,4 +236,81 @@ func (a *App) ElMonitor(ctx context.Context) Monitor {
 		return Monitor{Porque: "hay una salida para ver desde otra computadora, pero está en MPEG-2 y un navegador no sabe pintarlo: hace falta una en H.264"}
 	}
 	return Monitor{Porque: "todavía no hay una salida para ver la señal desde el navegador"}
+}
+
+// ── por qué cable sale la señal ───────────────────────────────────────
+
+// TarjetaDeRed es una tarjeta de esta máquina, como se le enseña a una
+// persona. Nadie tiene por qué saberse su propia dirección IP de memoria.
+type TarjetaDeRed struct {
+	// IP es lo que se guarda y lo que se le pasa a ffmpeg.
+	IP string `json:"ip"`
+	// Nombre es el del sistema: «Ethernet», «Wi-Fi», «en0».
+	Nombre string `json:"nombre"`
+	// Texto es la línea que se lee: «Ethernet — 192.168.1.20».
+	Texto string `json:"texto"`
+	// Cableada distingue un cable de un inalámbrico. Importa: una señal de
+	// televisión no se manda por wifi si hay un cable al lado.
+	Cableada bool `json:"cableada"`
+}
+
+// TarjetasDeRed son las tarjetas por las que se puede mandar la señal.
+//
+// Existe porque decirle a alguien «escribe la IP de la tarjeta» es pedirle que
+// abra una consola y sepa leer `ipconfig`. En una torre con dos cables —uno al
+// multiplexor y otro a la red de la estación— escoger mal no da ningún error:
+// la señal se va por el cable que no es y el canal simplemente no sale.
+//
+// No se ofrece el bucle local ni nada que esté caído: una tarjeta apagada no
+// es una opción, es una forma de perder la tarde.
+func TarjetasDeRed() []TarjetaDeRed {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil
+	}
+	out := []TarjetaDeRed{}
+	for _, i := range ifaces {
+		if i.Flags&net.FlagUp == 0 || i.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		dirs, err := i.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, d := range dirs {
+			ipn, ok := d.(*net.IPNet)
+			if !ok {
+				continue
+			}
+			// Solo IPv4: el multicast de una cadena de televisión va por ahí,
+			// y ofrecer direcciones IPv6 que el multiplexor no entiende sería
+			// ofrecer una forma de equivocarse.
+			ip := ipn.IP.To4()
+			if ip == nil || ip.IsLinkLocalUnicast() {
+				continue
+			}
+			cableada := !esInalambrica(i.Name)
+			out = append(out, TarjetaDeRed{
+				IP: ip.String(), Nombre: i.Name, Cableada: cableada,
+				Texto: fmt.Sprintf("%s — %s%s", i.Name, ip.String(),
+					map[bool]string{true: "", false: " (inalámbrica)"}[cableada]),
+			})
+		}
+	}
+	// Las de cable primero: es lo que hay que escoger en una torre.
+	sort.SliceStable(out, func(a, b int) bool { return out[a].Cableada && !out[b].Cableada })
+	return out
+}
+
+// esInalambrica reconoce los nombres que le pone cada sistema a una tarjeta
+// inalámbrica. No es exacto y no hace falta que lo sea: solo ordena la lista y
+// pone una nota, nunca impide escoger.
+func esInalambrica(nombre string) bool {
+	n := strings.ToLower(nombre)
+	for _, p := range []string{"wi-fi", "wifi", "wlan", "wl", "airport", "en1"} {
+		if strings.Contains(n, p) {
+			return true
+		}
+	}
+	return false
 }

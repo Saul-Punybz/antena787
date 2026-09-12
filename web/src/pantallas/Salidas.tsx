@@ -8,6 +8,7 @@ import {
   type Salida,
   type SalidaNueva,
   type SalidasDelCanal,
+  type TarjetaDeRed,
 } from '../lib/tipos'
 
 // A dónde manda este canal su señal (§10, F2-46, F2-50, F2-114). La API existía
@@ -102,6 +103,7 @@ export function Salidas() {
 
       {editando && (
         <EditorDeSalida
+          tarjetas={datos?.tarjetas ?? []}
           salida={editando === 'nueva' ? null : editando}
           tipos={tipos}
           alCerrar={() => setEditando(null)}
@@ -216,6 +218,7 @@ function TarjetaDeSalida({
 interface CamposUDPTS {
   destino: string
   ttl: string
+  interfaz: string
   bitrateMuxKbs: string
   bitrateVideoKbs: string
   pidVideo: string
@@ -230,6 +233,7 @@ interface CamposUDPTS {
 const CAMPOS_UDPTS_VACIOS: CamposUDPTS = {
   destino: '',
   ttl: '',
+  interfaz: '',
   bitrateMuxKbs: '',
   bitrateVideoKbs: '',
   pidVideo: '',
@@ -295,6 +299,7 @@ function camposUDPTSDe(salida: Salida | null): CamposUDPTS {
   return {
     destino: texto(p, 'destino'),
     ttl: texto(p, 'ttl'),
+    interfaz: texto(p, 'interfaz'),
     bitrateMuxKbs: texto(p, 'bitrate_mux_kbs'),
     bitrateVideoKbs: texto(p, 'bitrate_video_kbs'),
     pidVideo: texto(p, 'pid_video'),
@@ -343,6 +348,7 @@ function camposArchivoDe(salida: Salida | null): CamposArchivo {
 function construirParametrosUDPTS(c: CamposUDPTS): string {
   const p: Record<string, unknown> = { destino: c.destino.trim() }
   if (c.ttl.trim()) p.ttl = Number(c.ttl)
+  if (c.interfaz.trim()) p.interfaz = c.interfaz.trim()
   if (c.bitrateMuxKbs.trim()) p.bitrate_mux_kbs = Number(c.bitrateMuxKbs)
   if (c.bitrateVideoKbs.trim()) p.bitrate_video_kbs = Number(c.bitrateVideoKbs)
   if (c.pidVideo.trim()) p.pid_video = Number(c.pidVideo)
@@ -389,11 +395,13 @@ function construirParametrosArchivo(c: CamposArchivo): string {
 function EditorDeSalida({
   salida,
   tipos,
+  tarjetas,
   alCerrar,
   alGuardar,
 }: {
   salida: Salida | null
   tipos: DriverDeSalida[]
+  tarjetas: TarjetaDeRed[]
   alCerrar: () => void
   alGuardar: () => void
 }) {
@@ -479,7 +487,9 @@ function EditorDeSalida({
         <SelectorDeTipo lista={tipos} valor={tipo} alElegir={setTipo} />
       </div>
 
-      {tipo === DRIVER_UDP_TS && <CamposUDPTSForm valor={udpts} alCambiar={setUdpts} />}
+      {tipo === DRIVER_UDP_TS && (
+        <CamposUDPTSForm valor={udpts} alCambiar={setUdpts} tarjetas={tarjetas} />
+      )}
       {tipo === DRIVER_HTTP_TS && <CamposHTTPTSForm valor={httpts} alCambiar={setHttpts} />}
       {tipo === DRIVER_ARCHIVO && <CamposArchivoForm valor={archivo} alCambiar={setArchivo} />}
 
@@ -543,9 +553,11 @@ function SelectorDeTipo({
 function CamposUDPTSForm({
   valor,
   alCambiar,
+  tarjetas,
 }: {
   valor: CamposUDPTS
   alCambiar: (v: CamposUDPTS) => void
+  tarjetas: TarjetaDeRed[]
 }) {
   const set = (campo: keyof CamposUDPTS) => (v: string) => alCambiar({ ...valor, [campo]: v })
   return (
@@ -562,6 +574,35 @@ function CamposUDPTSForm({
         <span className="ayuda">
           Un receptor: «192.168.1.50:1234». Un grupo multicast: «239.1.1.1:1234». Escribe lo
           que espere tu multiplexor; los dos se aceptan igual.
+        </span>
+      </div>
+
+      {/*
+        Por cuál cable sale. Es el campo que más caro sale si se escoge mal:
+        en una torre con dos tarjetas —una al multiplexor y otra a la red de
+        la estación— el sistema operativo escoge por su cuenta y puede escoger
+        la equivocada. Y UDP no avisa: la señal se va por donde no es, todo
+        parece correcto, y el canal no sale.
+      */}
+      <div className="campo">
+        <label htmlFor="s-interfaz">Por cuál conexión sale</label>
+        <select
+          id="s-interfaz"
+          value={valor.interfaz}
+          onChange={(e) => set('interfaz')(e.target.value)}
+        >
+          <option value="">Que lo decida la computadora</option>
+          {tarjetas.map((t) => (
+            <option key={t.ip} value={t.ip}>
+              {t.texto}
+            </option>
+          ))}
+        </select>
+        <span className="ayuda">
+          Si esta computadora tiene más de un cable de red, escoge el que va al
+          multiplexor. Dejarlo en «que lo decida la computadora» funciona cuando
+          solo hay uno; con dos, puede mandar la señal por el cable equivocado sin
+          decir nada.
         </span>
       </div>
 

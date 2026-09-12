@@ -112,7 +112,7 @@ func StartDecoder(parent context.Context, ffmpeg, ffprobe string, f Format, clip
 		seek = argsDeVivo(clip.Path)
 	}
 
-	d.vcmd = exec.CommandContext(ctx, ffmpeg, append(append([]string{
+	d.vcmd = Comando(ctx, ffmpeg, append(append([]string{
 		"-nostdin", "-hide_banner", "-loglevel", "error"}, seek...),
 		"-i", clip.Path, "-an", "-sn", "-dn",
 		"-vf", videoFilter(f), "-f", "rawvideo", "pipe:1")...)
@@ -126,7 +126,7 @@ func StartDecoder(parent context.Context, ffmpeg, ffprobe string, f Format, clip
 		cancel()
 		return nil, err
 	}
-	d.acmd = exec.CommandContext(ctx, ffmpeg, append(append([]string{
+	d.acmd = Comando(ctx, ffmpeg, append(append([]string{
 		"-nostdin", "-hide_banner", "-loglevel", "error"}, seek...),
 		"-i", clip.Path, "-vn", "-sn", "-dn",
 		"-af", audioFilter(f), "-f", "s16le", "-ar", strconv.Itoa(f.SampleRate), "-ac", strconv.Itoa(f.Channels), "pipe:1")...)
@@ -236,7 +236,7 @@ func (p *pcmReader) read(n int) ([]byte, int) {
 }
 
 func probeDuration(ffprobe, path string) (float64, error) {
-	out, err := exec.Command(ffprobe, "-v", "error", "-show_entries", "format=duration",
+	out, err := Comando(nil, ffprobe, "-v", "error", "-show_entries", "format=duration",
 		"-of", "default=noprint_wrappers=1:nokey=1", path).Output()
 	if err != nil {
 		return 0, err

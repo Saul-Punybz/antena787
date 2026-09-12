@@ -24,9 +24,15 @@ está hecho Antena787 dejó de soportar Windows 8 hace años.
 
 ## Ponerlo a andar
 
-1. **Descomprime la carpeta `Antena787-windows`** donde quieras. En el
-   escritorio está bien. En `C:\Antena787` está mejor, porque una ruta corta da
-   menos problemas.
+1. **Descomprime la carpeta `Antena787-windows` en `C:\Antena787`.**
+
+   **No la pongas en el Escritorio ni en Documentos.** Windows 10 sincroniza
+   esas dos carpetas con OneDrive de fábrica, y OneDrive copia archivos
+   mientras se están escribiendo. La base de datos del canal se escribe todo el
+   tiempo: ahí dentro se corrompe. Tampoco en `C:\Program Files`, que pide
+   permisos de administrador para escribir al lado del programa.
+
+   `C:\Antena787` es una ruta corta, no la sincroniza nadie, y no pide permisos.
 
    Dentro vas a ver `antena.exe`, `ffmpeg.exe`, `ffprobe.exe`, el arranque y
    estos papeles. **Los tres ejecutables tienen que quedarse juntos**: Antena787

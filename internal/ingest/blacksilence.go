@@ -1,12 +1,12 @@
 package ingest
 
 import (
+	"antena787/internal/engine"
 	"bufio"
 	"bytes"
 	"context"
 	"fmt"
 	"math"
-	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
@@ -68,7 +68,7 @@ func BlackAndSilence(ctx context.Context, ffmpeg, path string, dur time.Duration
 // Analyze es BlackAndSilence con el detalle completo.
 func Analyze(ctx context.Context, ffmpeg, path string, dur time.Duration) (BlackSilence, error) {
 	var out BlackSilence
-	cmd := exec.CommandContext(ctx, ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "info",
+	cmd := engine.Comando(ctx, ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "info",
 		"-i", path,
 		"-vf", BlackDetectFilter,
 		"-af", SilenceDetectFilter,

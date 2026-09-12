@@ -565,8 +565,12 @@ func (s *Server) materialSubir(w http.ResponseWriter, r *http.Request) {
 			failf(w, http.StatusBadRequest, "archivo", "no se pudo leer lo que subiste: %s", plainUpload(err))
 			return
 		}
-		name := filepath.Base(part.FileName())
-		if name == "" || name == "." || name == string(filepath.Separator) {
+		// El nombre lo pone quien sube el archivo, y en Windows hay
+		// caracteres que no se pueden usar: «Solo Leveling: Season 2» entra
+		// sin problema en un Mac y revienta allá con un error del sistema que
+		// no explica nada. Se limpia al recibirlo.
+		name := ingest.NombreDeArchivoSeguro(part.FileName())
+		if name == "" {
 			continue
 		}
 		if !ingest.IsMedia(name) {

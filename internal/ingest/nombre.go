@@ -225,3 +225,67 @@ func conNombreLegible(tags, file Card) Card {
 	}
 	return tags
 }
+
+// ── nombres que Windows acepta ────────────────────────────────────────
+
+// prohibidosEnWindows son los caracteres que Windows no deja en un nombre de
+// archivo. En Mac y en Linux casi todos valen, así que un nombre que entra sin
+// problema aquí revienta allá — y el que sube el archivo no tiene forma de
+// saber por qué.
+const prohibidosEnWindows = `<>:"/\|?*`
+
+// reservadosEnWindows son nombres que Windows tiene tomados desde MS-DOS y que
+// **no se pueden usar ni con extensión**: `CON.mp4` falla igual que `CON`.
+var reservadosEnWindows = map[string]bool{
+	"con": true, "prn": true, "aux": true, "nul": true,
+	"com1": true, "com2": true, "com3": true, "com4": true, "com5": true,
+	"com6": true, "com7": true, "com8": true, "com9": true,
+	"lpt1": true, "lpt2": true, "lpt3": true, "lpt4": true, "lpt5": true,
+	"lpt6": true, "lpt7": true, "lpt8": true, "lpt9": true,
+}
+
+// NombreDeArchivoSeguro deja un nombre que se puede crear en Windows, en Mac y
+// en Linux, conservando todo lo que se pueda del original.
+//
+// Hace falta porque los nombres los pone quien sube el archivo, y los títulos
+// de verdad llevan dos puntos muy a menudo —«Solo Leveling: Season 2»— que en
+// Mac entran sin problema y en Windows no. Limpiarlo al recibirlo es mejor que
+// fallar con un error del sistema que no explica nada.
+//
+// Se cambia lo mínimo: los prohibidos por un guion, los puntos y espacios del
+// final —que Windows se come en silencio y dejan dos archivos distintos con el
+// mismo nombre—, y a un nombre reservado se le pone un guion bajo delante.
+func NombreDeArchivoSeguro(nombre string) string {
+	nombre = filepath.Base(strings.TrimSpace(nombre))
+	if nombre == "" || nombre == "." || nombre == ".." {
+		return ""
+	}
+
+	var b strings.Builder
+	for _, r := range nombre {
+		switch {
+		case strings.ContainsRune(prohibidosEnWindows, r):
+			b.WriteRune('-')
+		case r < 0x20 || r == 0x7f:
+			// Los de control no se ven, así que un nombre con uno dentro
+			// parece igual que otro sin él. Fuera.
+		default:
+			b.WriteRune(r)
+		}
+	}
+	limpio := b.String()
+
+	// Windows quita los puntos y espacios del final al crear el archivo, sin
+	// avisar. «peli .mp4 » y «peli .mp4» acaban siendo el mismo, y el segundo
+	// pisa al primero.
+	ext := filepath.Ext(limpio)
+	base := strings.TrimRight(strings.TrimSuffix(limpio, ext), ". ")
+	ext = strings.TrimRight(ext, ". ")
+	if base == "" {
+		base = "archivo"
+	}
+	if reservadosEnWindows[strings.ToLower(base)] {
+		base = "_" + base
+	}
+	return base + ext
+}

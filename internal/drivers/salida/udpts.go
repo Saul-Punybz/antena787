@@ -28,7 +28,12 @@ type ParamsUDPTS struct {
 	// TTL son los saltos de red que vive el paquete. Solo hace falta para un
 	// grupo multicast; en un grupo sin TTL escrito se pone 1, que no sale de
 	// la propia red.
-	TTL             int    `json:"ttl"`
+	TTL int `json:"ttl"`
+	// Interfaz es la IP de la tarjeta de red por la que sale la señal. Vacía
+	// deja que el sistema escoja, que es lo que había hasta el 12 de
+	// septiembre de 2026 y lo que hace que en una máquina con dos tarjetas la
+	// señal se vaya por el cable que no es, sin que nada lo diga.
+	Interfaz        string `json:"interfaz"`
 	BitrateMuxKbs   int    `json:"bitrate_mux_kbs"`
 	BitrateVideoKbs int    `json:"bitrate_video_kbs"`
 	PIDVideo        int    `json:"pid_video"`
@@ -240,21 +245,22 @@ func pidValido(que string, pid, minimo int) error {
 // entra para que el driver pueda quejarse si algún día no cuadra.
 func (d *udpts) Abrir(engine.Format) (engine.Output, error) {
 	return engine.Output{
-		Name:     d.nombre(),
-		Kind:     "mpeg2-ts",
-		UDP:      fmt.Sprintf("udp://%s:%d", d.host, d.puerto),
-		VideoKbs: d.p.BitrateVideoKbs,
-		MuxKbs:   d.p.BitrateMuxKbs,
-		PIDVideo: d.p.PIDVideo,
-		PIDAudio: d.p.PIDAudio,
-		PIDPMT:   d.p.PIDPMT,
-		Programa: d.p.Programa,
-		TSID:     d.p.TSID,
-		PCRms:    d.p.PCRms,
-		Audio:    d.p.Audio,
-		AudioKbs: d.p.BitrateAudioKbs,
-		TTL:      d.p.TTL,
-		PktSize:  engine.PktSizePorDefecto,
+		Name:      d.nombre(),
+		Kind:      "mpeg2-ts",
+		UDP:       fmt.Sprintf("udp://%s:%d", d.host, d.puerto),
+		VideoKbs:  d.p.BitrateVideoKbs,
+		MuxKbs:    d.p.BitrateMuxKbs,
+		PIDVideo:  d.p.PIDVideo,
+		PIDAudio:  d.p.PIDAudio,
+		PIDPMT:    d.p.PIDPMT,
+		Programa:  d.p.Programa,
+		TSID:      d.p.TSID,
+		PCRms:     d.p.PCRms,
+		Audio:     d.p.Audio,
+		AudioKbs:  d.p.BitrateAudioKbs,
+		TTL:       d.p.TTL,
+		LocalAddr: d.p.Interfaz,
+		PktSize:   engine.PktSizePorDefecto,
 	}, nil
 }
 

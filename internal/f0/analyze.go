@@ -8,7 +8,7 @@ import (
 	"io"
 	"math"
 	"os"
-	"os/exec"
+
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -195,7 +195,7 @@ type frameInfo struct {
 func readMarkers(ffmpeg, tsPath string, fm engine.Format, byID map[int]ClipSpec) ([]frameInfo, error) {
 	const div = 4
 	w, h := fm.Width/div, fm.Height/div
-	cmd := exec.Command(ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-i", tsPath,
+	cmd := engine.Comando(nil, ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-i", tsPath,
 		"-map", "0:v:0", "-vf", fmt.Sprintf("scale=%d:%d:flags=area,format=gray", w, h), "-f", "rawvideo", "pipe:1")
 	pipe, err := cmd.StdoutPipe()
 	if err != nil {
@@ -374,7 +374,7 @@ func parseRate(s string) float64 {
 // streamStarts devuelve el primer PTS de audio y de video del TS.
 func streamStarts(ffprobe, tsPath string) (a, v float64) {
 	get := func(sel string) float64 {
-		out, err := exec.Command(ffprobe, "-v", "error", "-select_streams", sel, "-show_entries", "stream=start_time", "-of", "csv=p=0", tsPath).Output()
+		out, err := engine.Comando(nil, ffprobe, "-v", "error", "-select_streams", sel, "-show_entries", "stream=start_time", "-of", "csv=p=0", tsPath).Output()
 		if err != nil {
 			return 0
 		}
@@ -409,7 +409,7 @@ func maxMs(o []offset) float64 {
 }
 
 func checkAudio(ffmpeg, tsPath string, fm engine.Format, cuts []engine.Event, frames []frameInfo, aStart, vStart float64) (offsets []offset, clicks []float64, err error) {
-	cmd := exec.Command(ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-i", tsPath,
+	cmd := engine.Comando(nil, ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-i", tsPath,
 		"-map", "0:a:0", "-ac", "1", "-ar", strconv.Itoa(fm.SampleRate), "-f", "s16le", "pipe:1")
 	pipe, err := cmd.StdoutPipe()
 	if err != nil {
@@ -543,7 +543,7 @@ func worstClick(seg []int16, center int) float64 {
 // --- subtítulos, cpu, reporte -----------------------------------------------
 
 func hasClosedCaptions(ffprobe, tsPath string) string {
-	out, _ := exec.Command(ffprobe, "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=closed_captions", "-of", "csv=p=0", tsPath).Output()
+	out, _ := engine.Comando(nil, ffprobe, "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=closed_captions", "-of", "csv=p=0", tsPath).Output()
 	return strings.TrimSpace(string(out))
 }
 

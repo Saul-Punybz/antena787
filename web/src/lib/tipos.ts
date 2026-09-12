@@ -140,6 +140,8 @@ export interface SalidaBorrada {
 export interface SalidasDelCanal {
   salidas: Salida[]
   drivers_disponibles: DriverDeSalida[]
+  /** Las tarjetas de red de la máquina, para escoger por cuál sale. */
+  tarjetas?: TarjetaDeRed[]
 }
 
 export type EstadoPlan =
@@ -962,4 +964,21 @@ export interface Monitor {
   /** Qué falta, cuando falta algo. Ya escrito para una persona. */
   porque?: string
   salida_id?: number
+}
+
+/**
+ * Una tarjeta de red de la máquina. Se ofrecen para que quien configure una
+ * salida multicast escoja **por cuál cable sale la señal** en vez de tener que
+ * saberse su propia dirección IP.
+ *
+ * Importa más de lo que parece: en una torre con dos cables —uno al
+ * multiplexor y otro a la red de la estación— escoger mal no da ningún error.
+ * La señal se va por el cable que no es y el canal simplemente no sale.
+ */
+export interface TarjetaDeRed {
+  ip: string
+  nombre: string
+  /** «Ethernet — 192.168.1.20», ya escrito por el servidor. */
+  texto: string
+  cableada: boolean
 }

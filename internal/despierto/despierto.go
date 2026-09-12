@@ -33,6 +33,7 @@ import (
 	"os/exec"
 	"strconv"
 	"sync"
+	"time"
 )
 
 // Proceso es lo poco que hace falta de un subproceso: matarlo y esperar a que
@@ -67,6 +68,9 @@ func Sostener(ctx context.Context) (soltar func(), caido <-chan error, err error
 // LanzadorDelSistema es el que lanza de verdad. Un lanzador nil vale por este.
 func LanzadorDelSistema(ctx context.Context, programa string, args ...string) (Proceso, error) {
 	cmd := exec.CommandContext(ctx, programa, args...)
+	// Que matar este proceso no cuelgue el apagado del canal (issue #14):
+	// sin plazo, Wait espera para siempre a que suelte sus tuberías.
+	cmd.WaitDelay = 3 * time.Second
 	// El subproceso no habla con nadie: ni le entra ni le sale nada.
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, nil, nil
 	if err := cmd.Start(); err != nil {

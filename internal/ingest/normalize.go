@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -355,7 +354,7 @@ func measureLoudness(ctx context.Context, ffmpeg, path string, track int, target
 	args := []string{"-nostdin", "-hide_banner", "-i", path, "-map", fmt.Sprintf("0:a:%d", track),
 		"-af", fmt.Sprintf("loudnorm=I=%s:TP=%s:LRA=11:print_format=json", num(targetLUFS), num(truePeak)),
 		"-f", "null", "-"}
-	cmd := exec.CommandContext(ctx, ffmpeg, args...)
+	cmd := engine.Comando(ctx, ffmpeg, args...)
 	var errb bytes.Buffer
 	cmd.Stderr = &errb
 	cmd.Stdin = nil
@@ -393,7 +392,7 @@ func parseLoudnorm(text string) (loudness, error) {
 }
 
 func runFFmpeg(ctx context.Context, ffmpeg string, args []string) error {
-	cmd := exec.CommandContext(ctx, ffmpeg, args...)
+	cmd := engine.Comando(ctx, ffmpeg, args...)
 	var errb bytes.Buffer
 	cmd.Stderr = &errb
 	cmd.Stdin = nil
