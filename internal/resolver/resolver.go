@@ -678,9 +678,15 @@ func (r *run) placeProgram(it instance) {
 		r.cursor[owner] = &last.ID
 		r.advance[owner] = last.ID
 	}
-	if rule.RepeatsOf == nil {
-		r.airedToday[rule.ID] = picks[:placed]
-	}
+	// Se anota SIEMPRE, también cuando esta regla es ella misma una
+	// repetición. Antes solo se anotaba para las primarias, y eso rompía la
+	// cadena: en «Kojak a las 8, repetición a las 2, repetición a las 8 de la
+	// noche» —que es como funciona una estación chica— la tercera no
+	// encontraba qué repetir, escogía episodio desde cero, y encima movía el
+	// contador de la segunda. Medido: la primaria iba por el episodio 6, la
+	// segunda lo repetía bien, y la tercera salía con el episodio 1
+	// (auditoría de lógica, 12 sept 2026).
+	r.airedToday[rule.ID] = picks[:placed]
 }
 
 // pickEpisodes toma los siguientes n episodios con material listo a partir
@@ -963,6 +969,14 @@ func (r *run) expiryWarnings() {
 		}
 		if r.relieve[rule.ID] {
 			continue // ya hay quien la releve: avisar entrena a ignorar avisos
+		}
+		// Una regla que todavía no ha empezado no se está acabando. Sin esto,
+		// una regla del 1 al 5 de octubre avisaba «quedan 28 días» el 7 de
+		// septiembre, sin haber salido al aire ni una vez. Avisar de algo que
+		// no ha pasado es la forma más rápida de que alguien deje de leer los
+		// avisos (auditoría de lógica, 12 sept 2026).
+		if rule.From > r.today {
+			continue
 		}
 		left := rule.DaysLeft(r.today)
 		if left < 0 {

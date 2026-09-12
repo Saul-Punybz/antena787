@@ -873,3 +873,68 @@ func TestElContadorTieneDuenoDeclarado(t *testing.T) {
 		t.Fatalf("el contador del dueño tiene que ser el episodio que salió\n%s", f.dump(out))
 	}
 }
+
+// Una repetición de una repetición. «Kojak a las 8, otra vez a las 2, y otra
+// a las 8 de la noche» es cómo funciona una estación chica, y hasta el 12 de
+// septiembre de 2026 la TERCERA no repetía nada: `airedToday` solo se anotaba
+// para las primarias, así que la tercera no encontraba qué repetir, escogía
+// episodio desde cero y encima movía el contador de la segunda.
+//
+// Medido antes del arreglo: la primaria iba por el episodio 6, la segunda lo
+// repetía bien, y la tercera salía con el episodio 1.
+func TestLaRepeticionDeUnaRepeticionRepiteLoMismo(t *testing.T) {
+	f := newCAtv()
+	f.serie(344, "You're Under Arrest", 26, 24*time.Minute)
+	f.filler(1, time.Minute)
+	f.rule(344, 344, "LMMJV__", "08:00", "2026-07-07", "2026-09-16", 1) // la primaria
+	f.rule(315, 344, "LMMJV__", "14:00", "2026-07-07", "2026-09-16", 1) // repite a la primaria
+	f.rule(316, 344, "LMMJV__", "20:00", "2026-07-07", "2026-09-16", 1) // repite a la de las 2
+	f.tweak(315, func(r *model.ScheduleRule) { id := int64(344); r.RepeatsOf = &id })
+	f.tweak(316, func(r *model.ScheduleRule) { id := int64(315); r.RepeatsOf = &id })
+
+	out := Resolve(f.in(f.local(t, "2026-09-07 06:00"), 24*time.Hour))
+	manana := f.at(t, out, "2026-09-07 08:00")
+	tarde := f.at(t, out, "2026-09-07 14:00")
+	noche := f.at(t, out, "2026-09-07 20:00")
+
+	if manana.EpisodeID == nil || tarde.EpisodeID == nil || noche.EpisodeID == nil {
+		t.Fatalf("los tres pases tienen que llevar episodio\n%s", f.dump(out))
+	}
+	if *tarde.EpisodeID != *manana.EpisodeID {
+		t.Fatalf("la de las 2 no repitió la de las 8\n%s", f.dump(out))
+	}
+	if *noche.EpisodeID != *manana.EpisodeID {
+		t.Fatalf("la de las 8 de la noche salió con el episodio %d y tenía que repetir el %d: una repetición de una repetición sigue siendo la misma emisión\n%s",
+			*noche.EpisodeID, *manana.EpisodeID, f.dump(out))
+	}
+
+	// Y ninguna de las dos repeticiones lleva contador propio: el único que
+	// avanza es el de la primaria.
+	for _, id := range []int64{315, 316} {
+		if _, hay := out.EpisodeAdvance[id]; hay {
+			t.Fatalf("la repetición %d devolvió avance de episodio: %v", id, out.EpisodeAdvance)
+		}
+	}
+	if out.EpisodeAdvance[344] != *manana.EpisodeID {
+		t.Fatalf("el contador que avanza es el de la primaria, y avanzó %v", out.EpisodeAdvance)
+	}
+}
+
+// Una regla que todavía no ha empezado no se está acabando. Antes, una regla
+// del 1 al 5 de octubre avisaba «quedan 28 días» el 7 de septiembre sin haber
+// salido al aire nunca — y avisar de algo que no ha pasado es la forma más
+// rápida de que alguien deje de leer los avisos.
+func TestUnaReglaQueNoHaEmpezadoNoAvisaDeQueSeAcaba(t *testing.T) {
+	f := newCAtv()
+	f.serie(344, "You're Under Arrest", 26, 24*time.Minute)
+	f.filler(1, time.Minute)
+	// Empieza dentro de tres semanas y dura cinco días.
+	f.rule(344, 344, "LMMJV__", "14:00", "2026-10-01", "2026-10-05", 1)
+
+	out := Resolve(f.in(f.local(t, "2026-09-07 06:00"), 24*time.Hour))
+	for _, w := range out.Warnings {
+		if w.Kind == "vencimiento" {
+			t.Fatalf("avisó del vencimiento de una regla que todavía no ha empezado: %q", w.Text)
+		}
+	}
+}
