@@ -138,6 +138,45 @@ jobs:
             echo "El reporte de F0 tiene criterios que FALLAN:"; cat f0/out/REPORTE.md; exit 1
           fi
 
+      # El producto de verdad, arrancado en la plataforma donde va a vivir.
+      # Hasta el 12 de septiembre de 2026 esto NO se hacía: el CI compilaba y
+      # corría `cmd/f0`, que es el arnés de medición, y `cmd/antena` —lo que
+      # se le entrega a una estación— no se construía nunca fuera de un Mac.
+      # Un binario que solo compila cruzado no está probado.
+      - name: compilar el producto
+        run: go build -o bin/antena${{ runner.os == 'Windows' && '.exe' || '' }} ./cmd/antena
+
+      - name: el producto arranca y contesta
+        shell: bash
+        run: |
+          set -e
+          datos="$(mktemp -d)"
+          exe=bin/antena${{ runner.os == 'Windows' && '.exe' || '' }}
+          "$exe" -datos "$datos" -escucha 127.0.0.1:7899 > arranque.log 2>&1 &
+          pid=$!
+          # Hasta 40 s para abrir: un Windows de CI arranca lento y la base
+          # se crea y se migra en el primer arranque.
+          ok=0
+          for i in $(seq 1 40); do
+            if curl -fsS --max-time 2 http://127.0.0.1:7899/api/v1/estado > estado.json 2>/dev/null; then ok=1; break; fi
+            sleep 1
+          done
+          if [ "$ok" != "1" ]; then
+            echo "El producto no llegó a contestar. Lo que dijo al arrancar:"; cat arranque.log; exit 1
+          fi
+          echo "== /estado =="; head -c 400 estado.json; echo
+          # Que sea el de verdad y no una página de error: tiene que traer el
+          # canal y la versión del esquema puesta al día.
+          grep -q '"canal"' estado.json || { echo "la respuesta no trae el canal"; cat arranque.log; exit 1; }
+          # Que sirva algo por la raíz. Ojo: este trabajo NO compila la
+          # interfaz, así que lo que se sirve aquí es el marcador de reserva,
+          # no la interfaz de verdad. Comprobar que va dentro es trabajo del
+          # paquete, más abajo, y decirlo aquí evita creer que esto lo cubre.
+          curl -fsS --max-time 5 http://127.0.0.1:7899/ > /dev/null || {
+            echo "el binario no contesta por la raíz"; exit 1; }
+          kill "$pid" 2>/dev/null || true
+          echo "el producto arranca y contesta en $(uname -s)"
+
       # Pase lo que pase, lo último que hizo el motor y qué procesos había:
       # es lo que hace falta para entender un cuelgue en una plataforma
       # que no tenemos a mano.
@@ -173,3 +212,71 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run build
+
+  # El paquete que se le manda a una estación: el ejecutable con la interfaz
+  # dentro, la guía y el arranque de un clic.
+  #
+  # Se arma EN Windows, no cruzado desde otro sitio: así lo que se descarga es
+  # lo mismo que el CI compiló y arrancó, y no una compilación que nadie probó.
+  paquete-windows:
+    name: paquete para Windows
+    needs: [verificar, interfaz]
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: la interfaz, dentro del binario
+        shell: bash
+        run: |
+          npm --prefix web ci
+          npm --prefix web run build
+          rm -rf internal/api/ui/dist
+          cp -R web/dist internal/api/ui/dist
+
+      - name: compilar
+        shell: bash
+        run: CGO_ENABLED=0 go build -ldflags "-s -w" -o dist/antena.exe ./cmd/antena
+
+      # Que la interfaz vaya DE VERDAD dentro. Un binario sin ella arranca
+      # igual y sirve un marcador, y eso se descubre cuando alguien abre el
+      # navegador en la torre.
+      - name: arranca y sirve la interfaz de verdad
+        shell: bash
+        run: |
+          set -e
+          datos="$(mktemp -d)"
+          dist/antena.exe -datos "$datos" -escucha 127.0.0.1:7898 > arranque.log 2>&1 &
+          pid=$!
+          ok=0
+          for i in $(seq 1 40); do
+            if curl -fsS --max-time 2 http://127.0.0.1:7898/api/v1/estado >/dev/null 2>&1; then ok=1; break; fi
+            sleep 1
+          done
+          [ "$ok" = "1" ] || { echo "no arrancó:"; cat arranque.log; exit 1; }
+          raiz=$(curl -fsS --max-time 5 http://127.0.0.1:7898/)
+          echo "$raiz" | grep -q 'id="raiz"' || {
+            echo "el binario NO lleva la interfaz dentro; esto es lo que sirve:"; echo "$raiz" | head -c 400; exit 1; }
+          kill "$pid" 2>/dev/null || true
+          echo "arranca en Windows y sirve la interfaz de verdad"
+
+      - name: armar el paquete
+        shell: bash
+        run: |
+          mkdir -p dist/Antena787-windows
+          cp dist/antena.exe dist/Antena787-windows/
+          cp docs/INSTALAR-WINDOWS.md dist/Antena787-windows/LEEME.md
+          cp scripts/Arrancar-Antena787.bat dist/Antena787-windows/
+          cp LICENSE dist/Antena787-windows/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Antena787-windows
+          path: dist/Antena787-windows
+          retention-days: 30

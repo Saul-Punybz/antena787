@@ -14,3 +14,7 @@ diseno/_plain/
 /dist/
 
 internal/api/ui/dist/
+
+# El paquete de entrega se arma, no se guarda: lo compila el CI en Windows y
+# sale como artefacto de la corrida.
+dist/

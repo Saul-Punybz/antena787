@@ -1,11 +1,13 @@
-# Antena787 — Fase 0. El producto (cmd/antena) todavia no existe.
-# Nada de esto hace magia: son los mismos comandos de docs/DESARROLLO.md.
+# Antena787. Nada de esto hace magia: son los mismos comandos de
+# docs/DESARROLLO.md.
+#
+# Para entregarle algo a una estacion: `make paquete-windows`.
 
 BIN  ?= bin
 DIST ?= dist
 GO   ?= go
 
-.PHONY: build vet test f0 windows linux arm64 clean
+.PHONY: build vet test f0 windows linux arm64 clean ui antena antena-windows paquete-windows
 
 ## build — compila el ejecutable de la F0 en bin/
 build:
@@ -53,3 +55,27 @@ ui:
 ## antena: el binario completo con la interfaz dentro
 antena: ui
 	go build -o bin/antena ./cmd/antena
+
+
+## antena-windows — el producto entero para Windows x86-64, con la interfaz
+##                  dentro. Es lo que se le manda a una estacion.
+##
+## Sin CGo a proposito: asi el .exe no necesita nada instalado en la maquina
+## de destino mas que ffmpeg, y corre en un Windows 10 tal como viene.
+antena-windows: ui
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build \
+		-ldflags "-s -w" -o $(DIST)/antena.exe ./cmd/antena
+
+## paquete-windows — la carpeta que se le entrega: el ejecutable, la guia y
+##                   un arranque de un clic. Sin instalador de los de
+##                   siguiente-siguiente-siguiente: este programa no necesita
+##                   tocar el registro ni pedir permisos de administrador.
+paquete-windows: antena-windows
+	rm -rf $(DIST)/Antena787-windows
+	mkdir -p $(DIST)/Antena787-windows
+	cp $(DIST)/antena.exe $(DIST)/Antena787-windows/
+	cp docs/INSTALAR-WINDOWS.md $(DIST)/Antena787-windows/LEEME.md
+	cp scripts/Arrancar-Antena787.bat $(DIST)/Antena787-windows/
+	cp LICENSE $(DIST)/Antena787-windows/
+	cd $(DIST) && zip -qr Antena787-windows.zip Antena787-windows
+	@echo "Listo: $(DIST)/Antena787-windows.zip"
