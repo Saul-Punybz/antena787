@@ -27,6 +27,54 @@ asistente está abierto.
 | `GET /ajustes` · `PUT /ajustes` | Mapa clave→valor de `settings` (sin la clave de estación). Los secretos (`clave_tmdb`, `avisos_telegram_token`, `avisos_smtp_clave`) salen tapados con `••••••`; devolverlos tapados en un `PUT` no los cambia. |
 | `WS /ws` | Empuja `{"tipo":"estado", ...}` cada segundo y `{"tipo":"evento", ...}` en cada incidente o cambio de plan. El empujón lleva `salidas`, `al_aire` y `siguiente` igual que `GET /estado`: las dos últimas van siempre, con `null` cuando no hay nada al aire. |
 
+## Presets de preparación — cómo se prepara el material (esquema v10)
+
+Un preset dice **cómo se prepara** lo que entra: volumen, recortes y calidad.
+Se aplican en **tres niveles** —el canal entero, un programa, un archivo
+suelto— y **gana el más específico**. Lo que un nivel no dice lo hereda del de
+arriba, y lo que no diga ninguno cae en los valores de fábrica del código: por
+eso en `ajustes` **todo es opcional**, y «cero» y «no dicho» son cosas
+distintas.
+
+| Método y ruta | Qué hace |
+|---|---|
+| `GET /presets` | `{presets:[Preset], volumen_lkfs, pico_db, volumen_porque}`. El volumen viene con la lista porque es el número que gobierna todo el canal y la pantalla tiene que poder enseñarlo sin pedirlo aparte; `volumen_porque` es la frase ya escrita para una persona (CALM Act, EBU R128 o internet, según el perfil). |
+| `POST /presets` | Crea uno: `{nombre, ajustes}`. `ajustes` viaja **como objeto**, no como cadena: quien escribe la pantalla no serializa nada a mano. `400` con `campo` si el nombre falta o si un valor no tiene sentido —una corrección de volumen de ±25 dB no arregla un archivo, lo rompe—. |
+| `PUT /presets/{id}` | Igual que crear. **No rehace lo ya convertido**: lo hecho se queda como estaba hasta que alguien lo pida archivo por archivo. |
+| `DELETE /presets/{id}` | `{"borrado": id, "aviso": "…"}`. Lo que lo usaba —canal, programas, archivos— vuelve a heredar del nivel de arriba, que es como estaba antes de que el preset existiera. No se rompe nada y el aviso lo dice. |
+| `POST /material/{id}/volver-a-preparar` | `{"encolado": id, "texto": "…"}`. Manda un archivo otra vez a la cola de preparación. No convierte nada aquí mismo: la cola ordena por hora de aire y se aparta cuando el aire sufre (ADR 0008), así que pedirlo nunca le puede costar la señal a nadie. |
+
+**Cómo se aplica un preset**, que es la otra mitad y no tiene ruta propia:
+
+- **Al canal** — `PUT /canal` con `preset_id`.
+- **A un programa** — `PUT /biblioteca/{id}` con `preset_id`.
+- **A un archivo suelto** — `PUT /material/{id}` con `preset_id`.
+
+En los tres, `null` lo devuelve a heredar y un preset que no existe se contesta
+`400` con `campo: "preset_id"` y una frase, **nunca** un error de base de
+datos. En `PUT /material/{id}` hay una diferencia que importa: **no mandar**
+`preset_id` deja el que había, y mandarlo en `null` lo quita. Son cosas
+distintas porque esa pantalla manda el formulario entero cada vez, y
+confundirlas borraría el preset de un archivo cada vez que alguien le cambia la
+pista de sonido.
+
+Un `Preset` sale con **dónde se está usando**, que es lo que hay que enseñar
+antes de dejar borrarlo:
+
+```json
+{
+  "id": 1, "nombre": "Películas viejas",
+  "ajustes": {"volumen_relativo_db": 3, "recorte_cabeza_ms": 2000, "calidad": "normal"},
+  "creado": "2026-09-12T18:20:47Z",
+  "en_canal": false, "titulos": 4, "archivos": 0
+}
+```
+
+El preset **del archivo** viaja con nombre propio, `preset_archivo`, en todo lo
+que lleva sonido (`GET /biblioteca`, `/biblioteca/{id}`, `PUT /material/{id}`).
+No se llama `preset_id` porque un título lleva los dos encima —el suyo y el de
+su archivo— y con el mismo nombre uno pisaría al otro en el JSON.
+
 ## Salidas — a dónde manda el canal su señal (§10, F2-46, F2-50, F2-114)
 
 | Método y ruta | Qué hace |

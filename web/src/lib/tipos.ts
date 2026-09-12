@@ -54,6 +54,11 @@ export interface Canal {
    * exige por evento; vacío es legítimo y la guía avisa en vez de inventarlo.
    */
   numero_canal: string
+  /**
+   * El preset de preparación de todo el canal: el nivel más bajo de los tres
+   * (canal → programa → archivo). `null` es «los valores de fábrica».
+   */
+  preset_id?: number | null
 }
 
 export interface Salida {
@@ -382,6 +387,15 @@ export interface AudioDelMaterial {
   audio_sidecar?: string
   /** Ruta del archivo de subtítulos de al lado; vacío cuando no hubo. */
   subtitulos_sidecar?: string
+  /**
+   * El preset de preparación de este **archivo** en concreto: el nivel que
+   * manda sobre todos. Ausente es «que herede del programa o del canal».
+   *
+   * Se llama distinto que el del programa a propósito: un título lleva los
+   * dos encima —`preset_id` es el suyo, éste el de su archivo— y con el mismo
+   * nombre uno pisaría al otro (internal/api/biblioteca.go, `audioOut`).
+   */
+  preset_archivo?: number | null
 }
 
 export interface TituloDeBiblioteca extends AudioDelMaterial {
@@ -406,6 +420,11 @@ export interface TituloDeBiblioteca extends AudioDelMaterial {
    * Form 2100 Schedule H llegan con el reporte de emisión (F4).
    */
   infantil_core: boolean
+  /**
+   * El preset de preparación **del programa**. Manda sobre el del canal y
+   * cede ante el del archivo, que viaja en `preset_archivo`.
+   */
+  preset_id?: number | null
 }
 
 export interface EpisodioDeBiblioteca extends AudioDelMaterial {
@@ -420,6 +439,12 @@ export interface EpisodioDeBiblioteca extends AudioDelMaterial {
 /** Cuerpo de PUT /material/{id}: por ahora, cambiar la pista que sale al aire. */
 export interface CambioDeMaterial {
   pista_audio_aire?: number
+  /**
+   * El preset de este archivo. Ojo con el `null`: **no mandarlo** deja el que
+   * había, mandarlo `null` lo quita. Son cosas distintas y el servidor las
+   * distingue (internal/api/biblioteca.go).
+   */
+  preset_id?: number | null
 }
 
 /**
@@ -443,6 +468,8 @@ export interface CambioDeTitulo {
   nombre?: string
   sinopsis?: string
   infantil_core?: boolean
+  /** El preset del programa. `null` lo devuelve a heredar del canal. */
+  preset_id?: number | null
 }
 
 export interface EnCuarentena {

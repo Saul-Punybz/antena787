@@ -27,6 +27,7 @@ import type {
   MesDelPlan,
   Opcion,
   OpcionesDelAsistente,
+  Preset,
   Regla,
   RespuestasDelAsistente,
   ResultadoDeEmparejar,
@@ -72,6 +73,38 @@ let siguienteId = 1000
  * acordarse y contestar «aún no listo para aire» de ahí en adelante.
  */
 const pistaElegida = new Map<number, number>()
+
+/**
+ * Los presets de preparación (esquema v10). Van en la demostración desde el
+ * primer día por la misma razón que las señales: una pantalla vacía en la
+ * demostración se lee como una función rota, y eso ya pasó con el acelerador.
+ *
+ * Los dos de ejemplo son los dos casos que justifican que los presets
+ * existan: material viejo que viene bajito, y material que ya llega listo y
+ * volver a comprimirlo solo lo empeora.
+ */
+let presetsDemo: Preset[] = [
+  {
+    id: 1,
+    nombre: 'Películas viejas',
+    ajustes: { volumen_relativo_db: 3, recorte_cabeza_ms: 2000, calidad: 'normal' },
+    creado: '2026-08-30T10:00:00Z',
+    en_canal: false,
+    titulos: 0,
+    archivos: 0,
+  },
+  {
+    id: 2,
+    nombre: 'Ya viene listo',
+    ajustes: { no_tocar: true },
+    creado: '2026-09-02T15:20:00Z',
+    en_canal: false,
+    titulos: 0,
+    archivos: 0,
+  },
+]
+/** El preset de cada archivo suelto: el nivel que manda sobre todos. */
+const presetDeArchivo = new Map<number, number | null>()
 
 /**
  * Lo que alguien movió a mano en la parrilla. El servidor de verdad lo guarda
@@ -912,9 +945,14 @@ type ConAudio = TituloDeBiblioteca | EpisodioDeBiblioteca
 /** Aplica encima lo que alguien eligió a mano para ese archivo. */
 function conPistaElegida<T extends ConAudio>(m: T): T {
   const id = m.material_id
-  if (id === undefined || !pistaElegida.has(id)) return m
+  if (id === undefined) return m
+  let salida = m
+  if (presetDeArchivo.has(id)) {
+    salida = { ...salida, preset_archivo: presetDeArchivo.get(id) ?? null }
+  }
+  if (!pistaElegida.has(id)) return salida
   return {
-    ...m,
+    ...salida,
     pista_audio_aire: pistaElegida.get(id),
     estado_material: 'aún no listo para aire',
   }
@@ -1571,6 +1609,91 @@ export async function responder(ruta: string, init?: RequestInit): Promise<Respo
     return json({ borrada: Number(p.split('/')[2]) })
   }
 
+  // ── los presets de preparación (esquema v10) ────────────────────────
+  //
+  // La API y la resolución de los tres niveles estaban escritas y probadas en
+  // Go, y no había una sola pantalla que las llamara. Aquí van completas para
+  // que la demostración enseñe lo mismo que el producto.
+  if (p === '/presets' && metodo === 'GET') {
+    return json({
+      // Los conteos se calculan, no se guardan: si se guardaran, la
+      // demostración enseñaría «1 programa» sobre un preset que nadie usa en
+      // cuanto alguien lo quitara, y eso es justo lo que la pantalla mira
+      // antes de dejar borrarlo.
+      presets: presetsDemo.map((x) => ({
+        ...x,
+        en_canal: canal.preset_id === x.id,
+        titulos: titulos.filter((t) => t.preset_id === x.id).length,
+        archivos: [...presetDeArchivo.values()].filter((v) => v === x.id).length,
+      })),
+      volumen_lkfs: -24,
+      pico_db: -2,
+      volumen_porque:
+        '−24 es lo que la FCC espera de una estación con licencia en Estados Unidos (CALM Act). No es una preferencia: es lo que se mide si alguien se queja de que los anuncios suenan más alto que el programa.',
+    })
+  }
+  if (p === '/presets' && metodo === 'POST') {
+    const nombre = String((cuerpo as { nombre?: string })?.nombre ?? '').trim()
+    if (!nombre)
+      return json(
+        { error: 'Ponle un nombre al preset: es como lo vas a reconocer después.', campo: 'nombre' },
+        400,
+      )
+    const nuevo: Preset = {
+      id: siguienteId++,
+      nombre,
+      ajustes: (cuerpo as { ajustes?: Preset['ajustes'] })?.ajustes ?? {},
+      creado: new Date().toISOString(),
+      en_canal: false,
+      titulos: 0,
+      archivos: 0,
+    }
+    presetsDemo = [...presetsDemo, nuevo]
+    return json(nuevo)
+  }
+  const presetId = p.match(/^\/presets\/(\d+)$/)
+  if (presetId && metodo === 'PUT') {
+    const id = Number(presetId[1])
+    const viejo = presetsDemo.find((x) => x.id === id)
+    if (!viejo) return json({ error: 'Ese preset ya no existe.' }, 404)
+    const nombre = String((cuerpo as { nombre?: string })?.nombre ?? '').trim()
+    if (!nombre)
+      return json(
+        { error: 'Ponle un nombre al preset: es como lo vas a reconocer después.', campo: 'nombre' },
+        400,
+      )
+    const actualizado: Preset = {
+      ...viejo,
+      nombre,
+      ajustes: (cuerpo as { ajustes?: Preset['ajustes'] })?.ajustes ?? {},
+    }
+    presetsDemo = presetsDemo.map((x) => (x.id === id ? actualizado : x))
+    return json(actualizado)
+  }
+  if (presetId && metodo === 'DELETE') {
+    const id = Number(presetId[1])
+    const viejo = presetsDemo.find((x) => x.id === id)
+    presetsDemo = presetsDemo.filter((x) => x.id !== id)
+    // Lo que lo usaba vuelve a heredar: no se queda roto.
+    if (canal.preset_id === id) canal.preset_id = null
+    for (const t of titulos) if (t.preset_id === id) t.preset_id = null
+    for (const [archivo, suyo] of presetDeArchivo) {
+      if (suyo === id) presetDeArchivo.set(archivo, null)
+    }
+    const usos = viejo ? viejo.titulos + viejo.archivos + (viejo.en_canal ? 1 : 0) : 0
+    return json({
+      borrado: id,
+      aviso: usos > 0 ? 'lo que lo usaba vuelve a prepararse como el resto del canal' : '',
+    })
+  }
+  const aRehacer = p.match(/^\/material\/(\d+)\/volver-a-preparar$/)
+  if (aRehacer && metodo === 'POST') {
+    return json({
+      encolado: Number(aRehacer[1]),
+      texto: 'se puso en la cola: se rehace cuando el aire no lo note',
+    })
+  }
+
   if (p === '/salidas' && metodo === 'GET') {
     return json({
       salidas,
@@ -1813,6 +1936,14 @@ export async function responder(ruta: string, init?: RequestInit): Promise<Respo
       if (typeof cuerpo?.nombre === 'string') t.nombre = cuerpo.nombre.trim()
       if (typeof cuerpo?.sinopsis === 'string') t.sinopsis = cuerpo.sinopsis
       if (typeof cuerpo?.infantil_core === 'boolean') t.infantil_core = cuerpo.infantil_core
+      // El preset del programa. `null` lo devuelve a heredar del canal, que
+      // no es lo mismo que no mandarlo (se queda como estaba).
+      if ('preset_id' in (cuerpo ?? {})) {
+        const suyo = (cuerpo as { preset_id?: number | null }).preset_id
+        if (suyo != null && !presetsDemo.some((x) => x.id === suyo))
+          return json({ error: 'Ese preset ya no existe.', campo: 'preset_id' }, 400)
+        t.preset_id = suyo ?? null
+      }
     }
     return json({
       ...conPistaElegida(t),
@@ -1852,6 +1983,12 @@ export async function responder(ruta: string, init?: RequestInit): Promise<Respo
           400,
         )
       pistaElegida.set(id, pista)
+    }
+    if ('preset_id' in (cuerpo ?? {})) {
+      const suyo = (cuerpo as { preset_id?: number | null }).preset_id
+      if (suyo != null && !presetsDemo.some((x) => x.id === suyo))
+        return json({ error: 'Ese preset ya no existe.', campo: 'preset_id' }, 400)
+      presetDeArchivo.set(id, suyo ?? null)
     }
     return json(conPistaElegida(materialPorId(id) as ConAudio))
   }

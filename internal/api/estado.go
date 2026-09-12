@@ -194,6 +194,10 @@ func (s *Server) canalPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	nuevo := old
+	// El puntero se desengancha antes de decodificar: si no, el decodificador
+	// escribe dentro del de `old` y las dos filas cambian a la vez
+	// (ver sueltoDe, en presets.go).
+	nuevo.PresetID = sueltoDe(old.PresetID)
 	if !decode(w, r, &nuevo) {
 		return
 	}
@@ -237,6 +241,15 @@ func (s *Server) canalPut(w http.ResponseWriter, r *http.Request) {
 				"%s no está en esta máquina: escoge otra", ac.Nombre())
 			return
 		}
+	}
+
+	// El preset del canal es el nivel más bajo de los tres: lo que no diga un
+	// título ni un archivo se prepara con éste. Si el preset no existe, se
+	// dice ahora y no cuando la clave foránea lo tumbe con un error de base
+	// de datos que nadie sabe leer.
+	if motivo, vale := s.presetAplicable(ctx, nuevo.PresetID); !vale {
+		fail(w, http.StatusBadRequest, motivo, "preset_id")
+		return
 	}
 
 	// El modo no se cambia por aquí. Guardar el nombre del canal no puede

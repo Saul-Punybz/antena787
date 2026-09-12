@@ -6,12 +6,15 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"antena787/internal/model"
+	"antena787/internal/store"
 )
 
 // presetBody es lo que se manda al crear o cambiar un preset. `ajustes` viaja
@@ -202,4 +205,50 @@ func (s *Server) volverAPreparar(w http.ResponseWriter, r *http.Request) {
 	}
 	s.audit(r, "media_asset", &id, "volver_a_preparar", "", "sí")
 	writeJSON(w, http.StatusOK, map[string]any{"encolado": id, "texto": texto})
+}
+
+// presetAplicable comprueba que el preset que se le quiere poner a algo
+// exista y sea de este canal. Sin esto, la clave foránea del esquema lo
+// pararía igual, pero contestando un error de base de datos: quien lo lea no
+// sabría si se le cayó el canal o si escribió mal un número.
+//
+// Vale para los tres niveles —canal, título y archivo— porque el error es el
+// mismo en los tres. `nil` significa «que herede», que siempre se permite.
+func (s *Server) presetAplicable(ctx context.Context, id *int64) (string, bool) {
+	if id == nil {
+		return "", true
+	}
+	p, err := s.App.Store.Preset.Get(ctx, *id)
+	if errors.Is(err, store.ErrNotFound) {
+		return "ese preset ya no existe: recarga la pantalla y escoge otro", false
+	}
+	if err != nil {
+		return "no se pudo comprobar el preset", false
+	}
+	if p.ChannelID != nil && *p.ChannelID != s.App.ChannelID {
+		return "ese preset es de otro canal", false
+	}
+	return "", true
+}
+
+// sueltoDe devuelve una copia del puntero, no el mismo puntero.
+//
+// Hace falta antes de cada `decode` sobre una fila leída de la base, y el
+// motivo es una trampa de encoding/json que no se ve leyendo el código: al
+// decodificar en un campo `*int64` que **ya apunta a algo**, no crea un
+// puntero nuevo — escribe dentro del que hay. Como la fila nueva se hace
+// copiando la vieja (`nuevo := old`), las dos comparten el puntero, y
+// entonces pasan dos cosas a la vez: la fila vieja cambia sola, y comparar
+// `nuevo.X != old.X` para saber si algo cambió sale siempre que no.
+//
+// Lo cazó el binario de verdad el 12 de septiembre de 2026: aplicarle al
+// canal un preset que no existe contestaba «FOREIGN KEY constraint failed»
+// en vez de la frase escrita para eso, porque la comprobación colgaba de esa
+// comparación y nunca entraba.
+func sueltoDe(p *int64) *int64 {
+	if p == nil {
+		return nil
+	}
+	v := *p
+	return &v
 }

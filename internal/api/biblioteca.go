@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -39,6 +40,15 @@ type audioOut struct {
 	PistaAudioAire    *int               `json:"pista_audio_aire,omitempty"`
 	AudioSidecar      string             `json:"audio_sidecar,omitempty"`
 	SubtitulosSidecar string             `json:"subtitulos_sidecar,omitempty"`
+	// PresetArchivo es el preset **del archivo**, que no es el mismo que el
+	// del programa. Va con nombre propio a propósito: un título lleva su
+	// `preset_id` —el del programa— y si el del archivo se llamara igual, uno
+	// pisaría al otro en el JSON y la pantalla enseñaría el nivel equivocado.
+	// Sin `omitempty` a propósito: «no hay preset» es un valor con sentido
+	// —el archivo hereda del programa o del canal— y si el campo se cayera
+	// del JSON, la pantalla no podría distinguirlo de un servidor viejo que
+	// no sabe de presets.
+	PresetArchivo *int64 `json:"preset_archivo"`
 }
 
 // audioDe lee el sonido de un archivo. Sin archivo —o si ya no está— no
@@ -58,6 +68,7 @@ func (s *Server) audioDe(ctx context.Context, assetID *int64) audioOut {
 		PistaAudioAire:    &pista,
 		AudioSidecar:      a.AudioSidecar,
 		SubtitulosSidecar: a.SubtitulosSidecar,
+		PresetArchivo:     a.PresetID,
 	}
 }
 
@@ -257,12 +268,22 @@ func (s *Server) bibliotecaPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	nuevo := old
+	// Los punteros se desenganchan antes de decodificar, o el decodificador
+	// escribe dentro de los de `old` (ver sueltoDe, en presets.go).
+	nuevo.PresetID = sueltoDe(old.PresetID)
+	nuevo.MediaAssetID = sueltoDe(old.MediaAssetID)
 	if !decode(w, r, &nuevo) {
 		return
 	}
 	nuevo.ID = old.ID
 	if strings.TrimSpace(nuevo.Name) == "" {
 		fail(w, http.StatusBadRequest, "el título tiene que llamarse de alguna forma", "nombre")
+		return
+	}
+	// El preset del programa manda sobre el del canal y cede ante el del
+	// archivo suelto (esquema v10).
+	if motivo, vale := s.presetAplicable(ctx, nuevo.PresetID); !vale {
+		fail(w, http.StatusBadRequest, motivo, "preset_id")
 		return
 	}
 	if err := s.App.Store.Title.Update(ctx, &nuevo); err != nil {
@@ -343,6 +364,13 @@ func (s *Server) materialPut(w http.ResponseWriter, r *http.Request) {
 		ExternalCaptions *string  `json:"subtitulos_externos"`
 		BreakMarks       *[]int64 `json:"marcas_de_corte_ms"`
 		PistaAudioAire   *int     `json:"pista_audio_aire"`
+		// PresetID tiene **tres** estados y por eso viaja en crudo: no venir
+		// (se queda como está), venir `null` (que vuelva a heredar del
+		// programa o del canal) y venir con un número. Un `*int64` solo sabe
+		// distinguir dos de los tres, y confundir «no dicho» con «quítalo»
+		// borraría el preset de un archivo cada vez que alguien le cambia la
+		// pista de sonido.
+		PresetID json.RawMessage `json:"preset_id"`
 	}
 	if !decode(w, r, &body) {
 		return
@@ -375,6 +403,21 @@ func (s *Server) materialPut(w http.ResponseWriter, r *http.Request) {
 	}
 
 	nuevo := old
+	if len(body.PresetID) > 0 {
+		var pid *int64
+		if err := json.Unmarshal(body.PresetID, &pid); err != nil {
+			fail(w, http.StatusBadRequest, "no reconozco ese preset", "preset_id")
+			return
+		}
+		if motivo, vale := s.presetAplicable(ctx, pid); !vale {
+			fail(w, http.StatusBadRequest, motivo, "preset_id")
+			return
+		}
+		nuevo.PresetID = pid
+		// Cambiar el preset no rehace lo que ya está convertido: eso se pide
+		// aparte, con POST /material/{id}/volver-a-preparar. Aquí solo se
+		// apunta cuál le toca de ahora en adelante.
+	}
 	if body.IntentionalBlack != nil {
 		nuevo.IntentionalBlack = *body.IntentionalBlack
 	}

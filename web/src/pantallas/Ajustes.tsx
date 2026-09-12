@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { api } from '../lib/api'
 import { useEstado } from '../lib/estado'
-import { IconoAntena, IconoSalidas } from '../componentes/Iconos'
+import { IconoAjustes, IconoAntena, IconoSalidas } from '../componentes/Iconos'
 import type { Ajustes as MapaDeAjustes } from '../lib/tipos'
 
 /**
@@ -171,6 +171,28 @@ export function Ajustes() {
           >
             <IconoAntena tamano={16} />
             De dónde viene la señal
+          </Link>
+        </Tarjeta>
+
+        {/*
+          Los presets de preparación (esquema v10). La resolución de los tres
+          niveles estaba escrita y probada en Go desde la tanda anterior, y no
+          había una sola pantalla que llamara a las rutas: se podían tener
+          presets que nadie podía crear ni aplicar a nada.
+        */}
+        <Tarjeta rotulo="CÓMO SE PREPARA EL MATERIAL">
+          <p className="ayuda">
+            Volumen, recortes y calidad. Se pueden guardar como presets y aplicarlos a
+            todo el canal, a un programa o a un archivo suelto — gana siempre el más
+            específico.
+          </p>
+          <Link
+            to="/presets"
+            className="boton"
+            style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 8 }}
+          >
+            <IconoAjustes tamano={16} />
+            Presets de preparación
           </Link>
         </Tarjeta>
 

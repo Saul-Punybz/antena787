@@ -7,6 +7,7 @@ import { Asistente } from './pantallas/Asistente'
 import { Biblioteca } from './pantallas/Biblioteca'
 import { Entrar } from './pantallas/Entrar'
 import { Parrilla } from './pantallas/Parrilla'
+import { Presets } from './pantallas/Presets'
 import { ParrillaDia } from './pantallas/ParrillaDia'
 import { ParrillaGuia } from './pantallas/ParrillaGuia'
 import { ParrillaMes } from './pantallas/ParrillaMes'
@@ -75,6 +76,7 @@ function Rutas() {
         <Route path="/biblioteca" element={<Biblioteca />} />
         <Route path="/salidas" element={<Salidas />} />
         <Route path="/senales" element={<Senales />} />
+        <Route path="/presets" element={<Presets />} />
         <Route path="/ajustes" element={<Ajustes />} />
         {/* Estas las construye la siguiente entrega; el menú las esconde
             hasta que existan. */}

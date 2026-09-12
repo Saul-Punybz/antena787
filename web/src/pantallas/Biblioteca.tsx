@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Caratula } from '../componentes/Caratula'
 import { Panel } from '../componentes/Panel'
 import { IconoBuscar } from '../componentes/Iconos'
+import { EligePreset } from './Presets'
 import { api, suscribirseAEventos } from '../lib/api'
 import { nombreDeArchivo, nombreDePista } from '../lib/audio'
 import { duracionLarga, fechaDeRegla, minutosAHora12, hhMmAMinutos } from '../lib/fechas'
@@ -13,6 +14,7 @@ import type {
   EstadoMaterial,
   FichaDeTitulo,
   MaterialDeAudio,
+  Preset,
   TituloDeBiblioteca,
   ArchivoEntrando,
 } from '../lib/tipos'
@@ -23,6 +25,9 @@ export function Biblioteca() {
   const [titulos, setTitulos] = useState<TituloDeBiblioteca[] | null>(null)
   const [cuarentena, setCuarentena] = useState<EnCuarentena[]>([])
   const [entrando, setEntrando] = useState<ArchivoEntrando[]>([])
+  // Los presets se cargan aquí y bajan a la ficha: son pocos, cambian poco, y
+  // pedirlos otra vez cada vez que se abre un título sería pedirlos de más.
+  const [presets, setPresets] = useState<Preset[]>([])
   const [busqueda, setBusqueda] = useState('')
   const [ficha, setFicha] = useState<FichaDeTitulo | null>(null)
   const [dejarPasar, setDejarPasar] = useState<EnCuarentena | null>(null)
@@ -34,6 +39,10 @@ export function Biblioteca() {
     api.biblioteca().then(setTitulos).catch(() => setTitulos([]))
     api.cuarentena().then(setCuarentena).catch(() => setCuarentena([]))
     api.entrando().then(setEntrando).catch(() => setEntrando([]))
+    api
+      .presets()
+      .then((p) => setPresets(p.presets))
+      .catch(() => setPresets([]))
   }
   useEffect(() => {
     cargar()
@@ -302,6 +311,7 @@ export function Biblioteca() {
       {ficha && (
         <FichaLateral
           ficha={ficha}
+          presets={presets}
           alCerrar={() => setFicha(null)}
           alActualizar={setFicha}
           anio={anio}
@@ -415,11 +425,13 @@ function Estante({
 
 function FichaLateral({
   ficha,
+  presets,
   alCerrar,
   alActualizar,
   anio,
 }: {
   ficha: FichaDeTitulo
+  presets: Preset[]
   alCerrar: () => void
   alActualizar: (f: FichaDeTitulo) => void
   anio: number
@@ -455,8 +467,11 @@ function FichaLateral({
 
       <SonidoDelMaterial
         material={ficha}
+        presets={presets}
         alCambiar={(cambio) => alActualizar({ ...ficha, ...cambio })}
       />
+
+      <PresetDelPrograma ficha={ficha} presets={presets} alActualizar={alActualizar} />
 
       <ProgramaInfantil ficha={ficha} alActualizar={alActualizar} />
 
@@ -495,6 +510,7 @@ function FichaLateral({
                 </div>
                 <SonidoDelMaterial
                   material={e}
+                  presets={presets}
                   alCambiar={(cambio) =>
                     alActualizar({
                       ...ficha,
@@ -515,6 +531,60 @@ function FichaLateral({
         </div>
       )}
     </Panel>
+  )
+}
+
+/**
+ * El preset del programa: el nivel de en medio de los tres (canal → programa
+ * → archivo). Se pone aquí, en la ficha, porque es donde una persona piensa
+ * «este programa siempre suena bajito», que es el caso que justifica que los
+ * presets existan.
+ *
+ * Lo que cambia no toca lo ya convertido. Eso se dice, y se ofrece rehacerlo
+ * archivo por archivo más abajo: rehacer un programa entero de golpe puede
+ * ser media biblioteca, y eso no se dispara desde un desplegable.
+ */
+function PresetDelPrograma({
+  ficha,
+  presets,
+  alActualizar,
+}: {
+  ficha: FichaDeTitulo
+  presets: Preset[]
+  alActualizar: (f: FichaDeTitulo) => void
+}) {
+  const [error, setError] = useState('')
+  if (presets.length === 0) return null
+
+  async function elegir(id: number | null) {
+    const antes = ficha.preset_id ?? null
+    setError('')
+    alActualizar({ ...ficha, preset_id: id })
+    try {
+      const guardado = await api.cambiarTitulo(ficha.id, { preset_id: id })
+      alActualizar({ ...ficha, preset_id: guardado.preset_id ?? null })
+    } catch (e) {
+      setError((e as Error).message)
+      alActualizar({ ...ficha, preset_id: antes })
+    }
+  }
+
+  return (
+    <div className="campo">
+      <label htmlFor={`preset-titulo-${ficha.id}`}>Cómo se prepara este programa</label>
+      <EligePreset
+        id={`preset-titulo-${ficha.id}`}
+        presets={presets}
+        valor={ficha.preset_id ?? null}
+        heredado="el resto del canal"
+        alElegir={(id) => void elegir(id)}
+      />
+      <span className="ayuda">
+        Vale para todos sus episodios. Un archivo suelto puede llevar el suyo y
+        entonces manda ése.
+      </span>
+      {error && <div className="error-claro">{error}</div>}
+    </div>
   )
 }
 
@@ -583,20 +653,58 @@ function ProgramaInfantil({
  */
 function SonidoDelMaterial({
   material,
+  presets,
   alCambiar,
 }: {
   material: AudioDelMaterial & { estado_material: EstadoMaterial }
+  presets: Preset[]
   alCambiar: (cambio: Partial<AudioDelMaterial> & { estado_material?: EstadoMaterial }) => void
 }) {
   const [error, setError] = useState('')
   const [cambiado, setCambiado] = useState(false)
   const [guardando, setGuardando] = useState(false)
+  const [rehaciendo, setRehaciendo] = useState('')
 
   const pistas = material.pistas_audio ?? []
   const audio = material.audio_sidecar?.trim() ?? ''
   const subtitulos = material.subtitulos_sidecar?.trim() ?? ''
   const hayQueElegir = pistas.length > 1 && material.material_id !== undefined
-  if (!hayQueElegir && !audio && !subtitulos) return null
+  // El preset del archivo es el tercer nivel y solo se ofrece cuando hay
+  // presets que ofrecer: un canal que no ha creado ninguno no tiene por qué
+  // ver un desplegable vacío.
+  const hayPresets = presets.length > 0 && material.material_id !== undefined
+  if (!hayQueElegir && !hayPresets && !audio && !subtitulos) return null
+
+  async function ponerPreset(id: number | null) {
+    const idArchivo = material.material_id
+    if (idArchivo === undefined) return
+    const antes = material.preset_archivo ?? null
+    setError('')
+    setRehaciendo('')
+    alCambiar({ preset_archivo: id })
+    try {
+      await api.cambiarMaterial(idArchivo, { preset_id: id })
+    } catch (e) {
+      setError((e as Error).message)
+      alCambiar({ preset_archivo: antes })
+    }
+  }
+
+  // Cambiar el preset no rehace lo que ya está convertido: el archivo de ayer
+  // sigue como estaba hasta que alguien lo pida. Se pide aquí, y lo que
+  // contesta el servidor es el texto que sale — no uno inventado en la
+  // pantalla, que podría no coincidir con lo que de verdad se encoló.
+  async function rehacer() {
+    const idArchivo = material.material_id
+    if (idArchivo === undefined) return
+    setError('')
+    try {
+      const r = await api.volverAPreparar(idArchivo)
+      setRehaciendo(r.texto)
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
 
   async function elegir(indice: number) {
     const id = material.material_id
@@ -640,6 +748,34 @@ function SonidoDelMaterial({
               </option>
             ))}
           </select>
+        </div>
+      )}
+      {hayPresets && (
+        <div className="campo">
+          <label htmlFor={`preset-archivo-${material.material_id}`}>
+            Cómo se prepara este archivo
+          </label>
+          <EligePreset
+            id={`preset-archivo-${material.material_id}`}
+            presets={presets}
+            valor={material.preset_archivo ?? null}
+            heredado="el resto del programa"
+            alElegir={(id) => void ponerPreset(id)}
+          />
+          <div className="fila" style={{ gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
+            <button className="boton" onClick={() => void rehacer()}>
+              Volver a preparar
+            </button>
+            {rehaciendo && (
+              <span className="tenue" style={{ fontSize: 12.5 }}>
+                {rehaciendo}
+              </span>
+            )}
+          </div>
+          <span className="ayuda">
+            Cambiar el preset no rehace lo que ya se convirtió: eso se pide aquí, y se
+            hace en la cola, sin quitarle sitio al aire.
+          </span>
         </div>
       )}
       {cambiado && material.estado_material === 'aún no listo para aire' && (
