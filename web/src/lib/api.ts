@@ -9,6 +9,10 @@
 
 import { responder, suscribirDemo } from '../demo/servidor'
 import type {
+  Fuente,
+  FuenteNueva,
+  FuentesDelCanal,
+  PruebaDeFuente,
   AjustesDePreset,
   Preset,
   PresetsDelCanal,
@@ -162,6 +166,18 @@ export const api = {
       `/material/${id}/volver-a-preparar`,
       conCuerpo('POST', {}),
     ),
+
+  // Las señales en vivo (F2-116). `clave` solo se manda cuando cambia:
+  // reenviar una clave en cada guardado es como se filtran.
+  fuentes: () => pedir<FuentesDelCanal>('/fuentes'),
+  crearFuente: (f: FuenteNueva) => pedir<Fuente>('/fuentes', conCuerpo('POST', f)),
+  guardarFuente: (id: number, f: FuenteNueva) =>
+    pedir<Fuente>(`/fuentes/${id}`, conCuerpo('PUT', f)),
+  borrarFuente: (id: number) =>
+    pedir<{ borrada: number }>(`/fuentes/${id}`, conCuerpo('DELETE', {})),
+  // Probar sin guardar: abre la señal de verdad y dice qué hay al otro lado.
+  probarFuente: (f: Partial<FuenteNueva>) =>
+    pedir<PruebaDeFuente>('/fuentes/probar', conCuerpo('POST', f)),
 
   guardarAjustes: (a: Ajustes) => pedir<Ajustes>('/ajustes', conCuerpo('PUT', a)),
 

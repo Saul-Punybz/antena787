@@ -7,6 +7,8 @@
 // cuentas con la zona horaria completa.
 
 import type {
+  Fuente,
+  TipoDeFuenteDisponible,
   AceleradorDisponible,
   Ajustes,
   Alarma,
@@ -1528,6 +1530,47 @@ export async function responder(ruta: string, init?: RequestInit): Promise<Respo
   // Las salidas del canal (§10, F2-46, F2-50, F2-114): la pantalla Salidas.tsx
   // hace el CRUD completo aquí, con la misma validación y el mismo texto en palabras
   // claras que escribiría el servidor de verdad.
+  // ── las señales en vivo (F2-116) ───────────────────────────────────
+  //
+  // Va en la demostración desde el primer día a propósito: una pantalla que
+  // sale vacía en la demostración se lee como una función rota, y eso ya
+  // pasó hoy con el acelerador.
+  if (p === '/fuentes' && metodo === 'GET') {
+    return json({ fuentes: FUENTES_DEMO, tipos: TIPOS_DE_FUENTE_DEMO })
+  }
+  if (p === '/fuentes/probar' && metodo === 'POST') {
+    const d = String((cuerpo as { direccion?: string })?.direccion ?? '').trim()
+    if (!/^(https?|srt|rtmp|rtsp|udp):\/\//i.test(d)) {
+      return json({
+        responde: false,
+        texto: `a la dirección le falta el principio: prueba con http://${d.replace(/^\/\//, '')}`,
+      })
+    }
+    if (/localhost|127\.0\.0\.1/.test(d)) {
+      return json({
+        responde: true,
+        texto: 'la señal responde',
+        video: 'h264 1280x720 a 60000/1001',
+        audio: '2 canal(es)',
+        duracion: 'en vivo (sin final)',
+      })
+    }
+    return json({
+      responde: false,
+      texto: 'nadie está escuchando en esa dirección y ese puerto',
+      detalle: `${d}: Connection refused`,
+    })
+  }
+  if (p === '/fuentes' && metodo === 'POST') {
+    return json({ ...FUENTES_DEMO[0], id: 99, ...(cuerpo as object) }, 201)
+  }
+  if (/^\/fuentes\/\d+$/.test(p) && metodo === 'PUT') {
+    return json({ ...FUENTES_DEMO[0], ...(cuerpo as object) })
+  }
+  if (/^\/fuentes\/\d+$/.test(p) && metodo === 'DELETE') {
+    return json({ borrada: Number(p.split('/')[2]) })
+  }
+
   if (p === '/salidas' && metodo === 'GET') {
     return json({
       salidas,
@@ -1843,3 +1886,76 @@ export function suscribirDemo(alRecibir: (e: Estado) => void): () => void {
   const t = window.setInterval(() => alRecibir(estado()), 1000)
   return () => window.clearInterval(t)
 }
+
+
+// Las señales que se enseñan en la demostración. RadioOnce Live! es la de
+// verdad del canal de referencia, y el HLS de la máquina es cómo se alimenta
+// hoy: los dos casos que importan, uno que se espera y otro que se busca.
+const FUENTES_DEMO: Fuente[] = [
+  {
+    id: 1,
+    nombre: 'El HLS de esta máquina',
+    tipo: 'url',
+    direccion: 'http://localhost:8080/hls/for_tv/index.m3u8',
+    se_va_a_buscar: true,
+    solo_audio: false,
+    retardo_ms: 7000,
+    gracia_s: 30,
+    reloj_de_cortes: [],
+    usuario: '',
+    tiene_clave: false,
+    reglas: 2,
+    bloques: 0,
+    texto: 'se va a buscar a http://localhost:8080/hls/for_tv/index.m3u8',
+  },
+  {
+    id: 2,
+    nombre: 'RadioOnce Live!',
+    tipo: 'srt',
+    direccion: 'srt://0.0.0.0:9000',
+    se_va_a_buscar: false,
+    solo_audio: false,
+    retardo_ms: 7000,
+    gracia_s: 30,
+    reloj_de_cortes: [0, 15, 30, 45],
+    usuario: '',
+    tiene_clave: false,
+    reglas: 5,
+    bloques: 1,
+    texto: 'se espera en srt://0.0.0.0:9000',
+  },
+]
+
+const TIPOS_DE_FUENTE_DEMO: TipoDeFuenteDisponible[] = [
+  {
+    tipo: 'url',
+    nombre: 'Ir a buscarla a una dirección',
+    se_va_a_buscar: true,
+    explicacion:
+      'El canal se conecta y tira de la señal. Es lo que hace falta para un stream que ya existe en otro sitio, tuyo o de un proveedor.',
+    ejemplo: 'http://localhost:8080/hls/for_tv/index.m3u8',
+  },
+  {
+    tipo: 'srt',
+    nombre: 'Esperarla por SRT',
+    se_va_a_buscar: false,
+    explicacion:
+      'Se abre un puerto y se espera a que alguien empuje la señal. Quien la manda tiene que saber la dirección de esta máquina.',
+    ejemplo: 'srt://0.0.0.0:9000',
+  },
+  {
+    tipo: 'rtmp',
+    nombre: 'Esperarla por RTMP',
+    se_va_a_buscar: false,
+    explicacion:
+      'Igual que SRT, pero con el protocolo que usan la mayoría de los programas de transmisión.',
+    ejemplo: 'rtmp://0.0.0.0:1935/vivo',
+  },
+  {
+    tipo: 'captura',
+    nombre: 'De una tarjeta de captura',
+    se_va_a_buscar: false,
+    explicacion: 'Una tarjeta metida en esta computadora, con una cámara o un mezclador conectado.',
+    ejemplo: 'Video Capture Device',
+  },
+]

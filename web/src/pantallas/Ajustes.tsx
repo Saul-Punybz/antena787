@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { api } from '../lib/api'
 import { useEstado } from '../lib/estado'
-import { IconoSalidas } from '../componentes/Iconos'
+import { IconoAntena, IconoSalidas } from '../componentes/Iconos'
 import type { Ajustes as MapaDeAjustes } from '../lib/tipos'
 
 /**
@@ -149,6 +149,28 @@ export function Ajustes() {
           >
             <IconoSalidas tamano={16} />
             A dónde va la señal
+          </Link>
+        </Tarjeta>
+
+        {/*
+          De dónde viene la señal (F2-116). Va junto a «a dónde va» a
+          propósito: son las dos mitades de la misma pregunta, y la persona
+          que configura una acaba configurando la otra.
+        */}
+        <Tarjeta rotulo="DE DÓNDE VIENE LA SEÑAL">
+          <p className="ayuda">
+            Lo que no sale de un archivo: un stream que ya existe en otro sitio, una
+            cámara conectada, o alguien que te empuja la señal desde fuera. Se puede
+            probar antes de guardarla, para no descubrir a las tres de la mañana que
+            la dirección estaba mal escrita.
+          </p>
+          <Link
+            to="/senales"
+            className="boton"
+            style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 8 }}
+          >
+            <IconoAntena tamano={16} />
+            De dónde viene la señal
           </Link>
         </Tarjeta>
 

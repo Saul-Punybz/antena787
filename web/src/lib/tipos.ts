@@ -870,3 +870,78 @@ export interface PresetsDelCanal {
   /** Por qué es ése y no otro, ya escrito para que lo lea una persona. */
   volumen_porque: string
 }
+
+// ── las señales en vivo (F2-116) ──────────────────────────────────────
+
+/**
+ * Cómo llega una señal. La diferencia que manda no es el protocolo, es quién
+ * llama a quién: `url` **se va a buscar**, los demás **se esperan**.
+ */
+export type TipoDeFuente = 'url' | 'srt' | 'rtmp' | 'captura'
+
+/** Un tipo como se le ofrece a una persona, con su ejemplo de dirección. */
+export interface TipoDeFuenteDisponible {
+  tipo: TipoDeFuente
+  nombre: string
+  explicacion: string
+  se_va_a_buscar: boolean
+  /** Lo que se escribe en el campo de dirección. Sin esto hay que adivinar. */
+  ejemplo: string
+}
+
+/** Una señal en vivo. **Nunca trae la clave**, solo si hay una guardada. */
+export interface Fuente {
+  id: number
+  nombre: string
+  tipo: TipoDeFuente
+  direccion: string
+  se_va_a_buscar: boolean
+  solo_audio: boolean
+  /** Lo que se espera antes de darla por perdida. */
+  retardo_ms: number
+  /** Lo que se aguanta antes de soltar el aire. */
+  gracia_s: number
+  /** Los minutos de la hora en que corta: [0,15,30,45]. */
+  reloj_de_cortes: number[]
+  usuario: string
+  tiene_clave: boolean
+  /** Cuántas reglas y cuántos bloques dependen de ella. */
+  reglas: number
+  bloques: number
+  /** De dónde viene o dónde se espera, ya escrito por el servidor. */
+  texto: string
+}
+
+export interface FuentesDelCanal {
+  fuentes: Fuente[]
+  tipos: TipoDeFuenteDisponible[]
+}
+
+/** Lo que se manda al crear o cambiar. `clave` solo cuando cambia. */
+export interface FuenteNueva {
+  nombre: string
+  tipo: TipoDeFuente
+  direccion: string
+  solo_audio?: boolean
+  retardo_ms?: number
+  gracia_s?: number
+  reloj_de_cortes?: number[]
+  usuario?: string
+  clave?: string
+}
+
+/**
+ * Lo que contesta el botón de probar. De todos los sistemas que se miraron,
+ * ninguno prueba antes de guardar: esto es la diferencia entre pegar una
+ * dirección y rezar, o saberlo en tres segundos.
+ */
+export interface PruebaDeFuente {
+  responde: boolean
+  texto: string
+  /** El motivo del sistema, para quien sepa leerlo. Se enseña plegado. */
+  detalle?: string
+  video?: string
+  audio?: string
+  duracion?: string
+  avisos?: string[]
+}
